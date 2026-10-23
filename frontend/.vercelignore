@@ -1,0 +1,9 @@
+# Vercel upload exclusions for the single Next.js project (API included).
+# backend/ and shared/ are imported by pages/api/[...all].js and must stay.
+.next
+out
+node_modules
+tests
+.env
+.env*.local
+*.log

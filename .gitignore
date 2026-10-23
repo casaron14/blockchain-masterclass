@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Backend generated documents and caches
+backend/out/
+backend/cache/
+
+# Secrets and local environment
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+backend/.env.*.local
+
+# Logs and editor files
+*.log
+.DS_Store
+.vercel
+
+# Test and tooling output
+coverage/
+
+
+#local md files
+*.md

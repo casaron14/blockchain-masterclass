@@ -1,0 +1,383 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-22T00:00:14Z",
+  "title": "Design System: Blockchain Masterclass",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "primary",
+        "displayName": "Ink Plate",
+        "canonical": "oklch(18.3% 0.009 84.6)",
+        "tonalRamp": [
+          "#181612",
+          "#35332e",
+          "#55524d",
+          "#77746f",
+          "#9b9892",
+          "#bdbab4",
+          "#dddad4",
+          "#f4f1eb"
+        ]
+      },
+      "ink-raised": {
+        "role": "primary",
+        "displayName": "Ink Raised",
+        "canonical": "oklch(21.5% 0.012 84.5)",
+        "tonalRamp": [
+          "#191610",
+          "#36322c",
+          "#56524b",
+          "#78746d",
+          "#9c9890",
+          "#bebab2",
+          "#dedad2",
+          "#f6f1e9"
+        ]
+      },
+      "ink-soft": {
+        "role": "primary",
+        "displayName": "Ink Soft",
+        "canonical": "oklch(25.3% 0.017 86.9)",
+        "tonalRamp": [
+          "#19160d",
+          "#373229",
+          "#575248",
+          "#797469",
+          "#9d988d",
+          "#bfbaae",
+          "#e0dace",
+          "#f7f1e5"
+        ]
+      },
+      "copper": {
+        "role": "secondary",
+        "displayName": "Burnished Copper",
+        "canonical": "oklch(51.7% 0.128 41.7)",
+        "tonalRamp": [
+          "#2d0700",
+          "#5a1b00",
+          "#8a3308",
+          "#b15732",
+          "#da7b56",
+          "#ff9e79",
+          "#ffcebc",
+          "#ffeee7"
+        ]
+      },
+      "copper-bright": {
+        "role": "secondary",
+        "displayName": "Copper Light",
+        "canonical": "oklch(63.6% 0.129 47.9)",
+        "tonalRamp": [
+          "#2a0b00",
+          "#552100",
+          "#853800",
+          "#b05926",
+          "#d87d4d",
+          "#fea06f",
+          "#ffcfb7",
+          "#ffeee5"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Bone Paper",
+        "canonical": "oklch(94.7% 0.014 84.6)",
+        "tonalRamp": [
+          "#19160f",
+          "#36322b",
+          "#56524a",
+          "#78746b",
+          "#9c988f",
+          "#bfbab0",
+          "#dfdad0",
+          "#f6f1e7"
+        ]
+      },
+      "paper-raised": {
+        "role": "neutral",
+        "displayName": "Paper Raised",
+        "canonical": "oklch(96.8% 0.011 84.6)",
+        "tonalRamp": [
+          "#181610",
+          "#36322c",
+          "#55524c",
+          "#78746d",
+          "#9b9890",
+          "#bebab2",
+          "#dedad2",
+          "#f5f1e9"
+        ]
+      },
+      "paper-sunk": {
+        "role": "neutral",
+        "displayName": "Paper Sunk",
+        "canonical": "oklch(91.5% 0.019 83.1)",
+        "tonalRamp": [
+          "#1a150c",
+          "#383228",
+          "#585247",
+          "#7a7468",
+          "#9e978b",
+          "#c0baad",
+          "#e1dacd",
+          "#f8f1e4"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Text",
+        "canonical": "oklch(47.0% 0.022 83.0)",
+        "tonalRamp": [
+          "#1b150a",
+          "#383226",
+          "#595245",
+          "#7b7466",
+          "#9f9789",
+          "#c1baab",
+          "#e2dacb",
+          "#f9f1e1"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Institutional Display",
+        "purpose": "Hero lockup only, three lines maximum, 86.4px at 1440."
+      },
+      "headline": {
+        "displayName": "Section Headline",
+        "purpose": "Section and page titles on paper or ink plates."
+      },
+      "title": {
+        "displayName": "Artifact Title",
+        "purpose": "Admission pass, admin panels, sub-sections."
+      },
+      "body": {
+        "displayName": "Running Text",
+        "purpose": "All prose at a 34-38rem measure."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Opening paragraph of a section, maximum 34rem."
+      },
+      "label": {
+        "displayName": "Action Label",
+        "purpose": "Buttons, nav links and inline actions, uppercase with 0.14em tracking."
+      },
+      "mono": {
+        "displayName": "Record Data",
+        "purpose": "Dates, serials, prices, status chips, ledger figures and field keys."
+      }
+    },
+    "shadows": [
+      {
+        "name": "pass-contact",
+        "value": "0 32px 70px -44px rgba(0, 0, 0, 0.9)",
+        "purpose": "The only cast shadow in the system: the admission pass resting on an ink plate."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 0.7, 0.24, 1)",
+        "purpose": "Default easing for every colour, border and transform transition."
+      },
+      {
+        "name": "ease-in-out",
+        "value": "cubic-bezier(0.55, 0.05, 0.2, 1)",
+        "purpose": "Symmetric easing for the loading pulse."
+      },
+      {
+        "name": "state-transition",
+        "value": "220ms",
+        "purpose": "Buttons, links and control state changes."
+      },
+      {
+        "name": "arrival",
+        "value": "700-900ms",
+        "purpose": "One-time hero dateline and headline line rises."
+      },
+      {
+        "name": "ledger-arrival",
+        "value": "520ms with 4ms stagger",
+        "purpose": "Admission ledger cells scaling into place on first paint."
+      },
+      {
+        "name": "pass-settle",
+        "value": "1100ms with 180ms delay",
+        "purpose": "The pass settling from -4.5deg to its resting -1.5deg tilt."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "68rem",
+        "purpose": "Below this the header dateline is removed and nav gaps tighten."
+      },
+      {
+        "name": "stack",
+        "value": "61rem",
+        "purpose": "Two-column compositions collapse; masthead becomes wordmark plus a full-width nav row."
+      },
+      {
+        "name": "compact-actions",
+        "value": "48rem",
+        "purpose": "Header actions take their own right-aligned row; settings fields go single column."
+      },
+      {
+        "name": "narrow",
+        "value": "34rem",
+        "purpose": "Deposit panel and other paired facts stack."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single decisive action on paper surfaces: reserve a seat, save a booking, continue to payment.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Reserve a seat</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 2.9rem; padding: 0.85rem 1.4rem; border: 1px solid var(--ink, #14120e); border-radius: 0; background: var(--ink, #14120e); color: var(--paper, #f2ede3); font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; line-height: 1.2; text-align: center; text-decoration: none; text-transform: uppercase; cursor: pointer; transition: background-color 220ms cubic-bezier(0.22, 0.7, 0.24, 1), border-color 220ms cubic-bezier(0.22, 0.7, 0.24, 1), color 220ms cubic-bezier(0.22, 0.7, 0.24, 1); } .ds-btn-primary:hover { background: var(--copper, #a34a25); border-color: var(--copper, #a34a25); color: var(--paper, #f2ede3); } .ds-btn-primary:focus-visible { outline: 2px solid var(--copper, #a34a25); outline-offset: 3px; }"
+    },
+    {
+      "name": "Paper Button",
+      "kind": "button",
+      "refersTo": "button-paper",
+      "description": "The primary action when it sits on an ink plate; the fill is the page stock itself.",
+      "html": "<button class=\"ds-btn-paper\" type=\"button\">Reserve a seat</button>",
+      "css": ".ds-btn-paper { display: inline-flex; align-items: center; justify-content: center; min-height: 2.9rem; padding: 1rem 1.75rem; border: 1px solid var(--paper, #f2ede3); border-radius: 0; background: var(--paper, #f2ede3); color: var(--ink, #14120e); font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; line-height: 1.2; text-align: center; text-decoration: none; text-transform: uppercase; cursor: pointer; transition: background-color 220ms cubic-bezier(0.22, 0.7, 0.24, 1), border-color 220ms cubic-bezier(0.22, 0.7, 0.24, 1), color 220ms cubic-bezier(0.22, 0.7, 0.24, 1); } .ds-btn-paper:hover { background: var(--copper-bright, #c9703f); border-color: var(--copper-bright, #c9703f); color: var(--ink, #14120e); } .ds-btn-paper:focus-visible { outline: 2px solid var(--copper, #a34a25); outline-offset: 3px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet, co-equal actions such as Sign out, Refresh, back links and admin toolbar buttons.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Refresh</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 2.9rem; padding: 0.85rem 1.4rem; border: 1px solid var(--line-strong, rgba(20, 18, 14, 0.36)); border-radius: 0; background: transparent; color: var(--ink, #14120e); font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; line-height: 1.2; text-align: center; text-decoration: none; text-transform: uppercase; cursor: pointer; transition: background-color 220ms cubic-bezier(0.22, 0.7, 0.24, 1), border-color 220ms cubic-bezier(0.22, 0.7, 0.24, 1), color 220ms cubic-bezier(0.22, 0.7, 0.24, 1); } .ds-btn-secondary:hover { background: var(--paper-sunk, #e9e2d5); border-color: var(--ink, #14120e); color: var(--ink, #14120e); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--copper, #a34a25); outline-offset: 3px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A transparent, hairline-bordered field with a mono key label above it; used across booking, payment and admin.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field__key\">Attendee email address</span><input class=\"ds-field__input\" type=\"email\" placeholder=\"you@example.com\" value=\"amina@example.com\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 0.4rem; width: 100%; max-width: 26rem; font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); } .ds-field__key { font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-field__input { width: 100%; padding: 0.75rem 0.85rem; border: 1px solid var(--line-strong, rgba(20, 18, 14, 0.36)); border-radius: 0; background: transparent; color: var(--ink, #14120e); font-size: 0.94rem; line-height: 1.4; transition: border-color 180ms cubic-bezier(0.22, 0.7, 0.24, 1), box-shadow 180ms cubic-bezier(0.22, 0.7, 0.24, 1); } .ds-field__input::placeholder { color: var(--text-secondary, #615a4d); opacity: 1; } .ds-field__input:hover { border-color: var(--ink, #14120e); } .ds-field__input:focus, .ds-field__input:focus-visible { outline: 2px solid var(--copper, #a34a25); outline-offset: 3px; border-color: var(--ink, #14120e); box-shadow: inset 0 0 0 1px var(--ink, #14120e); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "Admin and payment status in record grammar: square, mono, uppercase, fill carries the state.",
+      "html": "<span class=\"ds-chip ds-chip--confirmed\">Confirmed</span> <span class=\"ds-chip ds-chip--pending\">Pending</span> <span class=\"ds-chip ds-chip--failed\">Failed</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; padding: 0.18rem 0.45rem; border: 1px solid var(--line-strong, rgba(20, 18, 14, 0.36)); border-radius: 0; background: transparent; color: var(--ink, #14120e); font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.51rem; letter-spacing: 0.08em; line-height: 1.5; text-transform: uppercase; white-space: nowrap; } .ds-chip--confirmed { border-color: var(--ink, #14120e); background: var(--ink, #14120e); color: var(--paper, #f2ede3); } .ds-chip--pending { border-color: rgba(163, 74, 37, 0.5); color: var(--copper, #a34a25); } .ds-chip--failed { border-color: rgba(163, 74, 37, 0.5); background: rgba(163, 74, 37, 0.07); color: #7d3216; }"
+    },
+    {
+      "name": "Site Masthead",
+      "kind": "nav",
+      "description": "Sticky ink masthead: Bodoni wordmark with a mono institution line, mono section links, language switch and paper CTA.",
+      "html": "<header class=\"ds-masthead\"><a class=\"ds-masthead__wordmark\" href=\"#\"><span class=\"ds-masthead__institution\">DienAcademy</span><span class=\"ds-masthead__event\">Blockchain Masterclass</span></a><nav class=\"ds-masthead__nav\"><a href=\"#\">Programme</a><a href=\"#\">Admission</a><a href=\"#\">Questions</a></nav><div class=\"ds-masthead__actions\"><div class=\"ds-masthead__switch\"><span class=\"ds-masthead__lang\">EN</span><span class=\"ds-masthead__lang ds-masthead__lang--active\">SW</span></div><span class=\"ds-masthead__cta\">Reserve a seat</span></div></header>",
+      "css": ".ds-masthead { display: flex; align-items: center; gap: 2.75rem; padding: 0.9rem 2.5rem; background: var(--ink, #14120e); border-bottom: 1px solid var(--line-on-ink, rgba(242, 237, 227, 0.2)); color: var(--paper, #f2ede3); font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); } .ds-masthead__wordmark { display: flex; flex-direction: column; gap: 0.1rem; margin-right: auto; text-decoration: none; color: inherit; } .ds-masthead__institution { font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.56rem; letter-spacing: 0.26em; text-transform: uppercase; color: var(--text-on-ink-muted, rgba(242, 237, 227, 0.66)); } .ds-masthead__event { font-family: var(--font-display, \"Bodoni Moda\", Georgia, serif); font-size: 1.2rem; line-height: 1.1; } .ds-masthead__nav { display: flex; gap: 1.9rem; } .ds-masthead__nav a { padding-block: 0.4rem; border-bottom: 1px solid transparent; color: var(--text-on-ink-muted, rgba(242, 237, 227, 0.66)); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.16em; text-decoration: none; text-transform: uppercase; transition: color 200ms cubic-bezier(0.22, 0.7, 0.24, 1), border-color 200ms cubic-bezier(0.22, 0.7, 0.24, 1); } .ds-masthead__nav a:hover, .ds-masthead__nav a:focus-visible { border-color: var(--copper-bright, #c9703f); color: var(--paper, #f2ede3); } .ds-masthead__actions { display: flex; align-items: center; gap: 1rem; } .ds-masthead__switch { display: flex; border: 1px solid var(--line-on-ink, rgba(242, 237, 227, 0.2)); } .ds-masthead__lang { padding: 0.3rem 0.45rem; font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.56rem; letter-spacing: 0.1em; color: var(--text-on-ink-muted, rgba(242, 237, 227, 0.66)); } .ds-masthead__lang--active { background: var(--paper, #f2ede3); color: var(--ink, #14120e); } .ds-masthead__cta { display: inline-flex; align-items: center; min-height: 2.35rem; padding: 0.55rem 0.9rem; background: var(--paper, #f2ede3); color: var(--ink, #14120e); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Admission Ledger",
+      "kind": "custom",
+      "description": "The signature artifact: one cell per seat. Ink is confirmed, copper is held, an outline is open. Shown here at 15 columns.",
+      "html": "<div class=\"ds-ledger\"><div class=\"ds-ledger__head\"><span class=\"ds-ledger__caption\">Seats remaining</span><span class=\"ds-ledger__number\">47</span><span class=\"ds-ledger__states\"><span class=\"ds-ledger__state\"><i class=\"ds-ledger__key ds-ledger__key--confirmed\"></i>Confirmed</span><span class=\"ds-ledger__state\"><i class=\"ds-ledger__key ds-ledger__key--held\"></i>Held</span><span class=\"ds-ledger__state\"><i class=\"ds-ledger__key ds-ledger__key--open\"></i>Open</span></span></div><div class=\"ds-ledger__grid\"><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--held\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--held\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--held\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--confirmed\"></span><span class=\"ds-ledger__cell ds-ledger__cell--open\"></span></div></div>",
+      "css": ".ds-ledger { padding: 1.5rem; background: var(--paper, #f2ede3); color: var(--ink, #14120e); font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); } .ds-ledger__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1.25rem; margin-bottom: 1rem; } .ds-ledger__caption { font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-ledger__number { font-family: var(--font-display, \"Bodoni Moda\", Georgia, serif); font-size: 2.2rem; line-height: 1; } .ds-ledger__states { display: flex; flex-wrap: wrap; gap: 1rem; margin-left: auto; } .ds-ledger__state { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-ledger__key { width: 0.5rem; height: 0.5rem; border-radius: 0; } .ds-ledger__key--confirmed { background: var(--ink, #14120e); } .ds-ledger__key--held { background: var(--copper, #a34a25); } .ds-ledger__key--open { border: 1px solid var(--line-readable, rgba(20, 18, 14, 0.47)); } .ds-ledger__grid { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); gap: 4px; } .ds-ledger__cell { aspect-ratio: 2.2 / 1; } .ds-ledger__cell--confirmed { background: var(--ink, #14120e); } .ds-ledger__cell--held { background: var(--copper, #a34a25); } .ds-ledger__cell--open { box-shadow: inset 0 0 0 1px var(--line-readable, rgba(20, 18, 14, 0.47)); }"
+    },
+    {
+      "name": "Admission Pass",
+      "kind": "custom",
+      "refersTo": "admission-pass",
+      "description": "The ticket artifact: ivory sheet at -1.5\u00b0, perforated stub, punched notches, serial, fact grid, wax seal and barcode.",
+      "html": "<div class=\"ds-pass\"><div class=\"ds-pass__stub\"><span class=\"ds-pass__stub-text\">Admit one</span><span class=\"ds-pass__stub-number\">001</span></div><div class=\"ds-pass__body\"><div class=\"ds-pass__head\"><span>DienAcademy</span><span>No. 001 / 150</span></div><div class=\"ds-pass__title\">Blockchain Masterclass</div><div class=\"ds-pass__facts\"><div><span class=\"ds-pass__key\">Date</span><span class=\"ds-pass__value\">7 November 2026</span></div><div><span class=\"ds-pass__key\">Venue</span><span class=\"ds-pass__value\">Arusha, Tanzania</span></div><div><span class=\"ds-pass__key\">Admission</span><span class=\"ds-pass__value\">TZS 10,000</span></div><div><span class=\"ds-pass__key\">Currency</span><span class=\"ds-pass__value\">3.8 USDT</span></div></div><div class=\"ds-pass__foot\"><span class=\"ds-pass__seal\">DienAcademy</span><span class=\"ds-pass__meta\">Single session day</span><span class=\"ds-pass__barcode\"></span></div></div></div>",
+      "css": ".ds-pass { position: relative; display: grid; grid-template-columns: 2.7rem minmax(0, 1fr); width: min(100%, 27rem); background: var(--paper-raised, #f8f4ec); color: var(--ink, #14120e); font-family: var(--font-body, \"Archivo\", \"Helvetica Neue\", Arial, sans-serif); transform: rotate(-1.5deg); box-shadow: 0 32px 70px -44px rgba(0, 0, 0, 0.9); } .ds-pass__stub { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 1.2rem 0; border-right: 1px dashed var(--line-strong, rgba(20, 18, 14, 0.36)); } .ds-pass__stub::before, .ds-pass__stub::after { content: \"\"; position: absolute; right: -0.45rem; width: 0.9rem; height: 0.9rem; border-radius: 50%; background: var(--ink, #14120e); } .ds-pass__stub::before { top: -0.45rem; } .ds-pass__stub::after { bottom: -0.45rem; } .ds-pass__stub-text { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.56rem; letter-spacing: 0.34em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-pass__stub-number { font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.58rem; letter-spacing: 0.1em; } .ds-pass__body { padding: 1.55rem 1.65rem 1.4rem; min-width: 0; } .ds-pass__head { display: flex; justify-content: space-between; gap: 1rem; font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-pass__title { margin: 0.95rem 0 1.25rem; font-family: var(--font-display, \"Bodoni Moda\", Georgia, serif); font-size: 1.65rem; line-height: 1.04; letter-spacing: -0.01em; } .ds-pass__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line, rgba(20, 18, 14, 0.18)); } .ds-pass__facts > div { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.6rem 0 0.55rem; border-bottom: 1px solid var(--line, rgba(20, 18, 14, 0.18)); } .ds-pass__facts > div:nth-child(even) { padding-left: 0.85rem; border-left: 1px solid var(--line, rgba(20, 18, 14, 0.18)); } .ds-pass__key { font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.52rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-pass__value { font-size: 0.78rem; line-height: 1.4; } .ds-pass__foot { display: flex; align-items: center; gap: 0.9rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line-strong, rgba(20, 18, 14, 0.36)); } .ds-pass__seal { display: inline-flex; align-items: center; justify-content: center; width: 2.6rem; height: 2.6rem; border: 1px solid var(--copper, #a34a25); border-radius: 50%; color: var(--copper, #a34a25); font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.4rem; line-height: 1.5; letter-spacing: 0.1em; text-align: center; text-transform: uppercase; } .ds-pass__meta { margin-left: auto; font-family: var(--font-mono, \"DM Mono\", \"SFMono-Regular\", Menlo, monospace); font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary, #615a4d); } .ds-pass__barcode { width: 3.2rem; height: 1.9rem; background: repeating-linear-gradient(90deg, var(--ink, #14120e) 0 1px, transparent 1px 3px); }"
+    },
+    {
+      "name": "Loading Status",
+      "kind": "custom",
+      "description": "Every wait is drawn as a press proof: a spinning hairline ring, a DM Mono label naming the process, and a single copper segment travelling along a 1px rule.",
+      "html": "<p class=\"ds-loading\" role=\"status\"><span class=\"ds-loading__ring\"></span><span>Preparing your payment sheet\u2026</span><span class=\"ds-loading__rule\"><span></span></span></p>",
+      "css": ".ds-loading { display: flex; align-items: center; gap: 0.75rem; margin: 0; color: var(--text-secondary, #615a4d); font-family: var(--font-mono, \"DM Mono\", monospace); font-size: 0.56rem; letter-spacing: 0.14em; line-height: 1.4; text-transform: uppercase; } .ds-loading__ring { width: 12px; height: 12px; flex: none; border: 1.5px solid #a34a25; border-top-color: transparent; border-radius: 50%; animation: ds-spin 700ms linear infinite; } .ds-loading__rule { position: relative; display: block; flex: 1 1 6rem; min-width: 4rem; height: 1px; overflow: hidden; background: rgba(20, 18, 14, 0.18); } .ds-loading__rule span { position: absolute; inset-block: 0; left: 0; width: 34%; background: #a34a25; animation: ds-travel 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite; } @keyframes ds-spin { to { transform: rotate(360deg); } } @keyframes ds-travel { from { transform: translateX(-115%); } to { transform: translateX(320%); } } @media (prefers-reduced-motion: reduce) { .ds-loading__ring, .ds-loading__rule span { animation: none; } .ds-loading__rule span { width: 100%; opacity: 0.6; } }"
+    },
+    {
+      "name": "Record Docket",
+      "kind": "custom",
+      "description": "The paper slip on the struck-record 404 page: punched notches, a dashed seam, the requested address verbatim, a Not found chip, event facts, seal and barcode.",
+      "html": "<aside class=\"ds-record\"><div class=\"ds-record__head\"><span>Record check</span><span>Ref. 404</span></div><dl><div><dt>Requested address</dt><dd><code>/missing</code></dd></div><div><dt>Status</dt><dd><span class=\"ds-record__chip\">Not found</span></dd></div><div><dt>Event</dt><dd>Blockchain Masterclass</dd></div><div><dt>Date</dt><dd>7th November 2026</dd></div></dl><div class=\"ds-record__foot\"><span class=\"ds-record__seal\">DienAcademy</span><span class=\"ds-record__barcode\"></span></div></aside>",
+      "css": ".ds-record { position: relative; padding: 1.4rem 1.5rem 1.35rem; border-top: 1px dashed rgba(20, 18, 14, 0.36); background: #f8f4ec; color: #14120e; } .ds-record::before, .ds-record::after { content: \"\"; position: absolute; top: -0.45rem; width: 0.9rem; height: 0.9rem; border-radius: 50%; background: #14120e; } .ds-record::before { left: 1.6rem; } .ds-record::after { right: 1.6rem; } .ds-record__head { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 0.9rem; border-bottom: 1px solid rgba(20, 18, 14, 0.36); color: #615a4d; font-family: var(--font-mono, \"DM Mono\", monospace); font-size: 0.52rem; letter-spacing: 0.14em; text-transform: uppercase; } .ds-record dl > div { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid rgba(20, 18, 14, 0.18); } .ds-record dt { color: #615a4d; font-family: var(--font-mono, \"DM Mono\", monospace); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; } .ds-record dd { margin: 0; font-size: 0.8rem; line-height: 1.5; overflow-wrap: anywhere; } .ds-record__chip { display: inline-block; padding: 0.18rem 0.45rem; border: 1px solid #a34a25; color: #a34a25; font-family: var(--font-mono, \"DM Mono\", monospace); font-size: 0.51rem; letter-spacing: 0.08em; text-transform: uppercase; } .ds-record__foot { display: flex; align-items: center; gap: 1rem; margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid rgba(20, 18, 14, 0.36); } .ds-record__seal { display: inline-flex; align-items: center; justify-content: center; width: 3.1rem; height: 3.1rem; border: 1px solid #a34a25; border-radius: 50%; color: #a34a25; font-family: var(--font-mono, \"DM Mono\", monospace); font-size: 0.42rem; line-height: 1.4; text-align: center; text-transform: uppercase; } .ds-record__barcode { width: 5.5rem; height: 2.2rem; margin-left: auto; background: repeating-linear-gradient(90deg, #14120e 0 1px, transparent 1px 3px, #14120e 3px 5px, transparent 5px 7px); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Institution",
+    "overview": "The masterclass is presented as a limited institutional edition: a printed prospectus you are invited into. Every screen is set on warm bone stock or an ink gallery plate, divided by hairline rules, with one burnished copper used as ink rather than paint. There is no chrome, no glass, no floating UI: type, rule and live data carry the whole composition.\n\nThe ornament is real information. A 150-cell admission ledger replaces every progress bar and shows confirmed, held and open seats from the live API. A tilted ivory admission pass with a perforated stub, serial number, seal and barcode stands in for the photograph the project does not have. Motion is arrival, not decoration, and collapses to stillness under prefers-reduced-motion.\n\nThe two refused worlds are explicit: the dark-gradient, neon-badge crypto-conference template, and the soft cream-and-terracotta invitation tier with rounded panels and script faces.",
+    "keyCharacteristics": [
+      "Ink-black gallery plates alternating with bone paper; hairline rules instead of cards.",
+      "One burnished copper, used as ink (datelines, italic accent, held seats, seal, focus).",
+      "Bodoni Moda display with true italics, Archivo running text, DM Mono for data.",
+      "Square corners on every surface; circles only where the object is circular.",
+      "Perforated ticket geometry: dashed seams, punched notches, stamped seal, barcode.",
+      "A live 150-cell admission ledger as the signature artifact, full-bleed at every width.",
+      "Mobile-first, bilingual EN/SW, WCAG 2.2 AA, reduced-motion safe.",
+      "Async waits drawn as press proofs: labelled status rules and structural skeletons, never shimmer.",
+      "A missing address becomes a struck record: an oversized 404 over a printed record-check docket."
+    ],
+    "rules": [
+      {
+        "name": "The One Copper Rule",
+        "body": "Copper never becomes a field of colour. It appears as ink on at most 5% of a viewport - a dateline, one word, a held cell, a seal, a focus ring - and only as a fill for hover states and the held seat state. Its rarity is what makes it read as value.",
+        "section": "colors"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Structure is drawn with 1px, never with weight: 0.18 alpha for dividers, 0.36 for control edges, 0.47 when the line itself carries meaning. Decorative borders thicker than 1px do not exist; the only 2px stroke is the copper focus outline.",
+        "section": "colors"
+      },
+      {
+        "name": "The Warm Neutral Rule",
+        "body": "No pure white and no pure black. Paper is #f2ede3, ink is #14120e, and every neutral sits on the same warm hue so the page reads as stock and pressed ink, not screen white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three-Line Rule",
+        "body": "The hero lockup never exceeds three lines at any viewport, and never splits one word's scale from another's. One line may be italic; one word may be copper; never both in the same word.",
+        "section": "typography"
+      },
+      {
+        "name": "The Mono Is Data Rule",
+        "body": "DM Mono is reserved for data, keys, numerals and micro-labels. Sentences, ledes and FAQ answers are always Archivo. If a run of text needs to be read as prose, it is not monospace.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces have no shadow at rest. If a new element needs to lift, it changes tone or gains a hairline - it does not gain a drop shadow. The admission pass is the only exception and it stays one.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Proofing Rule",
+        "body": "No wait is a blank panel or an unlabelled spinner. Every wait names the process and shows the structure of what is coming; the travelling copper rule is the only continuous animation permitted on paper and it freezes under reduced motion without hiding the status.",
+        "section": "motion"
+      }
+    ],
+    "dos": [
+      "Do set every section on a tonal plate (paper, paper-sunk or ink) divided by a 1px hairline, with clamp(4rem, 8vw, 7.5rem) vertical rhythm.",
+      "Do use the 150-cell ledger wherever seats are counted, including payment summaries and admin views, in paper or on-ink tone.",
+      "Do set dates, serials, prices, statuses and micro-labels in DM Mono uppercase, and keep sentences in Archivo.",
+      "Do keep copper to at most 5% of a viewport and reserve the copper-light step for dark grounds.",
+      "Do keep every corner square and every edge a 1px hairline; reserve circles for the seal, notches, radio and spinner.",
+      "Do localise both languages fully (EN/SW, SW default) and keep the three-line hero lockup intact in both.",
+      "Do preserve the existing prices, dates, contacts, FAQ answers and booking behaviour."
+    ],
+    "donts": [
+      "Don't introduce gradients, glows, glass, backdrop blur, pill radii, or floating cards with drop shadows.",
+      "Don't wrap content in nested cards or add a card where a hairline rule and a heading will do.",
+      "Don't use copper as a background wash, badge colour, or decorative block; it is ink, not paint.",
+      "Don't use monospace for prose, or uppercase Bodoni for body copy.",
+      "Don't hide the mobile navigation behind a hamburger; keep the nav row visible.",
+      "Don't invent photography, speakers, testimonials, logos or press marks; the pass, seal, barcode and ledger are the only imagery.",
+      "Don't add a fourth typeface or a second accent colour."
+    ]
+  }
+}

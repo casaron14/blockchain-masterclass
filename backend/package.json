@@ -1,0 +1,56 @@
+{
+  "name": "blockchain-masterclass",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "NODE_ENV=production node server.js",
+    "local:setup": "bash local-dev/setupLocalChain.sh",
+    "local:pay": "node local-dev/simulateUsdtPayment.mjs",
+    "test": "TEST_DATABASE_NAME=masterclass_test DB_DATABASE=masterclass_test npm run test:isolated",
+    "test:isolated": "node --test --test-concurrency=1 --test-force-exit 'tests/**/*.test.js'",
+    "db:migrate": "node scripts/runDatabaseMigrations.js",
+    "sweep:prepare": "node scripts/prepareSweepBatchForOfflineSigning.js",
+    "sweep:sign": "node scripts/signSweepBatchOnOfflineMachine.js",
+    "sweep:submit": "node scripts/submitSignedSweepBatch.js",
+    "wallet:derive": "node scripts/printDepositAddressForDerivationIndex.js",
+    "report": "node scripts/adminReport.js",
+    "admin:create": "node scripts/createAdminUser.js",
+    "testnet:setup": "bash local-dev/setupBscTestnet.sh",
+    "testnet:order": "node local-dev/createTestnetOrder.mjs",
+    "testnet:pay": "node local-dev/simulateUsdtPayment.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.17.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "googleapis": "^182.0.0",
+    "joi": "^18.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.2.1",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  },
+  "allowScripts": {
+    "bcrypt@6.0.0": true
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

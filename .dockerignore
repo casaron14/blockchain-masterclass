@@ -1,0 +1,13 @@
+# Both Dockerfiles are built from the repository root because the apps share
+# the files in shared/. This keeps node_modules, build output and secrets out of
+# the build context.
+**/node_modules
+**/.next
+**/out
+backend/cache
+**/.env
+**/.env.local
+**/.env.*.local
+**/*.log
+.git
+.vercel
