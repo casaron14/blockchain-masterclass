@@ -27,5 +27,7 @@ backend/.env.*.local
 coverage/
 
 
-#local md files
+# Local Markdown notes stay ignored; keep the project runbooks trackable.
 *.md
+!README.md
+!DEPLOYMENT.md
