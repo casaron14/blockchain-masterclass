@@ -1,30 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import {
-  fetchPaymentRecordById,
   fetchPaymentOverviewById,
   fetchBookingRecordById,
   initiateUsdtPayment,
-  refreshOnchainPaymentStatus,
   uploadLipaNambaPaymentReceipt,
 } from '@/lib/api';
-import {
-  clearStoredBookingProgress,
-  fetchStoredBookingRecord,
-} from '@/lib/bookingStorage';
+import { fetchStoredBookingRecord } from '@/lib/bookingStorage';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import { SUPPORTED_PAYMENT_METHODS } from '@/lib/eventConfig';
 import { formatLocalPrice } from '@/lib/eventFormat';
+import { formatPaymentHoldCountdown } from '@/lib/paymentHoldCountdown';
 import LoadingButton from '@/components/LoadingButton';
-import LoadingStatusLine from '@/components/LoadingStatusLine';
 import HairlineLoadingIndicator from '@/components/HairlineLoadingIndicator';
 import PaymentLoadingSkeleton from '@/components/PaymentLoadingSkeleton';
 
-const POLL_INTERVAL_MS = 4000;
-const POLL_TIMEOUT_MS = 120000;
 // Serverless hosts (Vercel) refuse a request body above 4.5 MB before it ever
 // reaches the API, so the client must never offer to upload more than the
 // backend will accept.
@@ -41,13 +33,6 @@ function readStoredBookingRecord(eventSlug) {
     return fetchStoredBookingRecord(eventSlug);
   }
   return null;
-}
-
-function formatCountdown(remainingMilliseconds) {
-  const totalSeconds = Math.max(0, Math.floor(remainingMilliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function CopyAddressIcon() {
@@ -100,8 +85,6 @@ export default function PaymentFlow({ paymentId }) {
     lipaNambaNumber,
     lipaNambaAccountName,
   } = eventConfig;
-  const router = useRouter();
-  const hasNavigatedRef = useRef(false);
 
   const [paymentRecord, setPaymentRecord] = useState(null);
   const [bookingExpiresAtMs, setBookingExpiresAtMs] = useState(null);
@@ -114,6 +97,7 @@ export default function PaymentFlow({ paymentId }) {
 
   const [offlinePaymentReceipt, setOfflinePaymentReceipt] = useState(null);
   const [bookingReferenceCode, setBookingReferenceCode] = useState('');
+  const [attendeeFullName, setAttendeeFullName] = useState('');
   const [isOfflineSeatHoldActive, setIsOfflineSeatHoldActive] = useState(null);
   const [selectedReceiptFile, setSelectedReceiptFile] = useState(null);
   const [receiptUploadError, setReceiptUploadError] = useState(null);
@@ -122,23 +106,6 @@ export default function PaymentFlow({ paymentId }) {
 
   const [statusMessage, setStatusMessage] = useState(null);
   const [statusTone, setStatusTone] = useState('info');
-
-  const navigateToSuccess = useCallback(() => {
-    if (hasNavigatedRef.current) {
-      return;
-    }
-    hasNavigatedRef.current = true;
-    const storedBookingRecord = readStoredBookingRecord(slug);
-    const referenceCode = storedBookingRecord?.ref;
-    if (typeof window !== 'undefined') {
-      clearStoredBookingProgress(slug);
-    }
-    if (referenceCode) {
-      router.push(`/${slug}/success/${referenceCode}`);
-    } else {
-      router.push(`/${slug}`);
-    }
-  }, [router, slug]);
 
   const paymentLabelParams = {
     currency,
@@ -152,6 +119,9 @@ export default function PaymentFlow({ paymentId }) {
     const storedBookingRecord = readStoredBookingRecord(slug);
     if (storedBookingRecord?.ref) {
       setBookingReferenceCode(storedBookingRecord.ref);
+    }
+    if (storedBookingRecord?.full_name) {
+      setAttendeeFullName(storedBookingRecord.full_name);
     }
   }, [slug]);
 
@@ -172,6 +142,9 @@ export default function PaymentFlow({ paymentId }) {
         if (bookingRecord?.ref) {
           setBookingReferenceCode(bookingRecord.ref);
         }
+        if (bookingRecord?.full_name) {
+          setAttendeeFullName(bookingRecord.full_name);
+        }
         if (!bookingRecord?.expires_at) {
           return;
         }
@@ -185,8 +158,13 @@ export default function PaymentFlow({ paymentId }) {
       });
   }, [paymentId, t, slug]);
 
+  // A confirmed payment does not need a hold countdown; the ticket is already
+  // being delivered, so the timer must not overwrite the confirmation notice
+  // with an "expired" message.
+  const paymentStatusValue = paymentRecord?.status;
+
   useEffect(() => {
-    if (!bookingExpiresAtMs) {
+    if (!bookingExpiresAtMs || paymentStatusValue === 'confirmed') {
       return undefined;
     }
 
@@ -203,7 +181,7 @@ export default function PaymentFlow({ paymentId }) {
     const countdownTimer = setInterval(updateRemainingTime, 1000);
 
     return () => clearInterval(countdownTimer);
-  }, [bookingExpiresAtMs, t]);
+  }, [bookingExpiresAtMs, paymentStatusValue, t]);
 
   useEffect(() => {
     if (!paymentRecord || paymentRecord.payment_method !== SUPPORTED_PAYMENT_METHODS.usdt_bep20) {
@@ -259,79 +237,6 @@ export default function PaymentFlow({ paymentId }) {
     paymentRecord?.payment_method === SUPPORTED_PAYMENT_METHODS.lipanamba &&
     offlinePaymentReceipt?.status === 'submitted' &&
     !isPaymentStatusTerminal;
-
-  const isWaitingForConfirmation =
-    (paymentRecord?.payment_method === SUPPORTED_PAYMENT_METHODS.usdt_bep20 &&
-      !!usdtInstructions) ||
-    isOfflinePaymentAwaitingReview;
-
-  const isUsdtPaymentAwaitingConfirmation =
-    paymentRecord?.payment_method === SUPPORTED_PAYMENT_METHODS.usdt_bep20 &&
-    !!usdtInstructions;
-
-  useEffect(() => {
-    if (!isWaitingForConfirmation) {
-      return undefined;
-    }
-
-    let settled = false;
-    const startedAt = Date.now();
-    const pollTimer = setInterval(async () => {
-      if (settled) {
-        return;
-      }
-      // A serverless host has no five-second listener process. For USDT the
-      // poll asks the backend to run one guarded on-chain scan; the backend
-      // throttles it to at most one scan per ON_DEMAND_SCAN_MIN_INTERVAL_MS.
-      const payment = isUsdtPaymentAwaitingConfirmation
-        ? await refreshOnchainPaymentStatus(paymentId)
-            .then((refreshResult) => refreshResult.payment)
-            .catch(() => null)
-        : await fetchPaymentRecordById(paymentId).catch(() => null);
-      if (!payment) {
-        return;
-      }
-      setPaymentRecord(payment);
-
-      if (payment.status === 'confirmed') {
-        settled = true;
-        clearInterval(pollTimer);
-        navigateToSuccess();
-        return;
-      }
-      if (payment.status === 'failed' || payment.status === 'expired') {
-        settled = true;
-        clearInterval(pollTimer);
-        if (payment.status === 'failed') {
-          setOfflinePaymentReceipt((currentReceipt) =>
-            currentReceipt ? { ...currentReceipt, status: 'rejected' } : currentReceipt
-          );
-        }
-        setStatusTone('error');
-        setStatusMessage(
-          payment.status === 'failed' ? t('payment.statusFailed') : t('payment.statusExpired')
-        );
-        return;
-      }
-      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        settled = true;
-        clearInterval(pollTimer);
-        setStatusTone('info');
-        setStatusMessage(t('payment.statusPending'));
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      settled = true;
-      clearInterval(pollTimer);
-    };
-  }, [
-    isWaitingForConfirmation,
-    isUsdtPaymentAwaitingConfirmation,
-    paymentId,
-    t,
-    navigateToSuccess,
-  ]);
 
   function handleReceiptFileSelection(event) {
     const receiptFile = event.target.files?.[0] ?? null;
@@ -395,8 +300,6 @@ export default function PaymentFlow({ paymentId }) {
       if (receiptFileInputRef.current) {
         receiptFileInputRef.current.value = '';
       }
-      setStatusTone('info');
-      setStatusMessage(t('payment.lipanambaReceiptUploaded'));
     } catch (error) {
       setReceiptUploadError(error.message || t('payment.genericError'));
     } finally {
@@ -440,20 +343,43 @@ export default function PaymentFlow({ paymentId }) {
 
   return (
     <section className="card">
-      {bookingExpiresAtMs !== null && (
+      {bookingExpiresAtMs !== null && paymentStatusValue !== 'confirmed' && (
         <div className={`hold-countdown ${isCountdownUrgent ? 'warning' : ''}`}>
           <span>{t('payment.timeRemaining')}</span>
           <strong>
             {remainingMilliseconds !== null
-              ? formatCountdown(remainingMilliseconds)
-              : formatCountdown(bookingExpiresAtMs - Date.now())}
+              ? formatPaymentHoldCountdown(remainingMilliseconds)
+              : formatPaymentHoldCountdown(bookingExpiresAtMs - Date.now())}
           </strong>
         </div>
       )}
 
       <h2 className="card__title">{t('payment.title')}</h2>
 
-      {paymentMethod === SUPPORTED_PAYMENT_METHODS.usdt_bep20 && (
+      {paymentStatusValue === 'confirmed' && (
+        <p className="status-message success" role="status">
+          {t('payment.confirmedNotice')}
+        </p>
+      )}
+
+      {(attendeeFullName || bookingReferenceCode) && (
+        <div className="detail-list payment-attendee-details">
+          {attendeeFullName && (
+            <p>
+              <strong>{t('payment.attendeeLabel')}:</strong> {attendeeFullName}
+            </p>
+          )}
+          {bookingReferenceCode && (
+            <p>
+              <strong>{t('payment.bookingReferenceLabel')}:</strong>{' '}
+              <code className="payment-booking-reference-code">{bookingReferenceCode}</code>
+            </p>
+          )}
+        </div>
+      )}
+
+      {paymentMethod === SUPPORTED_PAYMENT_METHODS.usdt_bep20 &&
+        paymentStatusValue !== 'confirmed' && (
         <div className="payment-flow">
           <p>{t('payment.usdtInstructions', paymentLabelParams)}</p>
 
@@ -515,7 +441,8 @@ export default function PaymentFlow({ paymentId }) {
         </div>
       )}
 
-      {paymentMethod === SUPPORTED_PAYMENT_METHODS.lipanamba && (
+      {paymentMethod === SUPPORTED_PAYMENT_METHODS.lipanamba &&
+        paymentStatusValue !== 'confirmed' && (
         <div className="payment-flow">
           <p>
             {t('payment.lipanambaInstructions', {
@@ -593,10 +520,6 @@ export default function PaymentFlow({ paymentId }) {
             </form>
           )}
         </div>
-      )}
-
-      {isWaitingForConfirmation && !isPaymentStatusTerminal && (
-        <LoadingStatusLine label={t('loadingStates.checkingPayment')} spaced />
       )}
 
       {statusMessage && (

@@ -20,6 +20,15 @@ test('resolveBookingConfirmationMessage reports success when no delivery was att
   assert.equal(confirmationMessage.tone, 'success');
 });
 
+test('resolveBookingConfirmationMessage points to the booking lookup when email is disabled', () => {
+  const confirmationMessage = resolveBookingConfirmationMessage({
+    ticketDelivery: { delivered: false, skipped: true, reason: 'email_delivery_disabled' },
+  });
+
+  assert.equal(confirmationMessage.tone, 'success');
+  assert.match(confirmationMessage.message, /booking lookup/i);
+});
+
 test('resolveBookingConfirmationMessage reports an info message when the ticket email failed', () => {
   const confirmationMessage = resolveBookingConfirmationMessage({
     ticketDelivery: { delivered: false },

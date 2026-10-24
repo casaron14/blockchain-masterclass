@@ -204,7 +204,8 @@ export const translations = {
     },
     lookup: {
       title: 'Look up your booking',
-      description: 'Enter your booking reference to view your booking status.',
+      description:
+        'Enter your booking reference to view your booking status and download your ticket.',
       referenceLabel: 'Booking reference',
       referencePlaceholder: 'e.g. ABC123',
       search: 'Search',
@@ -213,6 +214,8 @@ export const translations = {
       noPayment: 'No payment started',
       downloadTicket: 'Download your ticket',
       ticketDownloaded: 'Ticket downloaded.',
+      ticketReadyNote:
+        'Your seat is confirmed. Download your ticket now, or return to this page with your reference any time.',
       payNow: 'Continue to payment',
       noActionAvailable: 'This booking has no action available. Contact support for help.',
       bookingStatus: {
@@ -240,7 +243,11 @@ export const translations = {
     },
     payment: {
       title: 'Payment',
+      confirmedNotice:
+        'Your payment is confirmed. Your ticket has been emailed to you — check your inbox and spam folder.',
       timeRemaining: 'Time remaining to pay',
+      attendeeLabel: 'Attendee',
+      bookingReferenceLabel: 'Booking reference',
       instantPayment: 'Instant Payment',
       usdt: '{crypto} on {network} (Crypto)',
       comingSoon: 'Coming soon',
@@ -257,11 +264,11 @@ export const translations = {
       copyAddress: 'Copy address',
       addressCopied: 'Address copied!',
       automaticCheck:
-        'Waiting for your transfer to be confirmed automatically. You do not need to enter anything.',
+        'Once your transfer is confirmed, your ticket will be emailed to you within one hour. You can close this page.',
       depositQrAlt: 'QR code with the deposit wallet address',
       lipanamba: 'Lipa Namba (Mobile Money)',
       lipanambaInstructions:
-        'Pay {currency} {price} to Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), then upload your payment receipt. An admin will review the receipt and email your ticket once payment is confirmed.',
+        'Pay {currency} {price} to Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), then upload your payment receipt. Our team will review the receipt and email your ticket within one hour.',
       lipanambaNumberLabel: 'Lipa Namba number',
       lipanambaAccountLabel: 'Account name',
       lipanambaAmountLabel: 'Amount to pay',
@@ -271,18 +278,14 @@ export const translations = {
       lipanambaUploadReceipt: 'Upload receipt',
       lipanambaUploadingReceipt: 'Uploading receipt...',
       lipanambaReceiptMissing: 'Choose a receipt file before uploading.',
-      lipanambaReceiptUploaded:
-        'Receipt uploaded. An admin will review it and confirm your payment.',
       lipanambaReceiptAwaitingReview:
-        'Your receipt has been received and is awaiting admin review. Your ticket will be emailed after confirmation.',
+        'Your receipt has been received. Our team will review it and email your ticket within one hour. You can close this page.',
       lipanambaReceiptRejected:
         'The previous receipt was not accepted. Please upload a clear payment receipt.',
       lipanambaSeatHoldUnavailable:
         'The receipt was received, but the event is currently full so the seat hold could not be extended. Please contact support before paying again.',
       lipanambaReceiptTooLarge: 'The receipt must be 4 MB or smaller.',
       lipanambaReceiptInvalidType: 'Upload a PDF, JPEG, PNG, or WebP receipt.',
-      statusPending: 'Payment pending. Waiting for confirmation...',
-      statusFailed: 'Payment failed. Please try again.',
       statusExpired: 'Your seat hold has expired. Please book again.',
       expired: 'Your seat hold has expired. Please book again.',
       genericError: 'Payment could not be completed. Please try again.',
@@ -293,12 +296,14 @@ export const translations = {
       message: 'Your seat is secured and your ticket is being prepared.',
       reference: 'Booking reference',
       attendee: 'Attendee',
-      ticketNote: 'Your ticket with a QR code has been sent to your email.',
+      ticketNote:
+        'Your ticket with a QR code is ready below. Keep your booking reference to find it again.',
       downloading: 'Preparing your ticket…',
       downloadTicket: 'Download your ticket',
       downloadFailed: 'Ticket download failed. Please try again.',
       supportHeading: 'Need help?',
       supportText: 'Contact the event support team for assistance with your booking.',
+      findBooking: 'Find this booking later',
       backHome: 'Back to home',
     },
     footerNote: {
@@ -309,7 +314,6 @@ export const translations = {
       loadingPayment: 'Preparing your payment sheet…',
       loadingQr: 'Drawing the deposit code…',
       loadingWallet: 'Fetching the wallet address…',
-      checkingPayment: 'Checking payment status…',
       sendingStkPrompt: 'Sending the prompt…',
       creatingBooking: 'Reserving your seat…',
       searchingBooking: 'Searching the register…',
@@ -530,7 +534,8 @@ export const translations = {
     },
     lookup: {
       title: 'Tafuta booking yako',
-      description: 'Weka namba ya kumbukumbu ya booking yako kuona hali yake.',
+      description:
+        'Weka namba ya kumbukumbu ya booking yako kuona hali yake na kupakua tikiti yako.',
       referenceLabel: 'Namba ya kumbukumbu',
       referencePlaceholder: 'mf. ABC123',
       search: 'Tafuta',
@@ -539,6 +544,8 @@ export const translations = {
       noPayment: 'Malipo hayajaanza',
       downloadTicket: 'Pakua tikiti yako',
       ticketDownloaded: 'Tikiti imepakuliwa.',
+      ticketReadyNote:
+        'Nafasi yako imethibitishwa. Pakua tikiti yako sasa, au rudi kwenye ukurasa huu na namba yako ya kumbukumbu wakati wowote.',
       payNow: 'Endelea na malipo',
       noActionAvailable:
         'Booking hii haina hatua inayopatikana. Wasiliana na timu ya usaidizi.',
@@ -567,7 +574,11 @@ export const translations = {
     },
     payment: {
       title: 'Malipo',
+      confirmedNotice:
+        'Malipo yako yamethibitishwa. Tikiti yako imetumwa kwa barua pepe — angalia inbox na spam.',
       timeRemaining: 'Muda uliobaki wa kulipa',
+      attendeeLabel: 'Mshiriki',
+      bookingReferenceLabel: 'Namba ya kumbukumbu',
       instantPayment: 'Malipo ya Papo Hapo',
       usdt: '{crypto} kwenye {network} (Crypto)',
       comingSoon: 'Inakuja hivi karibuni',
@@ -584,11 +595,11 @@ export const translations = {
       copyAddress: 'Nakili anwani',
       addressCopied: 'Anwani imenakiliwa!',
       automaticCheck:
-        'Inasubiri uhamisho wako uthibitishwe moja kwa moja. Huhitaji kuweka chochote.',
+        'Baada ya uhamisho wako kuthibitishwa, tikiti yako itatumwa kwa barua pepe ndani ya saa moja. Unaweza kufunga ukurasa huu.',
       depositQrAlt: 'QR code yenye anwani ya pochi ya malipo',
       lipanamba: 'Lipa Namba (Malipo kwa Simu)',
       lipanambaInstructions:
-        'Lipa {price} {currency} kwa Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), kisha upload risiti ya malipo. Admin atakagua risiti na akithibitisha malipo utatumiwa tikiti kwa barua pepe.',
+        'Lipa {price} {currency} kwa Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), kisha upload risiti ya malipo. Timu yetu itakagua risiti na kutumia tikiti yako kwa barua pepe ndani ya saa moja.',
       lipanambaNumberLabel: 'Namba ya Lipa Namba',
       lipanambaAccountLabel: 'Jina la akaunti',
       lipanambaAmountLabel: 'Kiasi cha kulipa',
@@ -598,18 +609,14 @@ export const translations = {
       lipanambaUploadReceipt: 'Upload risiti',
       lipanambaUploadingReceipt: 'Ina-upload risiti...',
       lipanambaReceiptMissing: 'Chagua faili ya risiti kabla ya upload.',
-      lipanambaReceiptUploaded:
-        'Risiti imeuploadwa. Admin atakagua na kuthibitisha malipo yako.',
       lipanambaReceiptAwaitingReview:
-        'Risiti yako imepokelewa na inasubiri ukaguzi wa admin. Tikiti yako itatumwa kwa barua pepe baada ya uthibitisho.',
+        'Risiti yako imepokelewa. Timu yetu itaikagua na kutumia tikiti yako kwa barua pepe ndani ya saa moja. Unaweza kufunga ukurasa huu.',
       lipanambaReceiptRejected:
         'Risiti ya awali haikukubaliwa. Tafadhali upload risiti iliyo wazi ya malipo.',
       lipanambaSeatHoldUnavailable:
         'Risiti imepokelewa, lakini tukio limejaa kwa sasa hivyo nafasi yako haikuweza kuhifadhiwa kwa ukaguzi. Tafadhali wasiliana na timu ya usaidizi kabla ya kulipa tena.',
       lipanambaReceiptTooLarge: 'Risiti isizidi 4 MB.',
       lipanambaReceiptInvalidType: 'Upload risiti ya PDF, JPEG, PNG, au WebP.',
-      statusPending: 'Malipo yanasubiri. Inasubiri uthibitisho...',
-      statusFailed: 'Malipo yameshindikana. Tafadhali jaribu tena.',
       statusExpired: 'Nafasi yako imeisha. Tafadhali book tena.',
       expired: 'Nafasi yako imeisha. Tafadhali book tena.',
       genericError: 'Malipo hayakukamilika. Tafadhali jaribu tena.',
@@ -623,9 +630,11 @@ export const translations = {
       downloading: 'Inatayarisha tikiti yako…',
       downloadTicket: 'Pakua tikiti yako',
       downloadFailed: 'Imeshindikana kupakua tikiti. Tafadhali jaribu tena.',
-      ticketNote: 'Tikiti yako yenye QR code imetumwa kwa barua pepe yako.',
+      ticketNote:
+        'Tikiti yako yenye QR code iko tayari hapa chini. Hifadhi namba yako ya kumbukumbu ili kuipata tena.',
       supportHeading: 'Unahitaji msaada?',
       supportText: 'Wasiliana na timu ya usaidizi kuhusu booking yako.',
+      findBooking: 'Tafuta booking hii baadaye',
       backHome: 'Rudi nyumbani',
     },
     footerNote: {
@@ -636,7 +645,6 @@ export const translations = {
       loadingPayment: 'Inatayarisha karatasi ya malipo…',
       loadingQr: 'Inachora msimbo wa amana…',
       loadingWallet: 'Inapata anwani ya pochi…',
-      checkingPayment: 'Inakagua hali ya malipo…',
       sendingStkPrompt: 'Inatuma taarifa…',
       creatingBooking: 'Inahifadhi nafasi yako…',
       searchingBooking: 'Inatafuta kwenye daftari…',

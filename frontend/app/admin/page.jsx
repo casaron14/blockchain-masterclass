@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   adminCreateBooking,
+  adminDownloadBookingsCsv,
   adminFetchBookingList,
 } from '@/lib/api';
 import { useAdmin } from '@/context/AdminContext';
@@ -28,6 +29,7 @@ function BookingCreateForm({ adminToken, onCreateBooking }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [referralSourceCode, setReferralSourceCode] = useState('');
   const [autoConfirm, setAutoConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -42,6 +44,7 @@ function BookingCreateForm({ adminToken, onCreateBooking }) {
           full_name: fullName.trim(),
           email: email.trim(),
           phone_number: phoneNumber.trim(),
+          utm_source: referralSourceCode.trim(),
           autoConfirm,
         },
         adminToken
@@ -49,6 +52,7 @@ function BookingCreateForm({ adminToken, onCreateBooking }) {
       setFullName('');
       setEmail('');
       setPhoneNumber('');
+      setReferralSourceCode('');
       setAutoConfirm(false);
       onCreateBooking();
     } catch (error) {
@@ -89,6 +93,16 @@ function BookingCreateForm({ adminToken, onCreateBooking }) {
             autoComplete="off"
           />
         </label>
+        <label className="field">
+          <span>Referral username or source (optional)</span>
+          <input
+            type="text"
+            value={referralSourceCode}
+            onChange={(event) => setReferralSourceCode(event.target.value)}
+            placeholder="neema"
+            autoComplete="off"
+          />
+        </label>
         <label className="checkbox-row">
           <input
             type="checkbox"
@@ -123,10 +137,25 @@ export default function AdminDashboardPage() {
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
   const [listError, setListError] = useState(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [isExportingBookings, setIsExportingBookings] = useState(false);
+  const [exportError, setExportError] = useState(null);
 
   const refreshBookingList = useCallback(() => {
     setListRefreshKey((currentKey) => currentKey + 1);
   }, []);
+
+  async function downloadBookingListCsv() {
+    setExportError(null);
+    setIsExportingBookings(true);
+
+    try {
+      await adminDownloadBookingsCsv(adminToken, { statusFilter });
+    } catch (error) {
+      setExportError(error.message || 'The booking export could not be downloaded.');
+    } finally {
+      setIsExportingBookings(false);
+    }
+  }
 
   useEffect(() => {
     if (isSessionRestoring) {
@@ -187,11 +216,23 @@ export default function AdminDashboardPage() {
             type="button"
             className="btn btn-secondary"
             autoLoading={false}
+            loading={isExportingBookings}
+            loadingLabel="Preparing export…"
+            onClick={downloadBookingListCsv}
+          >
+            Download CSV
+          </LoadingButton>
+          <LoadingButton
+            type="button"
+            className="btn btn-secondary"
+            autoLoading={false}
             onClick={() => router.push('/admin/settings')}
           >
             Settings
           </LoadingButton>
         </div>
+
+        {exportError && <p className="error-banner">{exportError}</p>}
 
         {statusCounts && (
           <div className="tx-summary-row">
@@ -253,6 +294,7 @@ export default function AdminDashboardPage() {
                   <th>Contact</th>
                   <th>Status</th>
                   <th>Payment</th>
+                  <th>Referral</th>
                   <th>Created</th>
                   <th></th>
                 </tr>
@@ -281,6 +323,7 @@ export default function AdminDashboardPage() {
                         {bookingRow.payment_status ? formatAdminStatusLabel(bookingRow.payment_status) : 'None'}
                       </span>
                     </td>
+                    <td>{bookingRow.referrer_name || bookingRow.utm_source || '—'}</td>
                     <td>{formatCreatedDate(bookingRow.created_at)}</td>
                     <td>
                       <LoadingButton
@@ -308,7 +351,7 @@ export default function AdminDashboardPage() {
                 ))}
                 {bookingRows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="muted">
+                    <td colSpan={8} className="muted">
                       No bookings found.
                     </td>
                   </tr>

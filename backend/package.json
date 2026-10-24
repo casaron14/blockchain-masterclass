@@ -18,6 +18,7 @@
     "wallet:derive": "node scripts/printDepositAddressForDerivationIndex.js",
     "report": "node scripts/adminReport.js",
     "admin:create": "node scripts/createAdminUser.js",
+    "admin:hash-password": "node scripts/generateAdminPasswordHash.js",
     "testnet:setup": "bash local-dev/setupBscTestnet.sh",
     "testnet:order": "node local-dev/createTestnetOrder.mjs",
     "testnet:pay": "node local-dev/simulateUsdtPayment.mjs"

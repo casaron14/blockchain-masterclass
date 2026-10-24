@@ -35,7 +35,31 @@ router.post(
 
 router.get('/referrals', referrerController.fetchReferralTrackingSummary);
 
+router.get(
+  '/referrals/export.csv',
+  referrerController.exportReferralSummaryAsCsvEndpoint
+);
+
+router.post('/referrals', referrerController.createReferrerInviteRecordEndpoint);
+
+router.get(
+  '/referrals/:referrerCode/clients',
+  referrerController.fetchReferredClientsEndpoint
+);
+
+router.get(
+  '/referrals/:referrerCode/export.csv',
+  referrerController.exportReferredClientsAsCsvEndpoint
+);
+
 router.get('/bookings', adminController.fetchAdminBookingListEndpoint);
+
+// Declared before /bookings/:id so the literal "export.csv" segment is not
+// parsed as a numeric booking id.
+router.get(
+  '/bookings/export.csv',
+  adminController.exportAdminBookingListAsCsvEndpoint
+);
 
 router.post('/bookings', adminController.createAdminBookingEndpoint);
 

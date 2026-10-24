@@ -100,8 +100,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   status          booking_status NOT NULL DEFAULT 'pending',
 
   -- which invite link / marketing channel this attendee arrived through
-  -- (e.g. "ref_john_x7k2" for a personal invite, or a campaign source). NULL
-  -- means the attendee did not arrive through a tracked link.
+  -- (e.g. "neema" for a personal invite, or a campaign source). NULL means
+  -- the attendee did not arrive through a tracked link.
   utm_source      TEXT,
 
   -- an unpaid/unconfirmed booking is marked expired after the hold window
@@ -138,8 +138,8 @@ CREATE OR REPLACE TRIGGER trg_bookings_updated_at
 -- ---------------------------------------------------------------------
 -- referrers - self-service invite identities (invite link creators)
 --   Each row is one person who registered to invite others to the event.
---   referrer_code doubles as the utm_source value carried on the invite
---   link and stored on bookings.utm_source for attribution.
+--   referrer_code is the referrer's username, shared as siteurl/?ref=<username>
+--   and stored on bookings.utm_source for attribution.
 -- ---------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS referrers (

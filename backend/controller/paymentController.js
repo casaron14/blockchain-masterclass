@@ -23,7 +23,6 @@ import {
 
 import { fetchPaymentReceiptByBookingId } from '../services/paymentReceiptService.js';
 import { fetchOfflinePaymentReceiptByPaymentId } from '../services/offlinePaymentReceiptService.js';
-import { refreshUsdtPaymentObservationOnDemand } from '../services/onDemandPaymentObservationService.js';
 
 import {
   createOrderWithDepositAddressForBooking,
@@ -345,29 +344,8 @@ function buildUsdtClaimPendingMessage(pendingReason) {
   }
 }
 
-// Serverless deployments cannot run the five-second listener. The attendee's
-// status poll calls this route, which runs the same listener tick at most once
-// every ON_DEMAND_SCAN_MIN_INTERVAL_MS (shared across all callers).
-async function refreshUsdtPaymentObservationEndpoint(req, res) {
-  const paymentId = parseInt(req.params.id, 10);
-
-  try {
-    const refreshResult = await refreshUsdtPaymentObservationOnDemand(paymentId);
-    if (!refreshResult.paymentRecord) {
-      return res.status(404).json(paymentNotFoundResponse());
-    }
-
-    return res.status(200).json({
-      payment: refreshResult.paymentRecord,
-      didRunScan: refreshResult.didRunScan,
-      reason: refreshResult.reason,
-    });
-  } catch (error) {
-    console.error('Error refreshing USDT payment observation', error);
-    return res.status(502).json({ message: 'Failed to refresh USDT payment status' });
-  }
-}
-
+// Serverless deployments cannot run the five-second listener, so USDT
+// observation is driven by the scheduled cron tick and the payment monitor job.
 async function verifyUsdtPaymentEndpoint(req, res) {
   const paymentId = parseInt(req.params.id, 10);
   const { tx_hash: txHash } = req.body;
@@ -424,5 +402,4 @@ export default {
   fetchPaymentStatusByExternalId,
   initiateUsdtPaymentEndpoint,
   verifyUsdtPaymentEndpoint,
-  refreshUsdtPaymentObservationEndpoint,
 };

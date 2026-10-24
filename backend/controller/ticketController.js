@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 
-import { redeliverFailedTicketEmail } from '../services/ticketDeliveryService.js';
+import {
+  redeliverFailedTicketEmail,
+  TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+} from '../services/ticketDeliveryService.js';
 import { fetchBookingRecordByReferenceCode } from '../services/bookingService.js';
 import { generateTicketPdfBuffer } from '../services/ticketPdfService.js';
 import { fetchPaymentReceiptByBookingId } from '../services/paymentReceiptService.js';
@@ -19,6 +22,17 @@ async function redeliverTicketEmailEndpoint(req, res) {
 
     if (!deliveryResult) {
       return res.status(404).json(ticketNotFoundResponse());
+    }
+
+    if (deliveryResult.skipped) {
+      return res.status(409).json({
+        message:
+          deliveryResult.reason === TICKET_EMAIL_DELIVERY_DISABLED_REASON
+            ? 'Email delivery is disabled; the attendee downloads the ticket from the booking lookup'
+            : 'Ticket is only available for confirmed bookings',
+        bookingId: deliveryResult.bookingId,
+        reason: deliveryResult.reason ?? null,
+      });
     }
 
     if (!deliveryResult.delivered) {

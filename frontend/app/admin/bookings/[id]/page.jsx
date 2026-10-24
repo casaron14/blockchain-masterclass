@@ -132,7 +132,7 @@ export default function AdminBookingDetailPage({ params }) {
 
       if (isAskingForConfirmation) {
         // Choosing "Confirmed" must run the same final step as the confirm
-        // button: confirm the seat, record the payment and email the ticket.
+        // button: confirm the seat, record the payment and release the ticket.
         const confirmationResult = await adminConfirmBooking(bookingId, adminToken);
         const confirmationMessage = resolveBookingConfirmationMessage(confirmationResult);
         const refreshedDetail = await adminFetchBookingDetail(bookingId, adminToken);
@@ -332,7 +332,7 @@ export default function AdminBookingDetailPage({ params }) {
             />
           </label>
           <label className="field">
-            <span>Referral source</span>
+            <span>Referral username or source</span>
             <input
               type="text"
               value={referralSource}
@@ -401,7 +401,8 @@ export default function AdminBookingDetailPage({ params }) {
 
               <p className="muted">
                 Check the uploaded receipt against the Lipa Namba statement, then confirm the
-                booking. Confirming records the payment and emails the ticket.
+                booking. Confirming records the payment and makes the ticket downloadable from the
+                booking lookup.
               </p>
 
               <OfflinePaymentReceiptPreview

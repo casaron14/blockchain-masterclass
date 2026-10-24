@@ -391,11 +391,13 @@ A receipt upload never confirms a payment by itself. Only an admin action can mo
 ### 6.7 Ticket delivery
 After confirmation:
 - generate a ticket reference or QR payload
-- send the ticket by email
+- send the ticket by email when email delivery is enabled
 - include attendee name, ticket ID, event details, and QR code
 - store a record of email delivery state for retries or support follow-up
+- always expose the ticket as a PDF from the booking lookup, so the attendee can
+  download it without email
 
-If email sending fails, the booking should be flagged for retry or manual recovery instead of silently disappearing from the system.
+If email sending fails, the booking should be flagged for retry or manual recovery instead of silently disappearing from the system. A deployment that does not send email sets `EMAIL_DELIVERY_ENABLED=false`: no delivery record is written and the retry job stays idle, while the booking lookup remains the ticket delivery path.
 
 ## 7. Payment Integration Details
 

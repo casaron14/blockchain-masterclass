@@ -13,7 +13,14 @@ import {
   BookingNotConfirmableError,
 } from '../services/adminBookingService.js';
 
+import {
+  buildBookingsCsvDocument,
+  buildCsvExportFileName,
+} from '../services/adminCsvExportService.js';
+
 import { BookingNotFoundError, SoldOutError } from '../services/bookingService.js';
+
+import { sendCsvFileDownloadResponse } from '../utils/csvDownloadResponse.js';
 
 import {
   validationFailedResponse,
@@ -42,6 +49,26 @@ async function fetchAdminBookingListEndpoint(req, res) {
   } catch (error) {
     console.error('Error fetching admin booking list', error);
     return res.status(500).json({ message: 'Error fetching bookings' });
+  }
+}
+
+async function exportAdminBookingListAsCsvEndpoint(req, res) {
+  const { status: statusFilter } = req.query;
+
+  try {
+    const bookingRows = await fetchAdminBookingList({ statusFilter });
+    const csvDownloadFileName = buildCsvExportFileName(
+      statusFilter ? `bookings-${statusFilter}` : 'bookings'
+    );
+
+    return sendCsvFileDownloadResponse(
+      res,
+      buildBookingsCsvDocument(bookingRows),
+      csvDownloadFileName
+    );
+  } catch (error) {
+    console.error('Error exporting admin booking list as CSV', error);
+    return res.status(500).json({ message: 'Error exporting bookings' });
   }
 }
 
@@ -146,6 +173,7 @@ async function confirmAdminBookingEndpoint(req, res) {
 export default {
   fetchAdminSummaryReport,
   fetchAdminBookingListEndpoint,
+  exportAdminBookingListAsCsvEndpoint,
   fetchAdminBookingDetailEndpoint,
   createAdminBookingEndpoint,
   updateAdminBookingEndpoint,

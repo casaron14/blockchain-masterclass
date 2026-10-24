@@ -269,6 +269,41 @@ test('runTicketDeliveryRetryJob stops retrying a receipt at the max attempt coun
   assert.equal(receiptAfterRetry.attemptCount, DEFAULT_TICKET_DELIVERY_MAX_ATTEMPTS);
 });
 
+test('runTicketDeliveryRetryJob sends nothing when email delivery is disabled', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  await recordFailedTicketDeliveryForBooking(confirmedBooking.id, 1);
+
+  const previousDeliveryFlag = process.env.EMAIL_DELIVERY_ENABLED;
+  process.env.EMAIL_DELIVERY_ENABLED = 'false';
+
+  try {
+    let anyEmailWasSent = false;
+    const retrySummary = await runTicketDeliveryRetryJob({
+      retryTicketDelivery: async () => {
+        anyEmailWasSent = true;
+        return { delivered: true };
+      },
+      deliverReceiptEmail: async () => {
+        anyEmailWasSent = true;
+        return { delivered: true };
+      },
+    });
+
+    assert.deepEqual(retrySummary, []);
+    assert.equal(anyEmailWasSent, false);
+
+    const deliveryRecord = await fetchTicketDeliveryRecordForBooking(confirmedBooking.id);
+    assert.equal(deliveryRecord.status, 'failed');
+    assert.equal(deliveryRecord.attempt_count, 1);
+  } finally {
+    if (previousDeliveryFlag === undefined) {
+      delete process.env.EMAIL_DELIVERY_ENABLED;
+    } else {
+      process.env.EMAIL_DELIVERY_ENABLED = previousDeliveryFlag;
+    }
+  }
+});
+
 test('runTicketDeliveryRetryJob is safe to call repeatedly with nothing left to retry', async () => {
   const confirmedBooking = await createConfirmedBooking();
   await createPendingPaymentReceiptForBooking(confirmedBooking.id);

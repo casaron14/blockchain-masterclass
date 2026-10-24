@@ -127,9 +127,10 @@ A Next.js 15 (App Router) public app lives in the **repo root** (`/home/xiv/Desk
   - `/book` — two-step booking: `BookingForm` (name, email, phone; matches the
     backend Joi rules) → `PaymentMethodSelector` (AzamPesa / USDT BEP20) → creates
     the payment record and navigates to `/pay/:paymentId`.
-  - `/pay/[paymentId]` — `PaymentFlow`: AzamPesa (initiate + poll payment status
-    every 4 s until confirmed/failed/expired) or USDT (shows receiving wallet +
-    12 USDT instructions, transaction-hash input, `verify-usdt` call).
+  - `/pay/[paymentId]` — `PaymentFlow`: AzamPesa (initiate payment) or USDT
+    (shows receiving wallet + 12 USDT instructions, transaction-hash input,
+    `verify-usdt` call). The page does not poll: it tells the attendee the
+    ticket will be emailed within one hour.
   - `/success/[ref]` — `SuccessCard`: booking reference, attendee, ticket-email note,
     and a support placeholder.
 - `components/`: `Header`, `Footer` (support email placeholder), `LanguageSwitcher`,
@@ -604,8 +605,8 @@ Frontend (Next.js on :3000, backend on :3001):
 - Pages return `200`: `/`, `/book`, `/pay/:id`, `/success/:ref`.
 - CORS allows the browser origin (`Access-Control-Allow-Origin: *`).
 - Full API chain consumed by the UI verified over HTTP: availability → create
-  booking → create payment → poll payment status → `initiate-usdt` (returns
-  receiving wallet + 12 USDT) → `verify-usdt` guard (400 without `tx_hash`).
+  booking → create payment → `initiate-usdt` (returns receiving wallet + 12 USDT)
+  → `verify-usdt` guard (400 without `tx_hash`).
 - Hydration-safe language switcher (client reads localStorage only in an effect).
 
 ---

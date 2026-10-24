@@ -6,6 +6,7 @@ const BOOKING_COLUMN_LABELS = [
   'Contact',
   'Status',
   'Payment',
+  'Referral',
   'Created',
   '',
 ];

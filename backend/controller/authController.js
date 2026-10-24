@@ -17,6 +17,16 @@ import {
   verifyTotpCodeAgainstSecret,
 } from '../utils/totp.js';
 
+import {
+  ENVIRONMENT_ADMIN_CREDENTIAL_SOURCE,
+  ENVIRONMENT_ADMIN_USER_ID,
+  isEnvironmentAdminConfigured,
+  isEnvironmentAdminTotpRequired,
+  readEnvironmentAdminPublicIdentity,
+  verifyEnvironmentAdminCredentials,
+  verifyEnvironmentAdminTotpCode,
+} from '../services/environmentAdminCredentialService.js';
+
 function sanitizeUserRecord(userRecord) {
   if (!userRecord) {
     return null;
@@ -56,6 +66,47 @@ const loginExistingUser = async (req, res) => {
     return res
       .status(400)
       .json({ message: 'Username and password are required' });
+  }
+
+  // A deployment with ADMIN_USERNAME + ADMIN_PASSWORD(_HASH) uses only those
+  // credentials. Falling back to the users table would leave a second, hidden
+  // way into the admin area that the operator does not control from Vercel.
+  if (isEnvironmentAdminConfigured()) {
+    const environmentCredentialsMatch = await verifyEnvironmentAdminCredentials(
+      username,
+      password
+    );
+
+    if (!environmentCredentialsMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    if (isEnvironmentAdminTotpRequired()) {
+      const temporaryToken = signTotpPendingToken(
+        ENVIRONMENT_ADMIN_USER_ID,
+        true,
+        ENVIRONMENT_ADMIN_CREDENTIAL_SOURCE
+      );
+
+      return res.status(200).json({
+        message: 'Credentials verified, second factor required',
+        temporaryToken,
+        totpConfigured: true,
+      });
+    }
+
+    const fullToken = signFullAdminToken(
+      ENVIRONMENT_ADMIN_USER_ID,
+      true,
+      ENVIRONMENT_ADMIN_CREDENTIAL_SOURCE
+    );
+    setJwtCookie(res, fullToken);
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token: fullToken,
+      user: readEnvironmentAdminPublicIdentity(),
+    });
   }
 
   const userRecord = await findUserByUsername(username);
@@ -105,6 +156,34 @@ const verifyTotpCode = async (req, res) => {
       .json({ message: 'Temporary token is not a pending login token' });
   }
 
+  if (
+    decodedTemporaryToken.credentialSource ===
+    ENVIRONMENT_ADMIN_CREDENTIAL_SOURCE
+  ) {
+    if (!isEnvironmentAdminConfigured() || !isEnvironmentAdminTotpRequired()) {
+      return res.status(403).json({
+        message: 'Two-factor authentication is not configured',
+      });
+    }
+
+    if (!verifyEnvironmentAdminTotpCode(code)) {
+      return res.status(401).json({ message: 'Invalid authentication code' });
+    }
+
+    const environmentAdminToken = signFullAdminToken(
+      ENVIRONMENT_ADMIN_USER_ID,
+      true,
+      ENVIRONMENT_ADMIN_CREDENTIAL_SOURCE
+    );
+    setJwtCookie(res, environmentAdminToken);
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token: environmentAdminToken,
+      user: readEnvironmentAdminPublicIdentity(),
+    });
+  }
+
   const userRecord = await findUserById(decodedTemporaryToken.id);
   if (!userRecord || !userRecord.totp_enabled || !userRecord.totp_secret) {
     return res
@@ -124,6 +203,14 @@ const verifyTotpCode = async (req, res) => {
 };
 
 const beginTotpSetup = async (req, res) => {
+  if (isEnvironmentAdminConfigured()) {
+    return res.status(409).json({
+      message:
+        'Two-factor authentication for the deployed admin is set by the ADMIN_TOTP_SECRET environment variable.',
+      error: 'TOTP_MANAGED_BY_ENVIRONMENT',
+    });
+  }
+
   const { temporaryToken } = req.body;
 
   if (!temporaryToken) {
@@ -165,6 +252,14 @@ const beginTotpSetup = async (req, res) => {
 };
 
 const confirmTotpSetup = async (req, res) => {
+  if (isEnvironmentAdminConfigured()) {
+    return res.status(409).json({
+      message:
+        'Two-factor authentication for the deployed admin is set by the ADMIN_TOTP_SECRET environment variable.',
+      error: 'TOTP_MANAGED_BY_ENVIRONMENT',
+    });
+  }
+
   const { temporaryToken, code } = req.body;
 
   if (!temporaryToken || !code) {

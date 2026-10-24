@@ -2,6 +2,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 import { DEFAULT_EVENT_SLUG } from '@/lib/eventConfig';
 import { resolveOfflinePaymentReceiptFileExtension } from '@/lib/offlinePaymentReceiptPreview';
+import { resolveCsvDownloadFileName } from '@/lib/downloadFileName';
 
 async function readResponseJson(response) {
   try {
@@ -128,14 +129,6 @@ export async function uploadLipaNambaPaymentReceipt(
 
 export function initiateUsdtPayment(paymentId) {
   return request(`/api/payments/${paymentId}/initiate-usdt`, {
-    method: 'POST',
-  });
-}
-
-// Serverless deployments have no background listener, so the attendee's poll
-// asks the API to run one throttled on-chain scan before returning the status.
-export function refreshOnchainPaymentStatus(paymentId) {
-  return request(`/api/payments/${paymentId}/refresh-onchain`, {
     method: 'POST',
   });
 }
@@ -326,4 +319,84 @@ export function adminFetchTransactionTracking({ methodFilter, paymentStatusFilte
   return request(`/api/admin/transactions${query}`, {
     headers: buildAdminAuthorizationHeaders(adminToken),
   });
+}
+
+export function adminFetchReferralSummary(adminToken) {
+  return request('/api/admin/referrals', {
+    headers: buildAdminAuthorizationHeaders(adminToken),
+  });
+}
+
+export function adminCreateReferrerInvite(referrerDetails, adminToken) {
+  return request('/api/admin/referrals', {
+    method: 'POST',
+    headers: buildAdminAuthorizationHeaders(adminToken),
+    body: JSON.stringify(referrerDetails),
+  });
+}
+
+export function adminFetchReferredClients(referrerCode, adminToken) {
+  return request(
+    `/api/admin/referrals/${encodeURIComponent(referrerCode)}/clients`,
+    {
+      headers: buildAdminAuthorizationHeaders(adminToken),
+    }
+  );
+}
+
+async function downloadAuthorizedCsvFile(downloadPath, adminToken, fallbackFileName) {
+  const response = await fetch(`${API_BASE_URL}${downloadPath}`, {
+    headers: buildAdminAuthorizationHeaders(adminToken),
+  });
+
+  if (!response.ok) {
+    const errorBody = await readResponseJson(response);
+    const error = new Error(
+      errorBody.message || `Download failed with status ${response.status}`
+    );
+    error.status = response.status;
+    error.responseBody = errorBody;
+    throw error;
+  }
+
+  const csvBlob = await response.blob();
+  const downloadFileName = resolveCsvDownloadFileName(
+    response.headers.get('content-disposition'),
+    fallbackFileName
+  );
+  const csvBlobUrl = window.URL.createObjectURL(csvBlob);
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.href = csvBlobUrl;
+  downloadAnchor.download = downloadFileName;
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(csvBlobUrl), 1000);
+
+  return downloadFileName;
+}
+
+export function adminDownloadBookingsCsv(adminToken, { statusFilter } = {}) {
+  const query = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : '';
+  return downloadAuthorizedCsvFile(
+    `/api/admin/bookings/export.csv${query}`,
+    adminToken,
+    'bookings.csv'
+  );
+}
+
+export function adminDownloadReferralSummaryCsv(adminToken) {
+  return downloadAuthorizedCsvFile(
+    '/api/admin/referrals/export.csv',
+    adminToken,
+    'referral-summary.csv'
+  );
+}
+
+export function adminDownloadReferredClientsCsv(referrerCode, adminToken) {
+  return downloadAuthorizedCsvFile(
+    `/api/admin/referrals/${encodeURIComponent(referrerCode)}/export.csv`,
+    adminToken,
+    `referred-clients-${referrerCode}.csv`
+  );
 }

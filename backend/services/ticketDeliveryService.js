@@ -15,6 +15,25 @@ export const DEFAULT_EVENT_TITLE = EVENT_TITLE;
 export const DEFAULT_EVENT_DATE = EVENT_DATE_LABEL;
 export const DEFAULT_EVENT_LOCATION = EVENT_LOCATION;
 
+export const TICKET_EMAIL_DELIVERY_DISABLED_REASON = 'email_delivery_disabled';
+
+// A deployment can run without email: the attendee downloads the ticket PDF
+// from the booking lookup. Setting EMAIL_DELIVERY_ENABLED=false stops a
+// confirmation from queueing an email attempt that can never succeed, and
+// stops the retry job from retrying it. Unset means email is enabled, so
+// existing deployments keep their behaviour.
+export function isTicketEmailDeliveryEnabled() {
+  const configuredDeliveryFlag = process.env.EMAIL_DELIVERY_ENABLED
+    ?.trim()
+    .toLowerCase();
+
+  if (!configuredDeliveryFlag) {
+    return true;
+  }
+
+  return !['false', 'off', '0', 'no'].includes(configuredDeliveryFlag);
+}
+
 export function getEventDetails() {
   return {
     eventTitle: EVENT_TITLE,
@@ -227,6 +246,18 @@ export async function deliverTicketForConfirmedBooking(
     return { skipped: true, bookingId: bookingRecord.id };
   }
 
+  if (!isTicketEmailDeliveryEnabled()) {
+    // No delivery row is written: the ticket is generated from the booking on
+    // demand by GET /api/tickets/:bookingRef/download, so there is nothing to
+    // retry and nothing the retry job can pick up.
+    return {
+      delivered: false,
+      skipped: true,
+      reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+      bookingId: bookingRecord.id,
+    };
+  }
+
   const qrPayload = buildTicketQrPayload(bookingRecord);
 
   const existingDeliveryRecord = await fetchDeliveryRecordForBooking(bookingId);
@@ -282,6 +313,15 @@ export async function redeliverFailedTicketEmail(bookingId, sendTicketEmail = se
 
   if (bookingRecord.status !== 'confirmed') {
     return { skipped: true, bookingId: bookingRecord.id };
+  }
+
+  if (!isTicketEmailDeliveryEnabled()) {
+    return {
+      delivered: false,
+      skipped: true,
+      reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+      bookingId: bookingRecord.id,
+    };
   }
 
   const existingDeliveryRecord = await fetchDeliveryRecordForBooking(bookingId);

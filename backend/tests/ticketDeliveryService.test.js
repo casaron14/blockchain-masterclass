@@ -9,6 +9,7 @@ import {
   deliverTicketForConfirmedBooking,
   redeliverFailedTicketEmail,
   sendTicketEmailToAttendee,
+  TICKET_EMAIL_DELIVERY_DISABLED_REASON,
 } from '../services/ticketDeliveryService.js';
 
 import {
@@ -288,6 +289,78 @@ test('deliverTicketForConfirmedBooking keeps working when there is no receipt at
 
   const deliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
   assert.equal(deliveryRecord.status, 'sent');
+});
+
+test('deliverTicketForConfirmedBooking skips email and writes no delivery row when email delivery is disabled', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  const previousDeliveryFlag = process.env.EMAIL_DELIVERY_ENABLED;
+  process.env.EMAIL_DELIVERY_ENABLED = 'false';
+
+  try {
+    let sendTicketEmailWasCalled = false;
+    const stubSender = async () => {
+      sendTicketEmailWasCalled = true;
+      return { ok: true };
+    };
+
+    const result = await deliverTicketForConfirmedBooking(
+      confirmedBooking.id,
+      stubSender
+    );
+
+    assert.equal(result.skipped, true);
+    assert.equal(result.delivered, false);
+    assert.equal(result.reason, TICKET_EMAIL_DELIVERY_DISABLED_REASON);
+    assert.equal(sendTicketEmailWasCalled, false);
+
+    const deliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
+    assert.equal(deliveryRecord, null);
+  } finally {
+    if (previousDeliveryFlag === undefined) {
+      delete process.env.EMAIL_DELIVERY_ENABLED;
+    } else {
+      process.env.EMAIL_DELIVERY_ENABLED = previousDeliveryFlag;
+    }
+  }
+});
+
+test('redeliverFailedTicketEmail skips sending when email delivery is disabled', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  await pool.query(
+    `INSERT INTO ticket_deliveries (booking_id, status, attempt_count, last_error)
+     VALUES ($1, 'failed', 1, 'SMTP refused connection')`,
+    [confirmedBooking.id]
+  );
+
+  const previousDeliveryFlag = process.env.EMAIL_DELIVERY_ENABLED;
+  process.env.EMAIL_DELIVERY_ENABLED = 'false';
+
+  try {
+    let sendTicketEmailWasCalled = false;
+    const stubSender = async () => {
+      sendTicketEmailWasCalled = true;
+      return { ok: true };
+    };
+
+    const result = await redeliverFailedTicketEmail(
+      confirmedBooking.id,
+      stubSender
+    );
+
+    assert.equal(result.skipped, true);
+    assert.equal(result.reason, TICKET_EMAIL_DELIVERY_DISABLED_REASON);
+    assert.equal(sendTicketEmailWasCalled, false);
+
+    const deliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
+    assert.equal(deliveryRecord.status, 'failed');
+    assert.equal(deliveryRecord.attempt_count, 1);
+  } finally {
+    if (previousDeliveryFlag === undefined) {
+      delete process.env.EMAIL_DELIVERY_ENABLED;
+    } else {
+      process.env.EMAIL_DELIVERY_ENABLED = previousDeliveryFlag;
+    }
+  }
 });
 
 test('deliverTicketForConfirmedBooking skips a booking that is not confirmed', async () => {

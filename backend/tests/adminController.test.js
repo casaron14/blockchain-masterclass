@@ -5,7 +5,12 @@ import pool from '../config/db.js';
 import adminController from '../controller/adminController.js';
 
 function createMockResponse() {
-  const capturedResponse = { statusCode: null, body: null };
+  const capturedResponse = {
+    statusCode: null,
+    body: null,
+    headers: {},
+    sentPayload: null,
+  };
 
   return {
     status(statusCode) {
@@ -14,6 +19,14 @@ function createMockResponse() {
     },
     json(body) {
       capturedResponse.body = body;
+      return this;
+    },
+    setHeader(headerName, headerValue) {
+      capturedResponse.headers[headerName] = headerValue;
+      return this;
+    },
+    send(payload) {
+      capturedResponse.sentPayload = payload;
       return this;
     },
     capturedResponse,
@@ -77,4 +90,29 @@ test('confirmAdminBookingEndpoint answers 404 when the booking does not exist', 
 
   assert.equal(response.capturedResponse.statusCode, 404);
   assert.equal(response.capturedResponse.body.message, 'Booking not found');
+});
+
+test('exportAdminBookingListAsCsvEndpoint returns a CSV attachment with the booking columns', async () => {
+  const response = createMockResponse();
+
+  await adminController.exportAdminBookingListAsCsvEndpoint(
+    { query: {} },
+    response
+  );
+
+  assert.equal(response.capturedResponse.statusCode, 200);
+  assert.equal(
+    response.capturedResponse.headers['Content-Type'],
+    'text/csv; charset=utf-8'
+  );
+  assert.match(
+    response.capturedResponse.headers['Content-Disposition'],
+    /^attachment; filename="bookings-\d{4}-\d{2}-\d{2}\.csv"$/
+  );
+  assert.ok(response.capturedResponse.sentPayload.startsWith('\uFEFF'));
+  assert.match(
+    response.capturedResponse.sentPayload,
+    /Booking reference,Attendee name,Email address,Phone number/
+  );
+  assert.match(response.capturedResponse.sentPayload, /Referral code,Referred by/);
 });

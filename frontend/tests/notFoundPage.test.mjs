@@ -36,7 +36,6 @@ const LOADING_STATE_KEYS = [
   'loadingPayment',
   'loadingQr',
   'loadingWallet',
-  'checkingPayment',
   'sendingStkPrompt',
   'creatingBooking',
   'searchingBooking',

@@ -19,15 +19,20 @@ export function verifyUserToken(token) {
   return jwt.verify(token, readJwtSecret());
 }
 
-export function signTotpPendingToken(userId, isAdmin) {
+export function signTotpPendingToken(userId, isAdmin, credentialSource = 'database') {
   return signUserToken(
-    { id: userId, isAdmin, totpPending: true },
+    { id: userId, isAdmin, credentialSource, totpPending: true },
     TOTP_PENDING_TOKEN_EXPIRY
   );
 }
 
-export function signFullAdminToken(userId, isAdmin) {
-  return signUserToken({ id: userId, isAdmin, totpVerified: true });
+export function signFullAdminToken(userId, isAdmin, credentialSource = 'database') {
+  return signUserToken({
+    id: userId,
+    isAdmin,
+    credentialSource,
+    totpVerified: true,
+  });
 }
 
 export function setJwtCookie(response, token) {

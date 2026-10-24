@@ -169,15 +169,18 @@ export default function BookingReferenceLookup() {
         )}
 
         {actions.canDownloadTicket && (
-          <LoadingButton
-            type="button"
-            className="btn btn-primary"
-            spinnerColor="#f2ede3"
-            loadingLabel={t('loadingStates.downloadingTicket')}
-            onClick={handleDownloadTicket}
-          >
-            {t('lookup.downloadTicket')}
-          </LoadingButton>
+          <div className="lookup-ticket-ready">
+            <p className="lookup-ticket-ready__note">{t('lookup.ticketReadyNote')}</p>
+            <LoadingButton
+              type="button"
+              className="btn btn-primary"
+              spinnerColor="#f2ede3"
+              loadingLabel={t('loadingStates.downloadingTicket')}
+              onClick={handleDownloadTicket}
+            >
+              {t('lookup.downloadTicket')}
+            </LoadingButton>
+          </div>
         )}
 
         {actions.canPayNow && !actions.isSoldOut && (

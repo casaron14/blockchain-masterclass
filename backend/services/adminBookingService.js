@@ -97,10 +97,12 @@ export async function fetchAdminBookingList({ statusFilter } = {}) {
   const result = await pool.query(
     `SELECT b.*, p.status AS payment_status, p.payment_method, p.amount_expected,
             p.confirmed_at AS payment_confirmed_at,
-            opr.status AS offline_receipt_status
+            opr.status AS offline_receipt_status,
+            r.referrer_name, r.referrer_phone
        FROM bookings b
        LEFT JOIN payments p ON p.booking_id = b.id
        LEFT JOIN offline_payment_receipts opr ON opr.payment_id = p.id
+       LEFT JOIN referrers r ON r.referrer_code = b.utm_source
        ${whereClause}
        ORDER BY b.created_at DESC`,
     queryParams

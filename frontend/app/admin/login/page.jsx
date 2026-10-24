@@ -160,6 +160,17 @@ export default function AdminLoginPage() {
     setLoginErrorMessage(null);
     try {
       const loginResult = await loginWithPassword(username, password, turnstileToken);
+
+      // The deployment admin configured through Vercel environment variables
+      // signs in with one step unless ADMIN_TOTP_SECRET is set. The API then
+      // returns the full token directly; there is no authenticator setup for
+      // an operator to complete.
+      if (loginResult.token) {
+        completeAdminSession(loginResult.token, loginResult.user);
+        router.replace('/admin');
+        return;
+      }
+
       setTemporaryToken(loginResult.temporaryToken);
       if (loginResult.totpConfigured) {
         return;

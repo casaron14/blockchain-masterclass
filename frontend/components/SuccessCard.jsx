@@ -108,6 +108,10 @@ export default function SuccessCard({ referenceCode }) {
 
       {loadError && <p className="field-error">{loadError}</p>}
 
+      {!loadError && (
+        <p className="toast-ticket-note muted">{t('success.ticketNote')}</p>
+      )}
+
       {isAutoPreparingTicket && (
         <LoadingStatusLine
           label={t('success.downloading')}
@@ -129,9 +133,14 @@ export default function SuccessCard({ referenceCode }) {
       {downloadError && <p className="field-error">{downloadError}</p>}
 
       <div className="toast-footer-row">
-        <Link href={`/${slug}`} className="toast-link">
-          {t('success.backHome')}
-        </Link>
+        <div className="toast-footer-links">
+          <Link href={`/${slug}/book`} className="toast-link">
+            {t('success.findBooking')}
+          </Link>
+          <Link href={`/${slug}`} className="toast-link">
+            {t('success.backHome')}
+          </Link>
+        </div>
         <span className="toast-support">
           {t('success.supportText')}{' '}
           <a href={`mailto:${supportEmail}`}>{supportEmail}</a>

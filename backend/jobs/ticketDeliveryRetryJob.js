@@ -1,5 +1,6 @@
 import {
   fetchFailedTicketDeliveryRecordsBelowMaxAttempts,
+  isTicketEmailDeliveryEnabled,
   resolveTicketDeliveryMaxAttempts,
   redeliverFailedTicketEmail,
 } from '../services/ticketDeliveryService.js';
@@ -10,6 +11,12 @@ import {
 } from '../services/paymentReceiptService.js';
 
 export async function runTicketDeliveryRetryJob(options = {}) {
+  // A no-email deployment has no ticket or receipt email to retry. Returning
+  // early also covers rows left failed by an earlier configuration.
+  if (!isTicketEmailDeliveryEnabled()) {
+    return [];
+  }
+
   const maxAttempts = options.maxAttempts ?? resolveTicketDeliveryMaxAttempts();
   const retryTicketDelivery =
     options.retryTicketDelivery ?? redeliverFailedTicketEmail;

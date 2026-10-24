@@ -44,13 +44,6 @@ router.post(
 );
 
 router.post(
-  "/:id/refresh-onchain",
-  createGeneralRequestRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
-  paymentController.refreshUsdtPaymentObservationEndpoint
-);
-
-router.post(
   "/:id/initiate-usdt",
   createStrictPaymentInitiationRateLimiter(),
   validatePositiveIntegerRouteParam("id"),
