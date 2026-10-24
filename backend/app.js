@@ -14,7 +14,8 @@ import { logError } from './utils/applicationLogger.js';
 
 // The HTTP application is built here, without listening on a port and without
 // starting background jobs, so the same app can be served by a long-lived Node
-// process (server.js) or by a serverless function (api/[...all].js on Vercel).
+// process (server.js) or by the single Next.js serverless function
+// (frontend/pages/api/[...all].js on Vercel).
 export function createApplication() {
   const app = express();
 

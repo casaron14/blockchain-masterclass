@@ -59,6 +59,7 @@ export default function AdminSettingsPage() {
           cryptoNetwork: configuration.price.cryptoNetwork,
           durationDays: configuration.durationDays,
           paymentMethods: configuration.paymentMethods,
+          comingSoonPaymentMethods: configuration.comingSoonPaymentMethods ?? [],
         });
         setLiveSeatCapacity(responseBody.liveSeatCapacity || null);
         setFormValues({
@@ -225,6 +226,10 @@ export default function AdminSettingsPage() {
               <div className="admin-detail-item">
                 <strong>Payment methods</strong>
                 {readOnlyDetails?.paymentMethods?.join(', ')}
+              </div>
+              <div className="admin-detail-item">
+                <strong>Coming soon</strong>
+                {readOnlyDetails?.comingSoonPaymentMethods?.join(', ') || '—'}
               </div>
               <div className="admin-detail-item">
                 <strong>Seats</strong>

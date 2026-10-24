@@ -31,6 +31,9 @@
     "postcss": "8.5.31",
     "proxy-addr": "2.0.8"
   },
+  "allowScripts": {
+    "bcrypt@6.0.0": true
+  },
   "engines": {
     "node": ">=20"
   }
