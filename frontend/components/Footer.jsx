@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import NewsletterSignup from '@/components/NewsletterSignup';
+import { buildEventHomeUrl } from '@/lib/siteRoutes';
 
 export default function Footer() {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
   const {
-    slug,
     name,
     dateLabel,
     supportEmail,
@@ -25,7 +25,7 @@ export default function Footer() {
       <div className="shell">
         <div className="site-footer__top">
           <div className="site-footer__identity">
-            <Link href={`/${slug}`} className="site-footer__wordmark">
+            <Link href={buildEventHomeUrl()} className="site-footer__wordmark">
               {name}
             </Link>
             <p className="site-footer__meta">

@@ -4,6 +4,11 @@ import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import {
+  buildBookingPageUrl,
+  buildEventHomeSectionUrlForSectionId,
+  buildEventHomeUrl,
+} from '@/lib/siteRoutes';
 
 const EVENT_SECTION_LINKS = [
   { sectionId: 'programme', labelKey: 'site.nav.programme' },
@@ -14,19 +19,19 @@ const EVENT_SECTION_LINKS = [
 export default function Header() {
   const { t } = useLanguage();
   const { eventConfig, isLoadingEvent } = useEvent();
-  const { slug, name, dateLabel } = eventConfig;
+  const { name, dateLabel } = eventConfig;
 
   return (
     <header className="site-header" aria-busy={isLoadingEvent || undefined}>
       <div className="site-header__inner shell">
-        <Link href={`/${slug}`} className="site-wordmark">
+        <Link href={buildEventHomeUrl()} className="site-wordmark">
           <span className="site-wordmark__institution">DienAcademy</span>
           <span className="site-wordmark__event">{name}</span>
         </Link>
 
         <nav className="site-nav" aria-label="Main">
           {EVENT_SECTION_LINKS.map(({ sectionId, labelKey }) => (
-            <Link key={sectionId} href={`/${slug}#${sectionId}`} className="site-nav__link">
+            <Link key={sectionId} href={buildEventHomeSectionUrlForSectionId(sectionId)} className="site-nav__link">
               {t(labelKey)}
             </Link>
           ))}
@@ -35,7 +40,7 @@ export default function Header() {
         <div className="site-header__actions">
           <span className="site-header__dateline">{dateLabel}</span>
           <LanguageSwitcher />
-          <Link href={`/${slug}/book`} className="button button--paper site-header__cta">
+          <Link href={buildBookingPageUrl()} className="button button--paper site-header__cta">
             {t('app.bookNow')}
           </Link>
         </div>

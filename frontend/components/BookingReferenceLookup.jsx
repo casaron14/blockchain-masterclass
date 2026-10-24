@@ -15,6 +15,7 @@ import {
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LoadingButton from '@/components/LoadingButton';
+import { buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
 
 const REFERENCE_PATTERN = /^[A-Z0-9]{4,12}$/;
 
@@ -127,7 +128,7 @@ export default function BookingReferenceLookup() {
       storeBookingRecordLocally(slug, activeBookingRecord);
       storePaymentIdLocally(slug, paymentToken);
 
-      router.push(`/${slug}/pay/${paymentToken}`);
+      router.push(buildPaymentPageUrlForPaymentId(paymentToken));
     } catch (error) {
       setActionTone('error');
       setActionMessage(error.message || t('lookup.errors.paymentPreparationFailed'));

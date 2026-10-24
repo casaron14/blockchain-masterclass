@@ -1,16 +1,15 @@
 // Single place that decides how outbound email leaves this backend.
 //
-//   EMAIL_PROVIDER=gmail_api -> Gmail API (Google's free tier, ~500 sends per
-//                               mailbox per rolling day; no local cap enforced)
-//   EMAIL_PROVIDER=smtp      -> any SMTP server via nodemailer (the local
-//                               MailHog default used by the test suite)
+//   EMAIL_PROVIDER=smtp -> any SMTP server via nodemailer (the local MailHog
+//                          default used by the test suite)
+//
+// The Gmail API transport was removed because this deployment does not send
+// email and the `googleapis` package added more than 200 MB to every install.
+// SMTP stays available for self-hosted deployments that enable email delivery.
 
 import nodemailer from 'nodemailer';
 
-import { createGmailApiTransport } from './gmailApiEmailService.js';
-
 export const EMAIL_PROVIDER_SMTP = 'smtp';
-export const EMAIL_PROVIDER_GMAIL_API = 'gmail_api';
 
 export function resolveEmailTransportProviderName() {
   return (process.env.EMAIL_PROVIDER || EMAIL_PROVIDER_SMTP).trim().toLowerCase();
@@ -34,15 +33,11 @@ export function createSmtpEmailTransport() {
 export async function createConfiguredEmailTransport(options = {}) {
   const providerName = options.providerName ?? resolveEmailTransportProviderName();
 
-  if (providerName === EMAIL_PROVIDER_GMAIL_API) {
-    return createGmailApiTransport(options);
-  }
-
   if (providerName === EMAIL_PROVIDER_SMTP) {
     return createSmtpEmailTransport();
   }
 
   throw new Error(
-    `EMAIL_PROVIDER_UNSUPPORTED:${providerName}. Use "${EMAIL_PROVIDER_SMTP}" or "${EMAIL_PROVIDER_GMAIL_API}".`
+    `EMAIL_PROVIDER_UNSUPPORTED:${providerName}. Use "${EMAIL_PROVIDER_SMTP}".`
   );
 }

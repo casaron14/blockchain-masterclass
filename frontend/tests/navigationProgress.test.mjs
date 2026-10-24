@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { shouldShowNavigationProgressForAnchor } from '../lib/navigationProgress.js';
 
-const CURRENT_EVENT_URL = 'https://masterclass.example/blockchain-masterclass';
+const CURRENT_EVENT_URL = 'https://masterclass.example/';
 
 function createAnchorElement({
   href = '',
@@ -34,7 +34,7 @@ test('route progress starts for an internal navigation to a different page', () 
   );
   assert.equal(
     shouldShowNavigationProgressForAnchor(
-      createAnchorElement({ href: '/blockchain-masterclass/book' }),
+      createAnchorElement({ href: '/book' }),
       CURRENT_EVENT_URL
     ),
     true
@@ -51,7 +51,7 @@ test('route progress ignores same-page anchors and hash links', () => {
   );
   assert.equal(
     shouldShowNavigationProgressForAnchor(
-      createAnchorElement({ href: '/blockchain-masterclass#schedule' }),
+      createAnchorElement({ href: '/#schedule' }),
       CURRENT_EVENT_URL
     ),
     false
@@ -61,7 +61,7 @@ test('route progress ignores same-page anchors and hash links', () => {
 test('route progress starts when the query string changes on the same page', () => {
   assert.equal(
     shouldShowNavigationProgressForAnchor(
-      createAnchorElement({ href: '/blockchain-masterclass?source=email' }),
+      createAnchorElement({ href: '/?source=email' }),
       CURRENT_EVENT_URL
     ),
     true
@@ -126,8 +126,8 @@ test('route progress ignores mail links, opted-out links and empty hrefs', () =>
 test('route progress compares the destination with the page the click started from', () => {
   assert.equal(
     shouldShowNavigationProgressForAnchor(
-      createAnchorElement({ href: '/blockchain-masterclass#schedule' }),
-      'https://masterclass.example/blockchain-masterclass/book'
+      createAnchorElement({ href: '/#schedule' }),
+      'https://masterclass.example/book'
     ),
     true
   );

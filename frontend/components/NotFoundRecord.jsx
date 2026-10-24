@@ -10,7 +10,7 @@ export default function NotFoundRecord() {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
   const requestedAddress = usePathname() || '/';
-  const destinationLinks = buildNotFoundDestinationLinks(eventConfig.slug);
+  const destinationLinks = buildNotFoundDestinationLinks();
 
   return (
     <div className="not-found-page">

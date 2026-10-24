@@ -23,6 +23,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LoadingButton from '@/components/LoadingButton';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
+import { buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
 import {
   buildSanitizedAttendeePayload,
   sanitizeAttendeeFieldValue,
@@ -224,7 +225,7 @@ export default function BookingForm() {
       clearStoredBookingDraft(slug);
       storeAttendeeProfileLocally(sanitizedAttendeePayload);
 
-      router.push(`/${slug}/pay/${createdPaymentResult.payment.id}`);
+      router.push(buildPaymentPageUrlForPaymentId(createdPaymentResult.payment.id));
     } catch (error) {
       if (isTurnstileEnabled()) {
         turnstileWidgetRef.current?.resetChallengeWidget();
@@ -267,7 +268,7 @@ export default function BookingForm() {
               type="button"
               className="btn btn-primary"
               spinnerColor="#f2ede3"
-              onClick={() => router.push(`/${slug}/pay/${activePaymentId}`)}
+              onClick={() => router.push(buildPaymentPageUrlForPaymentId(activePaymentId))}
             >
               {t('booking.resumePayment')}
             </LoadingButton>

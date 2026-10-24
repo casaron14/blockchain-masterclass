@@ -1,6 +1,6 @@
 // Referral links stay on the bare site root so the shared URL is as short as
-// possible: siteurl/?ref=<username>. The root page forwards the ref value to
-// the event page, where ReferralTracker stores it for the booking.
+// possible: siteurl/?ref=<username>. The root page is the event page itself, so
+// ReferralTracker stores the value for the booking without a redirect hop.
 export function buildReferralInviteUrl(referrerUsername, siteOrigin) {
   const referralQuery = `?ref=${encodeURIComponent(referrerUsername)}`;
 

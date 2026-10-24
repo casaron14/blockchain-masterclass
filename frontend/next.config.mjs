@@ -18,7 +18,6 @@ const SERVER_DEPENDENCIES_LOADED_AT_RUNTIME = [
   'ethers',
   'express',
   'express-rate-limit',
-  'googleapis',
   'joi',
   'jsonwebtoken',
   'multer',
@@ -28,12 +27,10 @@ const SERVER_DEPENDENCIES_LOADED_AT_RUNTIME = [
   'qrcode',
 ];
 
-// Some backend modules import a package subpath instead of the package entry
-// point. `googleapis/build/src/apis/gmail/index.js` is one example: it loads
-// only the Gmail surface instead of every Google API. A request for a subpath
-// must be externalised for the same reason as the bare package name, otherwise
-// webpack tries to resolve a path that only exists once node_modules is
-// installed inside the deployed function.
+// Some backend modules may import a package subpath instead of the package
+// entry point. A request for a subpath must be externalised for the same
+// reason as the bare package name, otherwise webpack tries to resolve a path
+// that only exists once node_modules is installed inside the deployed function.
 function isServerDependencyLoadedAtRuntime(request) {
   return SERVER_DEPENDENCIES_LOADED_AT_RUNTIME.some(
     (packageName) => request === packageName || request.startsWith(`${packageName}/`),

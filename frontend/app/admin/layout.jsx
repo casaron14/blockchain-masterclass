@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AdminProvider } from '@/context/AdminContext';
 import { defaultEventConfig } from '@/lib/eventConfig';
+import { buildEventHomeUrl } from '@/lib/siteRoutes';
 
 export const metadata = {
   title: 'Admin',
@@ -33,7 +34,7 @@ export default function AdminLayout({ children }) {
                 </Link>
               ))}
               <Link
-                href={`/${defaultEventConfig.slug}`}
+                href={buildEventHomeUrl()}
                 className="admin-nav__link admin-nav__link--exit"
               >
                 Event site

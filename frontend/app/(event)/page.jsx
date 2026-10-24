@@ -9,12 +9,12 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import { getTranslation } from '@/lib/translations';
 import { formatCryptoAmount, formatLocalPrice } from '@/lib/eventFormat';
+import { buildBookingPageUrl } from '@/lib/siteRoutes';
 
 export default function MasterHomePage() {
   const { language, t } = useLanguage();
   const { eventConfig } = useEvent();
   const {
-    slug,
     name,
     location,
     dateLabel,
@@ -62,7 +62,7 @@ export default function MasterHomePage() {
             <p className="hero-plate__lede">{t('site.hero.subtitle', { name })}</p>
 
             <div className="hero-plate__actions">
-              <Link href={`/${slug}/book`} className="button button--paper">
+              <Link href={buildBookingPageUrl()} className="button button--paper">
                 {t('site.hero.cta')}
               </Link>
               <a href="#programme" className="text-link">
@@ -194,7 +194,7 @@ export default function MasterHomePage() {
                 ))}
             </ul>
 
-            <Link href={`/${slug}/book`} className="button button--paper">
+            <Link href={buildBookingPageUrl()} className="button button--paper">
               {t('site.hero.cta')}
             </Link>
             <p className="admission-note">
@@ -290,7 +290,7 @@ export default function MasterHomePage() {
           </div>
 
           <div className="closing-plate__action">
-            <Link href={`/${slug}/book`} className="button button--paper">
+            <Link href={buildBookingPageUrl()} className="button button--paper">
               {t('site.hero.cta')}
             </Link>
             <p className="closing-plate__meta">{t('site.closing.meta')}</p>

@@ -47,15 +47,15 @@ const LOADING_STATE_KEYS = [
   'securityCheck',
 ];
 
-test('buildNotFoundDestinationLinks routes the 404 actions to the event, the booking lookup and the back office', () => {
-  const destinationLinks = buildNotFoundDestinationLinks('blockchain-masterclass-arusha-2026');
+test('buildNotFoundDestinationLinks routes the 404 actions to the root event page, the booking lookup and the back office', () => {
+  const destinationLinks = buildNotFoundDestinationLinks();
 
-  assert.equal(destinationLinks.eventHome, '/blockchain-masterclass-arusha-2026');
-  assert.equal(destinationLinks.bookingLookup, '/blockchain-masterclass-arusha-2026/book');
+  assert.equal(destinationLinks.eventHome, '/');
+  assert.equal(destinationLinks.bookingLookup, '/book');
   assert.equal(destinationLinks.backOffice, '/admin');
 });
 
-test('the event layout only serves configured event slugs and rejects unknown addresses', () => {
+test('the event configuration lookup only accepts configured event slugs', () => {
   assert.equal(checkEventSlugExistsInConfiguration(DEFAULT_EVENT_SLUG), true);
   assert.equal(checkEventSlugExistsInConfiguration('not-a-configured-event'), false);
   assert.equal(checkEventSlugExistsInConfiguration(''), false);
