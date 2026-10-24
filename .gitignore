@@ -10,13 +10,9 @@ frontend/out/
 backend/out/
 backend/cache/
 
-# Secrets and local environment
-.env
-.env.local
-.env.*.local
-backend/.env
-backend/.env.local
-backend/.env.*.local
+# Environment files (including templates); keep local credentials out of Git.
+**/.env
+**/.env.*
 
 # Logs and editor files
 *.log
