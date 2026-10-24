@@ -54,6 +54,7 @@ test('hardened app sends security headers and omits the x-powered-by header', as
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
   assert.match(response.headers.get('permissions-policy'), /geolocation=\(\)/);
+  assert.doesNotMatch(response.headers.get('permissions-policy'), /browsing-topics/);
 });
 
 test('CORS policy accepts a configured local origin', async () => {

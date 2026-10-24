@@ -5,6 +5,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
+  'https://masterclass.dienacademy.com',
+  'https://blockchain-masterclass.vercel.app/'
 ];
 
 const SECURITY_HEADERS = {
@@ -12,7 +14,7 @@ const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'no-referrer',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), browsing-topics=()',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
 export function buildSecurityHeaders(disableHsts = false) {
