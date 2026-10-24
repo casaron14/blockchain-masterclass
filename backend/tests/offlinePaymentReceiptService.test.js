@@ -25,6 +25,14 @@ const VALID_PNG_RECEIPT_BUFFER = Buffer.from([
   0x49, 0x48, 0x44, 0x52,
 ]);
 
+function restoreEnvironmentVariable(variableName, previousValue) {
+  if (previousValue === undefined) {
+    delete process.env[variableName];
+    return;
+  }
+  process.env[variableName] = previousValue;
+}
+
 async function resetDatabaseState() {
   await pool.query('TRUNCATE bookings CASCADE');
   await pool.query('UPDATE seat_capacity SET confirmed_count = 0 WHERE id = 1');
@@ -238,5 +246,108 @@ test('the admin download falls back to the stored disk file for a legacy receipt
     assert.deepEqual(downloadResult.fileBuffer, VALID_PNG_RECEIPT_BUFFER);
   } finally {
     await removeStoredReceiptFile(offlineReceiptRecord);
+  }
+});
+
+test('Supabase Storage receipts keep only a private object path in the database', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Supabase Receipt Uploader',
+    email: 'supabase-receipt@example.com',
+    phone_number: '+255712345689',
+  });
+  const paymentRecord = await createPendingPaymentRecordForBooking(
+    bookingRecord.id,
+    'lipanamba'
+  );
+  const previousEnvironment = {
+    offlinePaymentReceiptStorage: process.env.OFFLINE_PAYMENT_RECEIPT_STORAGE,
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    supabaseReceiptBucket: process.env.SUPABASE_RECEIPT_BUCKET,
+    documentStorageMode: process.env.DOCUMENT_STORAGE_MODE,
+    fetchImplementation: globalThis.fetch,
+  };
+  const storageRequests = [];
+
+  process.env.OFFLINE_PAYMENT_RECEIPT_STORAGE = 'supabase';
+  process.env.SUPABASE_URL = 'https://test-project.supabase.co';
+  process.env.SUPABASE_SECRET_KEY = 'server-only-test-secret';
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_RECEIPT_BUCKET = 'offline-payment-receipts';
+  process.env.DOCUMENT_STORAGE_MODE = 'memory';
+  globalThis.fetch = async (requestUrl, requestOptions = {}) => {
+    storageRequests.push({
+      requestUrl: String(requestUrl),
+      requestOptions,
+    });
+
+    if (requestOptions.method === 'POST') {
+      return Response.json({ Key: 'offline-payment-receipts/receipts/uploaded.png' });
+    }
+    if (requestOptions.method === 'GET') {
+      return new Response(VALID_PNG_RECEIPT_BUFFER, {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      });
+    }
+    if (requestOptions.method === 'DELETE') {
+      return Response.json({ message: 'deleted' });
+    }
+    throw new Error(`Unexpected Supabase Storage request: ${requestOptions.method}`);
+  };
+
+  try {
+    const offlineReceiptRecord = await storeOfflinePaymentReceiptForPayment({
+      paymentRecord,
+      bookingRecord,
+      receiptFileBuffer: VALID_PNG_RECEIPT_BUFFER,
+      originalFileName: 'supabase-receipt.png',
+      declaredMimeType: 'image/png',
+    });
+    const storedReceiptResult = await pool.query(
+      `SELECT storage_object_path, file_data
+         FROM offline_payment_receipts
+        WHERE id = $1`,
+      [offlineReceiptRecord.id]
+    );
+    const downloadResult = await fetchOfflinePaymentReceiptForAdminDownload(
+      bookingRecord.id
+    );
+
+    assert.match(storedReceiptResult.rows[0].storage_object_path, /^receipts\//);
+    assert.equal(storedReceiptResult.rows[0].file_data, null);
+    assert.deepEqual(downloadResult.fileBuffer, VALID_PNG_RECEIPT_BUFFER);
+    assert.equal(downloadResult.absoluteFilePath, null);
+    assert.equal(storageRequests.length, 2);
+    assert.match(storageRequests[0].requestUrl, /offline-payment-receipts\/receipts\//);
+    assert.match(storageRequests[1].requestUrl, /offline-payment-receipts\/receipts\//);
+    const storageAuthorizationHeaders = new Headers(
+      storageRequests[0].requestOptions.headers
+    );
+    assert.match(storageAuthorizationHeaders.get('Authorization') || '', /^Bearer /);
+  } finally {
+    restoreEnvironmentVariable(
+      'OFFLINE_PAYMENT_RECEIPT_STORAGE',
+      previousEnvironment.offlinePaymentReceiptStorage
+    );
+    restoreEnvironmentVariable('SUPABASE_URL', previousEnvironment.supabaseUrl);
+    restoreEnvironmentVariable(
+      'SUPABASE_SECRET_KEY',
+      previousEnvironment.supabaseSecretKey
+    );
+    restoreEnvironmentVariable(
+      'SUPABASE_SERVICE_ROLE_KEY',
+      previousEnvironment.supabaseServiceRoleKey
+    );
+    restoreEnvironmentVariable(
+      'SUPABASE_RECEIPT_BUCKET',
+      previousEnvironment.supabaseReceiptBucket
+    );
+    restoreEnvironmentVariable(
+      'DOCUMENT_STORAGE_MODE',
+      previousEnvironment.documentStorageMode
+    );
+    globalThis.fetch = previousEnvironment.fetchImplementation;
   }
 });

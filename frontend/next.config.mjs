@@ -1,11 +1,17 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 
 const frontendRootDirectory = path.dirname(fileURLToPath(import.meta.url));
 // The Express API and the shared event configuration live one level above the
 // frontend. The tracing root must cover both so the single /api/[...all]
 // function is deployed with backend/ and shared/ inside it.
 const repositoryRootDirectory = path.resolve(frontendRootDirectory, '..');
+
+dotenv.config({
+  path: path.resolve(repositoryRootDirectory, '.env'),
+  quiet: true,
+});
 
 // Native and dependency-heavy modules stay outside the webpack bundle. Next
 // traces them from frontend/node_modules into the function instead, which keeps
@@ -25,6 +31,7 @@ const SERVER_DEPENDENCIES_LOADED_AT_RUNTIME = [
   'pdfkit',
   'pg',
   'qrcode',
+  '@supabase/supabase-js',
 ];
 
 // Some backend modules may import a package subpath instead of the package

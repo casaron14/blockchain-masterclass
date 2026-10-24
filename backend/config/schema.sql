@@ -833,9 +833,9 @@ CREATE TABLE IF NOT EXISTS offline_payment_receipts (
   mime_type           TEXT NOT NULL,
   file_size_bytes     INTEGER NOT NULL CHECK (file_size_bytes > 0),
   file_sha256         TEXT NOT NULL,
-  -- The uploaded bytes are kept in the database so the Lipa Namba review flow
-  -- works on a read-only serverless filesystem. Legacy rows may have only the
-  -- file on disk; the download path falls back to stored_file_name.
+  -- New uploads may live in a private Supabase Storage bucket. The nullable
+  -- database bytes and stored_file_name retain compatibility with older rows.
+  storage_object_path TEXT,
   file_data           BYTEA,
 
   status              offline_receipt_status NOT NULL DEFAULT 'submitted',
@@ -850,6 +850,9 @@ CREATE TABLE IF NOT EXISTS offline_payment_receipts (
 -- Existing deployments created this table before file_data existed.
 ALTER TABLE offline_payment_receipts
   ADD COLUMN IF NOT EXISTS file_data BYTEA;
+
+ALTER TABLE offline_payment_receipts
+  ADD COLUMN IF NOT EXISTS storage_object_path TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_offline_payment_receipts_status
   ON offline_payment_receipts (status);

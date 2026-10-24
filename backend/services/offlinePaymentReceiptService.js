@@ -7,6 +7,12 @@ import pool from '../config/db.js';
 import { isLocalDocumentStorageEnabled } from '../config/documentStorage.js';
 
 import { PAYMENT_METHOD_LIPANAMBA } from './eventConfigService.js';
+import {
+  downloadOfflinePaymentReceiptObject,
+  removeOfflinePaymentReceiptObject,
+  SupabaseReceiptStorageObjectNotFoundError,
+  uploadOfflinePaymentReceiptObject,
+} from './supabaseReceiptStorageService.js';
 
 // Vercel rejects a serverless request body above 4.5 MB before it reaches the
 // function, so the deployed default is deliberately below that. A self-hosted
@@ -180,7 +186,8 @@ export function buildOfflinePaymentReceiptStoredFileName({
 // pulling them across the wire.
 const OFFLINE_PAYMENT_RECEIPT_READABLE_COLUMNS = `
   id, payment_id, booking_id, original_file_name, stored_file_name, mime_type,
-  file_size_bytes, file_sha256, status, reviewer_note, uploaded_at, reviewed_at,
+  file_size_bytes, file_sha256, storage_object_path, status, reviewer_note,
+  uploaded_at, reviewed_at,
   created_at, updated_at, (file_data IS NOT NULL) AS has_file_data
 `;
 
@@ -288,22 +295,55 @@ export async function storeOfflinePaymentReceiptForPayment({
     OFFLINE_PAYMENT_RECEIPT_DIRECTORY_PATH,
     storedFileName
   );
+  const configuredReceiptStorageMode = String(
+    process.env.OFFLINE_PAYMENT_RECEIPT_STORAGE || ''
+  )
+    .trim()
+    .toLowerCase();
+  if (configuredReceiptStorageMode && configuredReceiptStorageMode !== 'supabase') {
+    throw new Error(
+      'OFFLINE_PAYMENT_RECEIPT_STORAGE must be unset or set to "supabase"'
+    );
+  }
+  const shouldStoreReceiptFileInSupabase = configuredReceiptStorageMode === 'supabase';
+  const storageObjectPath = shouldStoreReceiptFileInSupabase
+    ? `receipts/${storedFileName}`
+    : null;
   const fileSha256 = crypto.createHash('sha256').update(receiptFileBuffer).digest('hex');
   const shouldStoreReceiptFileOnDisk = isLocalDocumentStorageEnabled();
 
-  if (shouldStoreReceiptFileOnDisk) {
-    await fs.mkdir(OFFLINE_PAYMENT_RECEIPT_DIRECTORY_PATH, { recursive: true });
-    await fs.writeFile(absoluteFilePath, receiptFileBuffer);
-  }
-
+  let wasReceiptUploadedToSupabase = false;
+  let wasReceiptRecordSavedToDatabase = false;
   try {
+    if (shouldStoreReceiptFileInSupabase) {
+      await uploadOfflinePaymentReceiptObject(
+        storageObjectPath,
+        receiptFileBuffer,
+        validatedFile.mimeType
+      );
+      wasReceiptUploadedToSupabase = true;
+    }
+
+    if (shouldStoreReceiptFileOnDisk) {
+      await fs.mkdir(OFFLINE_PAYMENT_RECEIPT_DIRECTORY_PATH, { recursive: true });
+      await fs.writeFile(absoluteFilePath, receiptFileBuffer);
+    }
+
     const previousReceipt = await fetchOfflinePaymentReceiptByPaymentId(paymentRecord.id);
+    const previousStorageObjectResult = previousReceipt
+      ? await pool.query(
+          'SELECT storage_object_path FROM offline_payment_receipts WHERE id = $1',
+          [previousReceipt.id]
+        )
+      : null;
+    const previousStorageObjectPath =
+      previousStorageObjectResult?.rows[0]?.storage_object_path ?? null;
 
     const upsertResult = await pool.query(
       `INSERT INTO offline_payment_receipts
          (payment_id, booking_id, original_file_name, stored_file_name, mime_type,
-          file_size_bytes, file_sha256, file_data, status, uploaded_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'submitted', now())
+          file_size_bytes, file_sha256, storage_object_path, file_data, status, uploaded_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'submitted', now())
        ON CONFLICT (payment_id) DO UPDATE
          SET booking_id = EXCLUDED.booking_id,
              original_file_name = EXCLUDED.original_file_name,
@@ -311,6 +351,7 @@ export async function storeOfflinePaymentReceiptForPayment({
              mime_type = EXCLUDED.mime_type,
              file_size_bytes = EXCLUDED.file_size_bytes,
              file_sha256 = EXCLUDED.file_sha256,
+             storage_object_path = EXCLUDED.storage_object_path,
              file_data = EXCLUDED.file_data,
              status = 'submitted',
              reviewer_note = NULL,
@@ -326,9 +367,11 @@ export async function storeOfflinePaymentReceiptForPayment({
         validatedFile.mimeType,
         receiptFileBuffer.length,
         fileSha256,
-        receiptFileBuffer,
+        storageObjectPath,
+        shouldStoreReceiptFileInSupabase ? null : receiptFileBuffer,
       ]
     );
+    wasReceiptRecordSavedToDatabase = true;
 
     await pool.query(
       `UPDATE payments
@@ -341,11 +384,31 @@ export async function storeOfflinePaymentReceiptForPayment({
     if (previousReceipt && previousReceipt.storedFileName !== storedFileName) {
       await removeStoredOfflinePaymentReceiptFile(previousReceipt.storedFileName);
     }
+    if (
+      previousStorageObjectPath &&
+      previousStorageObjectPath !== storageObjectPath
+    ) {
+      try {
+        await removeOfflinePaymentReceiptObject(previousStorageObjectPath);
+      } catch (error) {
+        console.error('Unable to remove replaced Supabase receipt object', error.message);
+      }
+    }
 
     return normalizeOfflinePaymentReceiptRecord(upsertResult.rows[0]);
   } catch (error) {
-    if (shouldStoreReceiptFileOnDisk) {
+    if (shouldStoreReceiptFileOnDisk && !wasReceiptRecordSavedToDatabase) {
       await removeStoredOfflinePaymentReceiptFile(storedFileName);
+    }
+    if (wasReceiptUploadedToSupabase && !wasReceiptRecordSavedToDatabase) {
+      try {
+        await removeOfflinePaymentReceiptObject(storageObjectPath);
+      } catch (cleanupError) {
+        console.error(
+          'Unable to remove unreferenced Supabase receipt object',
+          cleanupError.message
+        );
+      }
     }
     throw error;
   }
@@ -379,9 +442,8 @@ export async function rejectOfflinePaymentReceiptForFailedPayment(paymentId, rev
   return normalizeOfflinePaymentReceiptRecord(updateResult.rows[0]);
 }
 
-// The uploaded bytes live in the database so the flow works on a serverless
-// host, whose filesystem is read-only. Rows written before file_data existed
-// still have their file on disk, so that is the fallback.
+// Older receipts can still be stored in PostgreSQL or on disk. New Supabase
+// objects are fetched server-side so private bucket access never reaches clients.
 export async function fetchOfflinePaymentReceiptForAdminDownload(bookingId) {
   const receiptRecord = await fetchOfflinePaymentReceiptByBookingId(bookingId);
   if (!receiptRecord) {
@@ -389,10 +451,13 @@ export async function fetchOfflinePaymentReceiptForAdminDownload(bookingId) {
   }
 
   const storedFileDataResult = await pool.query(
-    'SELECT file_data FROM offline_payment_receipts WHERE booking_id = $1',
+    `SELECT file_data, storage_object_path
+       FROM offline_payment_receipts
+      WHERE booking_id = $1`,
     [bookingId]
   );
   const storedFileData = storedFileDataResult.rows[0]?.file_data;
+  const storageObjectPath = storedFileDataResult.rows[0]?.storage_object_path;
 
   if (storedFileData) {
     return {
@@ -400,6 +465,21 @@ export async function fetchOfflinePaymentReceiptForAdminDownload(bookingId) {
       fileBuffer: Buffer.from(storedFileData),
       absoluteFilePath: null,
     };
+  }
+
+  if (storageObjectPath) {
+    try {
+      return {
+        receiptRecord,
+        fileBuffer: await downloadOfflinePaymentReceiptObject(storageObjectPath),
+        absoluteFilePath: null,
+      };
+    } catch (error) {
+      if (error instanceof SupabaseReceiptStorageObjectNotFoundError) {
+        throw new OfflinePaymentReceiptFileMissingError(storageObjectPath);
+      }
+      throw error;
+    }
   }
 
   const absoluteFilePath = resolveOfflinePaymentReceiptAbsoluteFilePath(receiptRecord);

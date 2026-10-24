@@ -1,15 +1,7 @@
 import { ethers } from 'ethers';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import '../config/environment.js';
 
 import { TICKET_PRICE_USDT } from '../../shared/eventConfig.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-dotenv.config({ path: resolve(__dirname, '../.env') });
-dotenv.config({ path: resolve(__dirname, '../.env.local'), override: true });
 
 const MOCK_USDT_ABI = [
   'function mint(address to, uint256 amount) external',
