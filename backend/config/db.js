@@ -2,6 +2,7 @@ import './environment.js';
 
 import pg from 'pg';
 
+import { parsePostgresConnectionUrl } from './databaseConnectionUrl.js';
 import { assertSafeTestDatabaseName } from './testDatabaseGuard.js';
 
 const IS_SERVERLESS_RUNTIME = process.env.VERCEL === '1';
@@ -26,21 +27,6 @@ function readDatabaseConnectionUrlFromEnvironment() {
   return null;
 }
 
-function parseDatabaseConnectionUrl(connectionUrlValue) {
-  const parsedConnectionUrl = new URL(connectionUrlValue);
-  const parsedDatabaseName = decodeURIComponent(
-    parsedConnectionUrl.pathname.replace(/^\//, '')
-  );
-
-  return {
-    host: parsedConnectionUrl.hostname,
-    port: parsedConnectionUrl.port ? Number(parsedConnectionUrl.port) : 5432,
-    database: parsedDatabaseName,
-    user: decodeURIComponent(parsedConnectionUrl.username),
-    password: decodeURIComponent(parsedConnectionUrl.password),
-  };
-}
-
 function isSupabaseDatabaseHost(databaseHost) {
   return /(^|\.)supabase\.(co|com|in)$/.test(String(databaseHost || ''));
 }
@@ -53,7 +39,7 @@ function isLocalDatabaseHost(databaseHost) {
 // before the pool is built, not on the connection callback below.
 const databaseConnectionUrl = readDatabaseConnectionUrlFromEnvironment();
 const resolvedConnectionParameters = databaseConnectionUrl
-  ? parseDatabaseConnectionUrl(databaseConnectionUrl)
+  ? parsePostgresConnectionUrl(databaseConnectionUrl)
   : {
       host: process.env.DB_HOST,
       port: process.env.DB_PORT,

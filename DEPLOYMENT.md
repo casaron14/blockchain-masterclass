@@ -33,6 +33,13 @@ create a project, then copy its connection string into Vercel. No code change
 is needed per environment: `DATABASE_URL` is read first, and the five `DB_*`
 values remain the fallback for local development.
 
+This Express backend uses the PostgreSQL driver, not the browser Supabase
+Data API. `DATABASE_URL` must be a PostgreSQL connection string copied from
+Supabase **Connect** (for example, `postgresql://...`); the project HTTPS URL
+and publishable/anon API key are not database credentials and cannot replace
+it. The existing API does not consume `NEXT_PUBLIC_SUPABASE_URL` or
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+
 ### 1.1 Create and connect the Supabase project
 
 1. Create the project in the Supabase dashboard and wait for the database to
@@ -153,9 +160,9 @@ The fallback variables (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`,
 2. Set **Root Directory** to `frontend`.
 3. Enable **Include source files outside of the Root Directory in the Build
    Step**.
-4. Add the environment variables from the repository-root `.env.example`
-   (the universal template for this project) to the Production and Preview
-   targets.
+4. Add the required environment variables listed below to the Production
+   target. Only add them to Preview if it has a separate, non-production
+   database.
 5. Deploy, then verify `GET https://<domain>/api/health` returns
    `{"status":"ok","database":"connected"}`.
 
@@ -273,8 +280,11 @@ runs the due jobs sequentially, can use the plan maximum.
 
 ## 3. Local development
 
-Copy the repository-root `.env.example` to `.env` and set the values you need.
-Both the frontend and backend load that same root file; environment variables
+Create a private repository-root `.env` and set the values you need. Use the
+Supabase **Session pooler** PostgreSQL URL when connecting locally; use the
+local `DB_*` settings only when running a local PostgreSQL server. The project
+HTTPS URL and publishable key are not substitutes for a PostgreSQL URL. Both
+the frontend and backend load the same root file; environment variables
 already supplied by the shell or hosting platform take precedence.
 
 ```bash

@@ -25,10 +25,10 @@ cd backend && npm install
 cd ../frontend && npm install && npm run dev
 ```
 
-The frontend serves the API in-process. Copy the root
-[.env.example](./.env.example) to `.env` and configure both the frontend and
-backend there. Backend scripts and the frontend load the same repository-root
-`.env` file.
+The frontend serves the API in-process. Create a private `.env` file in the
+repository root and configure the required local values described in
+[DEPLOYMENT.md](./DEPLOYMENT.md). Environment files are intentionally ignored
+by Git. Backend scripts and the frontend load the same repository-root `.env`.
 
 ## Deploying
 
