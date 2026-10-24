@@ -275,7 +275,7 @@ test('Supabase Storage receipts keep only a private object path in the database'
   process.env.SUPABASE_SECRET_KEY = 'server-only-test-secret';
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   process.env.SUPABASE_RECEIPT_BUCKET = 'offline-payment-receipts';
-  process.env.DOCUMENT_STORAGE_MODE = 'memory';
+  process.env.DOCUMENT_STORAGE_MODE = 'local';
   globalThis.fetch = async (requestUrl, requestOptions = {}) => {
     storageRequests.push({
       requestUrl: String(requestUrl),
@@ -317,6 +317,11 @@ test('Supabase Storage receipts keep only a private object path in the database'
 
     assert.match(storedReceiptResult.rows[0].storage_object_path, /^receipts\//);
     assert.equal(storedReceiptResult.rows[0].file_data, null);
+    await assert.rejects(
+      () =>
+        fs.access(resolveOfflinePaymentReceiptAbsoluteFilePath(offlineReceiptRecord)),
+      (error) => error.code === 'ENOENT'
+    );
     assert.deepEqual(downloadResult.fileBuffer, VALID_PNG_RECEIPT_BUFFER);
     assert.equal(downloadResult.absoluteFilePath, null);
     assert.equal(storageRequests.length, 2);

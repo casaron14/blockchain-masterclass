@@ -143,8 +143,9 @@ Storage instead:
 
 The bucket stays private and needs no public access policy: the backend uses
 the server-only secret key, which bypasses Storage RLS. The app does not create
-the bucket automatically; create it in the Supabase dashboard first. Existing
-receipts stored in PostgreSQL remain downloadable after enabling Storage.
+the bucket automatically; create it in the Supabase dashboard first. When
+Supabase Storage is selected, receipt files are not also written to local disk.
+Existing receipts stored in PostgreSQL remain downloadable after enabling Storage.
 Legacy disk-only receipts remain accessible only where their original files
 still exist. New receipts use the bucket; removing the bucket or its key will
 make those new receipts unavailable.

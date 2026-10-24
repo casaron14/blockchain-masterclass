@@ -310,7 +310,8 @@ export async function storeOfflinePaymentReceiptForPayment({
     ? `receipts/${storedFileName}`
     : null;
   const fileSha256 = crypto.createHash('sha256').update(receiptFileBuffer).digest('hex');
-  const shouldStoreReceiptFileOnDisk = isLocalDocumentStorageEnabled();
+  const shouldStoreReceiptFileOnDisk =
+    !shouldStoreReceiptFileInSupabase && isLocalDocumentStorageEnabled();
 
   let wasReceiptUploadedToSupabase = false;
   let wasReceiptRecordSavedToDatabase = false;
