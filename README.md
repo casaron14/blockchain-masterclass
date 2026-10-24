@@ -4,9 +4,9 @@ Booking website and administration tools for the Blockchain Masterclass event.
 
 ## Production architecture
 
-- **Vercel** hosts the Next.js site and the Express API. The API is served by
-  `frontend/pages/api/[...all].js`; deploy this repository as one Vercel
-  project with `frontend/` as its Root Directory.
+- **Vercel** hosts the Next.js site and Express API. The API is split into
+  serverless functions by route group under `frontend/pages/api/`; deploy this
+  repository as one Vercel project with `frontend/` as its Root Directory.
 - **Supabase** provides managed PostgreSQL and private Storage for attendee
   payment receipts. The backend connects to Postgres with `pg` and to Storage
   server-side with `@supabase/supabase-js`.

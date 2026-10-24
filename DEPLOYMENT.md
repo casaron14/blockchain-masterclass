@@ -4,15 +4,28 @@ The production architecture is **Vercel for the app and API, Supabase for
 Postgres and private object storage**. Supabase is not the host for this
 Next.js/Express application. The repository ships as one Vercel project: the
 Next.js app in `frontend/` also serves the Express API.
-`frontend/pages/api/[...all].js` forwards every `/api/*` request to the same
-Express application that `backend/server.js` serves locally.
+The functions under `frontend/pages/api/` forward API route groups to the
+existing Express routers; `frontend/pages/api/[...all].js` remains as a
+fallback. The same routers are mounted together by `backend/server.js` locally.
 
 ```text
 Vercel project (Root Directory: frontend)
 ├── app/, components/, lib/          Next.js pages
-├── pages/api/[...all].js            single serverless function → Express
+├── pages/api/{bookings,events,...}  route-group functions → Express routers
+├── pages/api/health.js              lightweight database health probe
+├── pages/api/[...all].js            fallback function → Express
 └── ../backend, ../shared            imported at build time (outside root)
 ```
+
+Each route group has an independently logged Vercel function, while sharing
+the same Express router, middleware, and database configuration. This improves
+failure isolation in Vercel logs; it does not remove the requirement for a
+valid `DATABASE_URL`.
+
+The dedicated functions are `/api/bookings/*`, `/api/payments/*`,
+`/api/auth/*`, `/api/events/*`, `/api/tickets/*`, `/api/admin/*`,
+`/api/referrals/*`, and `/api/cron/*`. `/api/health` is a lightweight database
+probe; unmatched API paths use the catch-all fallback.
 
 `backend/` and `shared/` sit outside the project root, so on Vercel you **must**
 enable **Include source files outside of the Root Directory in the Build Step**

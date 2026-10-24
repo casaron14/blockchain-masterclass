@@ -4,8 +4,8 @@ import dotenv from 'dotenv';
 
 const frontendRootDirectory = path.dirname(fileURLToPath(import.meta.url));
 // The Express API and the shared event configuration live one level above the
-// frontend. The tracing root must cover both so the single /api/[...all]
-// function is deployed with backend/ and shared/ inside it.
+// frontend. The tracing root must cover both so the API functions can include
+// backend/ and shared/ files in their deployed bundles.
 const repositoryRootDirectory = path.resolve(frontendRootDirectory, '..');
 
 dotenv.config({
