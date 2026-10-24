@@ -6,6 +6,10 @@ export const DOCUMENT_STORAGE_MODE_LOCAL_FILE_SYSTEM = 'local';
 export const DOCUMENT_STORAGE_MODE_IN_MEMORY = 'memory';
 
 export function resolveDocumentStorageMode() {
+  if (process.env.VERCEL === '1') {
+    return DOCUMENT_STORAGE_MODE_IN_MEMORY;
+  }
+
   const configuredMode = String(process.env.DOCUMENT_STORAGE_MODE || '').toLowerCase();
 
   if (
@@ -15,9 +19,7 @@ export function resolveDocumentStorageMode() {
     return configuredMode;
   }
 
-  return process.env.VERCEL === '1'
-    ? DOCUMENT_STORAGE_MODE_IN_MEMORY
-    : DOCUMENT_STORAGE_MODE_LOCAL_FILE_SYSTEM;
+  return DOCUMENT_STORAGE_MODE_LOCAL_FILE_SYSTEM;
 }
 
 export function isLocalDocumentStorageEnabled() {

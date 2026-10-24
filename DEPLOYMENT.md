@@ -149,6 +149,10 @@ Legacy disk-only receipts remain accessible only where their original files
 still exist. New receipts use the bucket; removing the bucket or its key will
 make those new receipts unavailable.
 
+Vercel always uses in-memory document handling, even if
+`DOCUMENT_STORAGE_MODE=local` is set. Do not rely on local files for persistent
+receipt storage; use the private Supabase bucket or the database-backed default.
+
 ### Required database environment variables
 
 | Variable | Value on Vercel |
