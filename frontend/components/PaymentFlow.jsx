@@ -1,6 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
+import lipaNambaPaymentQr from '@/assets/Lipanamba.webp';
 import {
   fetchPaymentOverviewById,
   fetchBookingRecordById,
@@ -94,6 +96,7 @@ export default function PaymentFlow({ paymentId }) {
   const [usdtInstructions, setUsdtInstructions] = useState(null);
   const [depositQrDataUrl, setDepositQrDataUrl] = useState(null);
   const [isAddressCopied, setIsAddressCopied] = useState(false);
+  const [isLipaNambaNumberCopied, setIsLipaNambaNumberCopied] = useState(false);
 
   const [offlinePaymentReceipt, setOfflinePaymentReceipt] = useState(null);
   const [bookingReferenceCode, setBookingReferenceCode] = useState('');
@@ -322,6 +325,21 @@ export default function PaymentFlow({ paymentId }) {
     }
   }
 
+  async function copyLipaNambaNumberToClipboard() {
+    if (!lipaNambaNumber) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(lipaNambaNumber);
+      setIsLipaNambaNumberCopied(true);
+      setTimeout(() => setIsLipaNambaNumberCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy Lipa Namba number to clipboard', error);
+      setStatusTone('error');
+      setStatusMessage(t('payment.lipaNambaCopyFailed'));
+    }
+  }
+
   const isCountdownUrgent =
     bookingExpiresAtMs !== null &&
     remainingMilliseconds !== null &&
@@ -453,9 +471,30 @@ export default function PaymentFlow({ paymentId }) {
           </p>
 
           <div className="detail-list">
-            <p>
-              <strong>{t('payment.lipanambaNumberLabel')}:</strong> {lipaNambaNumber}
-            </p>
+            <div>
+              <strong>{t('payment.lipanambaNumberLabel')}:</strong>
+              <div className="wallet-address-row">
+                <code className="wallet-address">{lipaNambaNumber}</code>
+                <button
+                  type="button"
+                  className={`copy-address-icon-button${isLipaNambaNumberCopied ? ' copied' : ''}`}
+                  disabled={!lipaNambaNumber}
+                  aria-label={
+                    isLipaNambaNumberCopied
+                      ? t('payment.lipaNambaNumberCopied')
+                      : t('payment.copyLipaNambaNumber')
+                  }
+                  title={
+                    isLipaNambaNumberCopied
+                      ? t('payment.lipaNambaNumberCopied')
+                      : t('payment.copyLipaNambaNumber')
+                  }
+                  onClick={copyLipaNambaNumberToClipboard}
+                >
+                  {isLipaNambaNumberCopied ? <AddressCopiedIcon /> : <CopyAddressIcon />}
+                </button>
+              </div>
+            </div>
             <p>
               <strong>{t('payment.lipanambaAccountLabel')}:</strong> {lipaNambaAccountName}
             </p>
@@ -463,6 +502,17 @@ export default function PaymentFlow({ paymentId }) {
               <strong>{t('payment.lipanambaAmountLabel')}:</strong>{' '}
               {formatLocalPrice(ticketPrice)} {currency}
             </p>
+          </div>
+
+          <div className="lipanamba-qr">
+            <p>{t('payment.lipaNambaScanPrompt')}</p>
+            <Image
+              src={lipaNambaPaymentQr}
+              alt={t('payment.lipaNambaQrAlt')}
+              className="lipanamba-qr__image"
+              sizes="(max-width: 48rem) 100vw, 20rem"
+              priority
+            />
           </div>
 
           {isOfflinePaymentAwaitingReview && (

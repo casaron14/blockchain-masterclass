@@ -263,6 +263,10 @@ export const translations = {
       networkLabel: 'Network: {network}',
       copyAddress: 'Copy address',
       addressCopied: 'Address copied!',
+      copyLipaNambaNumber: 'Copy Lipa Namba number',
+      lipaNambaNumberCopied: 'Lipa Namba number copied!',
+      lipaNambaCopyFailed:
+        'Could not copy the Lipa Namba number. Please copy it manually.',
       automaticCheck:
         'Once your transfer is confirmed, your ticket will be emailed to you within one hour. You can close this page.',
       depositQrAlt: 'QR code with the deposit wallet address',
@@ -272,6 +276,8 @@ export const translations = {
       lipanambaNumberLabel: 'Lipa Namba number',
       lipanambaAccountLabel: 'Account name',
       lipanambaAmountLabel: 'Amount to pay',
+      lipaNambaScanPrompt: 'Scan to pay with Tigo Pesa',
+      lipaNambaQrAlt: 'Tigo Pesa QR code for the DienAcademy Lipa Namba payment',
       lipanambaReceiptLabel: 'Payment receipt',
       lipanambaReceiptHelp: 'Upload a PDF or photo of the receipt (max 4 MB).',
       lipanambaChooseReceipt: 'Choose receipt file',
@@ -594,6 +600,10 @@ export const translations = {
       networkLabel: 'Network: {network}',
       copyAddress: 'Nakili anwani',
       addressCopied: 'Anwani imenakiliwa!',
+      copyLipaNambaNumber: 'Nakili namba ya Lipa Namba',
+      lipaNambaNumberCopied: 'Namba ya Lipa Namba imenakiliwa!',
+      lipaNambaCopyFailed:
+        'Imeshindikana kunakili namba ya Lipa Namba. Tafadhali inakili mwenyewe.',
       automaticCheck:
         'Baada ya uhamisho wako kuthibitishwa, tikiti yako itatumwa kwa barua pepe ndani ya saa moja. Unaweza kufunga ukurasa huu.',
       depositQrAlt: 'QR code yenye anwani ya pochi ya malipo',
@@ -603,6 +613,8 @@ export const translations = {
       lipanambaNumberLabel: 'Namba ya Lipa Namba',
       lipanambaAccountLabel: 'Jina la akaunti',
       lipanambaAmountLabel: 'Kiasi cha kulipa',
+      lipaNambaScanPrompt: 'Scan QR code kulipa kwa Tigo Pesa',
+      lipaNambaQrAlt: 'QR code ya Tigo Pesa kwa malipo ya Lipa Namba ya DienAcademy',
       lipanambaReceiptLabel: 'Risiti ya malipo',
       lipanambaReceiptHelp: 'Upload PDF au picha ya risiti (isizidi 4 MB).',
       lipanambaChooseReceipt: 'Chagua faili ya risiti',

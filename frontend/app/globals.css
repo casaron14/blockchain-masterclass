@@ -2211,6 +2211,28 @@ code {
   font-weight: 500;
 }
 
+.lipanamba-qr {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.lipanamba-qr p {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lipanamba-qr__image {
+  display: block;
+  width: min(100%, 20rem);
+  height: auto;
+  border: 1px solid var(--line);
+}
+
 .payment-attendee-details {
   margin-bottom: 1.35rem;
   padding-bottom: 1.1rem;
