@@ -43,7 +43,9 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "jsqr": "^1.4.0",
+    "nodemon": "^3.1.14",
+    "png-js": "^2.0.0"
   },
   "allowScripts": {
     "bcrypt@6.0.0": true

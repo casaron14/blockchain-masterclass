@@ -90,9 +90,56 @@ async function fetchPaymentRecordForBookingRow(bookingRow) {
   return { payment: paymentRecord, orderAndDeposit };
 }
 
-export async function fetchAdminBookingList({ statusFilter } = {}) {
-  const whereClause = statusFilter ? 'WHERE b.status = $1' : '';
-  const queryParams = statusFilter ? [statusFilter] : [];
+// Shared by the admin list and the CSV export so an exported file always
+// contains exactly the rows the screen is showing.
+export function buildAdminBookingListWhereClause({ statusFilter, searchQuery } = {}) {
+  const whereConditions = [];
+  const queryParameters = [];
+
+  const trimmedStatusFilter = typeof statusFilter === 'string' ? statusFilter.trim() : '';
+  if (trimmedStatusFilter) {
+    queryParameters.push(trimmedStatusFilter);
+    whereConditions.push(`b.status = $${queryParameters.length}`);
+  }
+
+  const trimmedSearchQuery = typeof searchQuery === 'string' ? searchQuery.trim() : '';
+  if (trimmedSearchQuery) {
+    const escapedSearchQuery = trimmedSearchQuery.replace(/[\\%_]/g, '\\$&');
+    queryParameters.push(`%${escapedSearchQuery}%`);
+    const searchPatternParameter = `$${queryParameters.length}`;
+
+    const searchConditions = [
+      `b.ref ILIKE ${searchPatternParameter} ESCAPE '\\'`,
+      `b.full_name ILIKE ${searchPatternParameter} ESCAPE '\\'`,
+      `b.email ILIKE ${searchPatternParameter} ESCAPE '\\'`,
+      `b.phone_number ILIKE ${searchPatternParameter} ESCAPE '\\'`,
+    ];
+
+    // Phone numbers are stored with the country code, while an admin often
+    // types the local format, so the subscriber digits are compared as well.
+    const searchPhoneNumberDigits = trimmedSearchQuery.replace(/[^0-9]/g, '');
+    if (searchPhoneNumberDigits.length >= 9) {
+      queryParameters.push(searchPhoneNumberDigits.slice(-9));
+      searchConditions.push(
+        `right(regexp_replace(b.phone_number, '[^0-9]', '', 'g'), 9) = $${queryParameters.length}`
+      );
+    }
+
+    whereConditions.push(`(${searchConditions.join(' OR ')})`);
+  }
+
+  return {
+    whereClause:
+      whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '',
+    queryParameters,
+  };
+}
+
+export async function fetchAdminBookingList({ statusFilter, searchQuery } = {}) {
+  const { whereClause, queryParameters } = buildAdminBookingListWhereClause({
+    statusFilter,
+    searchQuery,
+  });
 
   const result = await pool.query(
     `SELECT b.*, p.status AS payment_status, p.payment_method, p.amount_expected,
@@ -105,7 +152,7 @@ export async function fetchAdminBookingList({ statusFilter } = {}) {
        LEFT JOIN referrers r ON r.referrer_code = b.utm_source
        ${whereClause}
        ORDER BY b.created_at DESC`,
-    queryParams
+    queryParameters
   );
 
   return result.rows;

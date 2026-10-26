@@ -1,16 +1,19 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fsSync from 'fs';
+import jsQR from 'jsqr';
+import PNG from 'png-js';
 import pool from '../config/db.js';
 
 import {
-  buildTicketQrPayload,
   renderTicketQrDataUrl,
   deliverTicketForConfirmedBooking,
   redeliverFailedTicketEmail,
   sendTicketEmailToAttendee,
   TICKET_EMAIL_DELIVERY_DISABLED_REASON,
 } from '../services/ticketDeliveryService.js';
+
+import { buildTicketQrCodeUrl } from '../services/ticketQrCodeService.js';
 
 import {
   createBookingRecordWithActiveSeatHold,
@@ -41,6 +44,24 @@ async function createConfirmedBooking() {
   });
   const confirmedBooking = await confirmBookingSeatWithinCapacity(bookingRecord.id);
   return confirmedBooking;
+}
+
+function decodeQrTextFromPngDataUrl(qrPngDataUrl) {
+  const qrPngBuffer = Buffer.from(qrPngDataUrl.split(',')[1], 'base64');
+
+  return new Promise((resolve) => {
+    const qrPngImage = new PNG(qrPngBuffer);
+
+    qrPngImage.decode((rgbaPixels) => {
+      const rgbaPixelData = new Uint8ClampedArray(
+        rgbaPixels.buffer,
+        rgbaPixels.byteOffset,
+        rgbaPixels.length
+      );
+      const decodedQrCode = jsQR(rgbaPixelData, qrPngImage.width, qrPngImage.height);
+      resolve(decodedQrCode?.data ?? null);
+    });
+  });
 }
 
 async function createPendingPaymentReceiptForBooking(bookingId) {
@@ -103,21 +124,67 @@ async function fetchDeliveryRecordForBooking(bookingId) {
   return result.rows[0] ?? null;
 }
 
-test('buildTicketQrPayload includes attendee and event details', async () => {
-  const confirmedBooking = await createConfirmedBooking();
-  const qrPayload = buildTicketQrPayload(confirmedBooking);
+test('buildTicketQrCodeUrl embeds the attendee referral value in the Inkryptus link', async () => {
+  const referredBooking = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Referred Ticket User',
+    email: 'referred-ticket@example.com',
+    phone_number: '+255712345697',
+    utm_source: 'neema',
+  });
 
-  assert.equal(qrPayload.bookingReference, confirmedBooking.ref);
-  assert.equal(qrPayload.attendeeName, 'Ticket User');
-  assert.equal(qrPayload.bookingId, confirmedBooking.id);
-  assert.ok(qrPayload.ticketId.startsWith('EVT-'));
-  assert.ok(qrPayload.eventTitle.length > 0);
+  assert.equal(
+    buildTicketQrCodeUrl(referredBooking),
+    'https://link.inkryptus.com/?referral=neema'
+  );
+});
+
+test('buildTicketQrCodeUrl still returns a valid Inkryptus link without a referral value', async () => {
+  const directBooking = await createConfirmedBooking();
+
+  assert.equal(
+    buildTicketQrCodeUrl(directBooking),
+    'https://link.inkryptus.com/?referral='
+  );
 });
 
 test('renderTicketQrDataUrl returns a valid PNG data URL', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const qrDataUrl = await renderTicketQrDataUrl(confirmedBooking);
   assert.match(qrDataUrl, /^data:image\/png;base64,/);
+});
+
+test('renderTicketQrDataUrl encodes the referral URL in the QR image', async () => {
+  const referredBooking = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Referred Qr User',
+    email: 'referred-qr@example.com',
+    phone_number: '+255712345700',
+    utm_source: 'neema',
+  });
+
+  const qrDataUrl = await renderTicketQrDataUrl(referredBooking);
+  const decodedQrText = await decodeQrTextFromPngDataUrl(qrDataUrl);
+
+  assert.equal(decodedQrText, 'https://link.inkryptus.com/?referral=neema');
+});
+
+test('renderTicketQrDataUrl encodes a different QR image for each referral value', async () => {
+  const firstReferredBooking = await createBookingRecordWithActiveSeatHold({
+    full_name: 'First Referred User',
+    email: 'first-referred@example.com',
+    phone_number: '+255712345698',
+    utm_source: 'neema',
+  });
+  const secondReferredBooking = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Second Referred User',
+    email: 'second-referred@example.com',
+    phone_number: '+255712345699',
+    utm_source: 'amina',
+  });
+
+  const firstQrDataUrl = await renderTicketQrDataUrl(firstReferredBooking);
+  const secondQrDataUrl = await renderTicketQrDataUrl(secondReferredBooking);
+
+  assert.notEqual(firstQrDataUrl, secondQrDataUrl);
 });
 
 test('deliverTicketForConfirmedBooking records a sent delivery on success', async () => {
@@ -134,7 +201,7 @@ test('deliverTicketForConfirmedBooking records a sent delivery on success', asyn
   assert.equal(deliveryRecord.status, 'sent');
   assert.ok(deliveryRecord.sent_at);
   assert.equal(deliveryRecord.attempt_count, 1);
-  assert.ok(deliveryRecord.qr_payload);
+  assert.equal(deliveryRecord.qr_payload, 'https://link.inkryptus.com/?referral=');
 });
 
 test('deliverTicketForConfirmedBooking records a failed delivery with a reason', async () => {

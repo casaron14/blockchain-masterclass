@@ -56,9 +56,14 @@ const nextConfig = {
   poweredByHeader: false,
 
   outputFileTracingRoot: repositoryRootDirectory,
+  // pdfkit resolves its built-in AFM fonts through the package "imports" map
+  // (#standard-fonts/Helvetica), which is a dynamic require that Next's tracer
+  // cannot follow. Without these two globs the deployed API function throws
+  // MODULE_NOT_FOUND for standard-fonts/*.cjs while rendering a ticket PDF.
   outputFileTracingIncludes: {
     '/api/**': [
       './node_modules/pdfkit/js/data/**/*',
+      './node_modules/pdfkit/js/standard-fonts/**/*',
       './node_modules/bcrypt/**/*',
     ],
   },

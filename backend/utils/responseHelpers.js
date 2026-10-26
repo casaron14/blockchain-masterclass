@@ -32,6 +32,22 @@ export function bookingNotFoundResponse() {
   };
 }
 
+export function invalidBookingSearchValueResponse(searchErrorMessage) {
+  return {
+    message: searchErrorMessage,
+    error: 'INVALID_BOOKING_SEARCH_VALUE',
+  };
+}
+
+export function ambiguousBookingLookupResponse(matchingBookingCount) {
+  return {
+    message:
+      'More than one booking matches that search. Use the booking reference to identify one booking.',
+    error: 'AMBIGUOUS_BOOKING_LOOKUP',
+    matchingBookingCount,
+  };
+}
+
 export function paymentNotFoundResponse() {
   return {
     message: 'Payment not found',

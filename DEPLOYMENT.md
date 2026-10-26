@@ -186,8 +186,9 @@ The fallback variables (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`,
 
 `frontend/vercel.json` declares the daily cron. `next.config.mjs` sets
 `outputFileTracingRoot` to the repository root so `backend/` and `shared/` are
-included in the deployed function, and traces the PDFKit font data and bcrypt
-native bindings that are loaded at runtime rather than through `require`.
+included in the deployed function, and traces the PDFKit font data and standard
+font modules plus bcrypt native bindings that are loaded at runtime rather than
+through a static `require`.
 
 ### Environment variables
 

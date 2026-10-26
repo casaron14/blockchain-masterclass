@@ -40,10 +40,10 @@ async function fetchAdminSummaryReport(req, res) {
 }
 
 async function fetchAdminBookingListEndpoint(req, res) {
-  const { status: statusFilter } = req.query;
+  const { status: statusFilter, q: searchQuery } = req.query;
 
   try {
-    const bookingRows = await fetchAdminBookingList({ statusFilter });
+    const bookingRows = await fetchAdminBookingList({ statusFilter, searchQuery });
     const statusCounts = await fetchBookingStatusCounts();
     return res.status(200).json({ bookings: bookingRows, counts: statusCounts });
   } catch (error) {
@@ -53,10 +53,10 @@ async function fetchAdminBookingListEndpoint(req, res) {
 }
 
 async function exportAdminBookingListAsCsvEndpoint(req, res) {
-  const { status: statusFilter } = req.query;
+  const { status: statusFilter, q: searchQuery } = req.query;
 
   try {
-    const bookingRows = await fetchAdminBookingList({ statusFilter });
+    const bookingRows = await fetchAdminBookingList({ statusFilter, searchQuery });
     const csvDownloadFileName = buildCsvExportFileName(
       statusFilter ? `bookings-${statusFilter}` : 'bookings'
     );

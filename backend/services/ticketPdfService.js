@@ -1,233 +1,341 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
-import {
-  getEventDetails,
-  buildTicketQrPayload,
-} from './ticketDeliveryService.js';
+import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
+import { INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64 } from '../assets/inkryptusLogoOnBlackPngAsset.js';
 
-const BRAND_TEAL = '#2E8282';
-const BRAND_PURPLE = '#69478A';
-const BRAND_DARK = '#1C3535';
-const BRAND_MUTED = '#5F7F7F';
-const PAGE_WIDTH = 595.28;
-const PAGE_HEIGHT = 841.89;
-const MARGIN = 50;
+// The ticket is a print-ready pass. Its copy is fixed to the details printed
+// on the event pass, while attendee and referral data stay dynamic per booking.
+const TICKET_EVENT_TITLE = 'Blockchain Masterclass';
+const TICKET_EVENT_TITLE_LINES = TICKET_EVENT_TITLE.toUpperCase().split(' ');
+const TICKET_BRAND_NAME = 'Inkryptus';
+const TICKET_EVENT_DATE = '07/10/2026';
+const TICKET_EVENT_TAGLINE = 'Jenga mustakabali kwa Blockchain';
+const TICKET_VENUE_NAME = 'Village Hall Mafao House';
+const TICKET_VENUE_CITY = 'Arusha, Tanzania';
+const TICKET_WEBSITE_ADDRESS = 'inkryptus.com';
+const TICKET_CONTACT_PHONE_NUMBER = '+255 621 745 217';
+
+const TICKET_PAGE_WIDTH = 841.89;
+const TICKET_PAGE_HEIGHT = 595.28;
+const TICKET_PAGE_MARGIN = 42;
+const TICKET_CONTENT_TOP_Y = 124;
+const TICKET_FOOTER_BASELINE_Y = 556;
+const TICKET_HEADER_RULE_Y = 96;
+const TICKET_PANEL_DIVIDER_X = 506;
+const TICKET_LEFT_COLUMN_WIDTH = TICKET_PANEL_DIVIDER_X - TICKET_PAGE_MARGIN - 28;
+
+const TICKET_PREFERRED_TITLE_FONT_SIZE = 56;
+const TICKET_TITLE_LINE_HEIGHT = 58;
+const TICKET_TITLE_TOP_Y = 124;
+const TICKET_DATE_TOP_Y = 264;
+const TICKET_TAGLINE_TOP_Y = 308;
+const TICKET_VENUE_TOP_Y = 340;
+const TICKET_ATTENDEE_DIVIDER_Y = 396;
+const TICKET_ATTENDEE_LABEL_TOP_Y = 414;
+const TICKET_ATTENDEE_NAME_TOP_Y = 430;
+const TICKET_ATTENDEE_NAME_MAX_HEIGHT = 24;
+const TICKET_REFERENCE_TOP_Y = 460;
+
+const TICKET_QR_OUTER_SIZE = 268;
+const TICKET_QR_OUTER_PADDING = 8;
+const TICKET_QR_TOP_Y = 196;
+const TICKET_QR_CAPTION_TOP_Y = 482;
+const TICKET_QR_REFERENCE_TOP_Y = 500;
+
+const TICKET_BLACK = '#000000';
+const TICKET_WHITE = '#FFFFFF';
+const TICKET_SECONDARY_TEXT = '#C9C9C9';
+const TICKET_MUTED_TEXT = '#8A8A8A';
+const TICKET_DIVIDER_COLOR = '#444444';
+const TICKET_QR_IMAGE_SIZE = TICKET_QR_OUTER_SIZE - TICKET_QR_OUTER_PADDING * 2;
+const TICKET_QR_PANEL_X = TICKET_PAGE_WIDTH - TICKET_PAGE_MARGIN - TICKET_QR_OUTER_SIZE;
+const TICKET_LOGO_WIDTH = 136;
+
+const INKRYPTUS_LOGO_ON_BLACK_PNG_BUFFER = Buffer.from(
+  INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64,
+  'base64'
+);
 
 export async function generateTicketPdfBuffer(bookingRecord, paymentSummary = null) {
-  const eventDetails = getEventDetails();
-  const qrPayload = buildTicketQrPayload(bookingRecord);
-  const qrBuffer = await QRCode.toBuffer(JSON.stringify(qrPayload), {
-    width: 200,
-    margin: 1,
-    color: { dark: '#0C2231', light: '#FFFFFF' },
+  const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
+  const qrCodePngBuffer = await QRCode.toBuffer(ticketQrCodeUrl, {
+    width: 1000,
+    margin: 4,
+    errorCorrectionLevel: 'M',
+    color: { dark: TICKET_BLACK, light: TICKET_WHITE },
   });
 
   return new Promise((resolve, reject) => {
     const document = new PDFDocument({
-      size: 'A4',
-      margin: MARGIN,
+      size: [TICKET_PAGE_WIDTH, TICKET_PAGE_HEIGHT],
+      margin: 0,
       info: {
-        Title: `Ticket - ${eventDetails.eventTitle} (${bookingRecord.ref})`,
-        Author: eventDetails.eventTitle,
+        Title: `${TICKET_EVENT_TITLE} ticket - ${bookingRecord.ref}`,
+        Author: TICKET_BRAND_NAME,
         Subject: `Admit one: ${bookingRecord.full_name}`,
       },
     });
 
-    const chunks = [];
-    document.on('data', (chunk) => chunks.push(chunk));
-    document.on('end', () => resolve(Buffer.concat(chunks)));
+    const pdfChunks = [];
+    document.on('data', (chunk) => pdfChunks.push(chunk));
+    document.on('end', () => resolve(Buffer.concat(pdfChunks)));
     document.on('error', reject);
 
-    drawHeaderBackground(document, eventDetails);
-    drawEventDetailsSection(document, eventDetails);
-    drawAttendeeDetailsSection(document, bookingRecord);
+    drawTicketBackground(document);
+    drawTicketHeader(document);
+    drawTicketEventTitle(document);
+    drawTicketDate(document);
+    drawTicketTaglineAndVenue(document);
+    drawAttendeeDetails(document, bookingRecord);
 
     if (paymentSummary) {
-      drawPaymentSummarySection(document, paymentSummary);
+      drawPaymentSummary(document, paymentSummary);
     }
 
-    drawQrCodeSection(document, qrBuffer);
-    drawFooterSection(document, eventDetails);
+    drawTicketFooter(document);
+    drawQrPanelDivider(document);
+    drawQrCodePanel(document, qrCodePngBuffer, bookingRecord);
 
     document.end();
   });
 }
 
-function drawHeaderBackground(document, eventDetails) {
+function drawTicketBackground(document) {
   document
-    .rect(0, 0, PAGE_WIDTH, 130)
-    .fill(BRAND_TEAL);
-
-  document
-    .font('Helvetica-Bold')
-    .fontSize(24)
-    .fillColor('#FFFFFF')
-    .text(eventDetails.eventTitle.toUpperCase(), MARGIN, 45, {
-      width: PAGE_WIDTH - MARGIN * 2,
-      align: 'center',
-    });
-
-  document
-    .font('Helvetica')
-    .fontSize(11)
-    .fillColor('#FFFFFF')
-    .text('ELECTRONIC TICKET', MARGIN, 80, {
-      width: PAGE_WIDTH - MARGIN * 2,
-      align: 'center',
-    });
+    .rect(0, 0, TICKET_PAGE_WIDTH, TICKET_PAGE_HEIGHT)
+    .fill(TICKET_BLACK);
 }
 
-function drawEventDetailsSection(document, eventDetails) {
-  const sectionTop = 155;
-
-  document
-    .font('Helvetica-Bold')
-    .fontSize(12)
-    .fillColor(BRAND_PURPLE)
-    .text('EVENT DETAILS', MARGIN, sectionTop);
-
-  document.moveDown(0.3);
-
-  document
-    .font('Helvetica')
-    .fontSize(11)
-    .fillColor(BRAND_DARK);
-
-  document.text(`Event:  ${eventDetails.eventTitle}`, MARGIN);
-  document.text(`Date:  ${eventDetails.eventDate}`, MARGIN);
-  document.text(`Location:  ${eventDetails.eventLocation}`, MARGIN);
-
-  document.moveDown(0.8);
-
-  drawHorizontalRule(document, document.y);
-}
-
-function drawAttendeeDetailsSection(document, bookingRecord) {
-  const sectionTop = document.y + 20;
-
-  document
-    .font('Helvetica-Bold')
-    .fontSize(12)
-    .fillColor(BRAND_PURPLE)
-    .text('ATTENDEE', MARGIN, sectionTop);
-
-  document.moveDown(0.3);
-
-  document
-    .font('Helvetica')
-    .fontSize(11)
-    .fillColor(BRAND_DARK);
-
-  document.text(`Name:  ${bookingRecord.full_name}`, MARGIN);
-  document.text(`Ticket ID:  EVT-${bookingRecord.ref}`, MARGIN);
-  document.text(`Booking Reference:  ${bookingRecord.ref}`, MARGIN);
-
-  document.moveDown(0.8);
-
-  drawHorizontalRule(document, document.y);
-}
-
-function drawPaymentSummarySection(document, paymentSummary) {
-  const sectionTop = document.y + 20;
-
-  document
-    .font('Helvetica-Bold')
-    .fontSize(12)
-    .fillColor(BRAND_PURPLE)
-    .text('PAYMENT', MARGIN, sectionTop);
-
-  document.moveDown(0.3);
-
-  document
-    .font('Helvetica')
-    .fontSize(11)
-    .fillColor(BRAND_DARK);
-
-  document.text(`Amount Paid:  ${paymentSummary.amountPaidUsdt} USDT`, MARGIN);
-  document.text(`Block Number:  ${paymentSummary.blockNumber}`, MARGIN);
-  document.text(`Transaction Hash:  ${paymentSummary.txHash}`, MARGIN);
-
-  document.moveDown(0.8);
-
-  drawHorizontalRule(document, document.y);
-}
-
-function drawQrCodeSection(document, qrBuffer) {
-  const qrSize = 160;
-  const qrX = (PAGE_WIDTH - qrSize) / 2;
-  const qrY = document.y + 25;
-
-  document
-    .font('Helvetica-Bold')
-    .fontSize(12)
-    .fillColor(BRAND_PURPLE)
-    .text('SCAN FOR CHECK-IN', MARGIN, qrY - 15, {
-      width: PAGE_WIDTH - MARGIN * 2,
-      align: 'center',
-    });
-
-  document.image(qrBuffer, qrX, qrY + 5, {
-    width: qrSize,
-    height: qrSize,
+function drawTicketHeader(document) {
+  document.image(INKRYPTUS_LOGO_ON_BLACK_PNG_BUFFER, TICKET_PAGE_MARGIN, 37, {
+    width: TICKET_LOGO_WIDTH,
   });
-
-  document.y = qrY + qrSize + 25;
 
   document
     .font('Helvetica')
     .fontSize(10)
-    .fillColor(BRAND_MUTED)
-    .text(
-      'Present this QR code at the venue for check-in.',
-      MARGIN,
-      document.y,
-      {
-        width: PAGE_WIDTH - MARGIN * 2,
-        align: 'center',
-      }
-    );
+    .fillColor(TICKET_WHITE)
+    .text(TICKET_WEBSITE_ADDRESS, 0, 49, {
+      width: TICKET_PAGE_WIDTH,
+      align: 'center',
+      characterSpacing: 2,
+    });
+
+  document.text(TICKET_CONTACT_PHONE_NUMBER, 0, 49, {
+    width: TICKET_PAGE_WIDTH - TICKET_PAGE_MARGIN,
+    align: 'right',
+    characterSpacing: 0.6,
+  });
+
+  document
+    .moveTo(TICKET_PAGE_MARGIN, TICKET_HEADER_RULE_Y)
+    .lineTo(TICKET_PAGE_WIDTH - TICKET_PAGE_MARGIN, TICKET_HEADER_RULE_Y)
+    .lineWidth(0.5)
+    .strokeColor(TICKET_DIVIDER_COLOR)
+    .stroke();
 }
 
-function drawFooterSection(document, eventDetails) {
-  const footerY = PAGE_HEIGHT - 100;
+function drawTicketEventTitle(document) {
+  const sharedTitleFontSize = resolveSharedTitleFontSize(document);
 
-  drawHorizontalRule(document, footerY);
+  document.font('Helvetica-Bold').fontSize(sharedTitleFontSize).fillColor(TICKET_WHITE);
+
+  TICKET_EVENT_TITLE_LINES.forEach((titleLine, titleLineIndex) => {
+    document.text(
+      titleLine,
+      TICKET_PAGE_MARGIN,
+      TICKET_TITLE_TOP_Y + titleLineIndex * TICKET_TITLE_LINE_HEIGHT,
+      { characterSpacing: -0.8 }
+    );
+  });
+}
+
+function resolveSharedTitleFontSize(document) {
+  document.font('Helvetica-Bold').fontSize(TICKET_PREFERRED_TITLE_FONT_SIZE);
+
+  return TICKET_EVENT_TITLE_LINES.reduce((sharedTitleFontSize, titleLine) => {
+    const measuredTitleWidth = document.widthOfString(titleLine);
+    const largestFontSizeThatFits =
+      (TICKET_PREFERRED_TITLE_FONT_SIZE * TICKET_LEFT_COLUMN_WIDTH) / measuredTitleWidth;
+
+    return Math.min(sharedTitleFontSize, Math.floor(largestFontSizeThatFits));
+  }, TICKET_PREFERRED_TITLE_FONT_SIZE);
+}
+
+function drawTicketDate(document) {
+  document
+    .font('Helvetica-Bold')
+    .fontSize(26)
+    .fillColor(TICKET_WHITE)
+    .text(TICKET_EVENT_DATE, TICKET_PAGE_MARGIN, TICKET_DATE_TOP_Y, {
+      width: TICKET_LEFT_COLUMN_WIDTH,
+      align: 'center',
+      characterSpacing: 1.5,
+    });
+}
+
+function drawTicketTaglineAndVenue(document) {
+  document
+    .font('Helvetica-Oblique')
+    .fontSize(15)
+    .fillColor(TICKET_SECONDARY_TEXT)
+    .text(TICKET_EVENT_TAGLINE, TICKET_PAGE_MARGIN, TICKET_TAGLINE_TOP_Y, {
+      width: TICKET_LEFT_COLUMN_WIDTH,
+      align: 'center',
+    });
+
+  document
+    .font('Helvetica-Bold')
+    .fontSize(12.5)
+    .fillColor(TICKET_WHITE)
+    .text(TICKET_VENUE_NAME, TICKET_PAGE_MARGIN, TICKET_VENUE_TOP_Y, {
+      width: TICKET_LEFT_COLUMN_WIDTH,
+      align: 'center',
+    });
 
   document
     .font('Helvetica')
-    .fontSize(9)
-    .fillColor(BRAND_MUTED)
-    .text(
-      `${eventDetails.eventTitle} | ${eventDetails.eventDate} | ${eventDetails.eventLocation}`,
-      MARGIN,
-      footerY + 12,
-      {
-        width: PAGE_WIDTH - MARGIN * 2,
-        align: 'center',
-      }
-    );
+    .fontSize(11.5)
+    .fillColor(TICKET_SECONDARY_TEXT)
+    .text(TICKET_VENUE_CITY, TICKET_PAGE_MARGIN, TICKET_VENUE_TOP_Y + 17, {
+      width: TICKET_LEFT_COLUMN_WIDTH,
+      align: 'center',
+    });
+}
+
+function drawAttendeeDetails(document, bookingRecord) {
+  drawLeftColumnRule(document, TICKET_ATTENDEE_DIVIDER_Y);
 
   document
     .font('Helvetica')
     .fontSize(8)
-    .fillColor(BRAND_MUTED)
+    .fillColor(TICKET_MUTED_TEXT)
+    .text('ATTENDEE', TICKET_PAGE_MARGIN, TICKET_ATTENDEE_LABEL_TOP_Y, {
+      characterSpacing: 2.4,
+    });
+
+  document
+    .font('Helvetica-Bold')
+    .fontSize(17)
+    .fillColor(TICKET_WHITE)
+    .text(bookingRecord.full_name, TICKET_PAGE_MARGIN, TICKET_ATTENDEE_NAME_TOP_Y, {
+      width: TICKET_LEFT_COLUMN_WIDTH,
+      height: TICKET_ATTENDEE_NAME_MAX_HEIGHT,
+      ellipsis: true,
+    });
+
+  document
+    .font('Helvetica')
+    .fontSize(9.5)
+    .fillColor(TICKET_SECONDARY_TEXT)
     .text(
-      'This ticket is non-transferable. Please present a valid photo ID alongside this ticket.',
-      MARGIN,
-      footerY + 28,
+      `TICKET ID  EVT-${bookingRecord.ref}`,
+      TICKET_PAGE_MARGIN,
+      TICKET_REFERENCE_TOP_Y,
+      { characterSpacing: 1.2 }
+    );
+}
+
+function drawPaymentSummary(document, paymentSummary) {
+  const shortenedTransactionHash = shortenBlockchainTransactionHashForTicket(
+    paymentSummary.txHash
+  );
+
+  document
+    .font('Helvetica')
+    .fontSize(7.5)
+    .fillColor(TICKET_MUTED_TEXT)
+    .text(
+      `PAYMENT  ${paymentSummary.amountPaidUsdt} USDT  ·  BLOCK ${paymentSummary.blockNumber}  ·  TX ${shortenedTransactionHash}`,
+      TICKET_PAGE_MARGIN,
+      TICKET_REFERENCE_TOP_Y + 26,
       {
-        width: PAGE_WIDTH - MARGIN * 2,
-        align: 'center',
+        width: TICKET_LEFT_COLUMN_WIDTH,
+        height: 12,
+        ellipsis: true,
+        characterSpacing: 0.4,
       }
     );
 }
 
-function drawHorizontalRule(document, yPosition) {
+function shortenBlockchainTransactionHashForTicket(transactionHash) {
+  if (transactionHash.length <= 24) {
+    return transactionHash;
+  }
+
+  return `${transactionHash.slice(0, 12)}...${transactionHash.slice(-6)}`;
+}
+
+function drawTicketFooter(document) {
   document
-    .moveTo(MARGIN, yPosition)
-    .lineTo(PAGE_WIDTH - MARGIN, yPosition)
+    .font('Helvetica')
+    .fontSize(7.5)
+    .fillColor(TICKET_MUTED_TEXT)
+    .text(
+      'This ticket is non-transferable. Present a valid photo ID at the entrance.',
+      TICKET_PAGE_MARGIN,
+      TICKET_FOOTER_BASELINE_Y,
+      {
+        width: TICKET_LEFT_COLUMN_WIDTH,
+        align: 'center',
+        characterSpacing: 0.4,
+      }
+    );
+}
+
+function drawLeftColumnRule(document, yPosition) {
+  document
+    .moveTo(TICKET_PAGE_MARGIN, yPosition)
+    .lineTo(TICKET_PAGE_MARGIN + TICKET_LEFT_COLUMN_WIDTH, yPosition)
     .lineWidth(0.5)
-    .strokeColor(BRAND_TEAL)
+    .strokeColor(TICKET_DIVIDER_COLOR)
     .stroke();
+}
+
+function drawQrPanelDivider(document) {
+  document
+    .moveTo(TICKET_PANEL_DIVIDER_X, TICKET_CONTENT_TOP_Y)
+    .lineTo(TICKET_PANEL_DIVIDER_X, TICKET_FOOTER_BASELINE_Y)
+    .lineWidth(0.5)
+    .strokeColor(TICKET_DIVIDER_COLOR)
+    .stroke();
+}
+
+function drawQrCodePanel(document, qrCodePngBuffer, bookingRecord) {
+  const qrPanelCaptionWidth = TICKET_QR_OUTER_SIZE;
+
+  document
+    .rect(TICKET_QR_PANEL_X, TICKET_QR_TOP_Y, TICKET_QR_OUTER_SIZE, TICKET_QR_OUTER_SIZE)
+    .fill(TICKET_WHITE);
+
+  document.image(
+    qrCodePngBuffer,
+    TICKET_QR_PANEL_X + TICKET_QR_OUTER_PADDING,
+    TICKET_QR_TOP_Y + TICKET_QR_OUTER_PADDING,
+    {
+      width: TICKET_QR_IMAGE_SIZE,
+      height: TICKET_QR_IMAGE_SIZE,
+    }
+  );
+
+  document
+    .font('Helvetica-Bold')
+    .fontSize(8)
+    .fillColor(TICKET_WHITE)
+    .text('SCAN AT ENTRY', TICKET_QR_PANEL_X, TICKET_QR_CAPTION_TOP_Y, {
+      width: qrPanelCaptionWidth,
+      align: 'center',
+      characterSpacing: 2.4,
+    });
+
+  document
+    .font('Helvetica')
+    .fontSize(8.5)
+    .fillColor(TICKET_MUTED_TEXT)
+    .text(`EVT-${bookingRecord.ref}`, TICKET_QR_PANEL_X, TICKET_QR_REFERENCE_TOP_Y, {
+      width: qrPanelCaptionWidth,
+      align: 'center',
+      characterSpacing: 1.8,
+    });
 }

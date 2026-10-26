@@ -134,6 +134,8 @@ export default function AdminDashboardPage() {
   const [bookingRows, setBookingRows] = useState([]);
   const [statusCounts, setStatusCounts] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [bookingSearchInputValue, setBookingSearchInputValue] = useState('');
+  const [appliedBookingSearchQuery, setAppliedBookingSearchQuery] = useState('');
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
   const [listError, setListError] = useState(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
@@ -149,13 +151,25 @@ export default function AdminDashboardPage() {
     setIsExportingBookings(true);
 
     try {
-      await adminDownloadBookingsCsv(adminToken, { statusFilter });
+      await adminDownloadBookingsCsv(adminToken, {
+        statusFilter,
+        searchQuery: appliedBookingSearchQuery,
+      });
     } catch (error) {
       setExportError(error.message || 'The booking export could not be downloaded.');
     } finally {
       setIsExportingBookings(false);
     }
   }
+
+  // Waiting for a pause in typing keeps the list from firing a request for
+  // every letter of a name or email address.
+  useEffect(() => {
+    const searchDebounceTimer = window.setTimeout(() => {
+      setAppliedBookingSearchQuery(bookingSearchInputValue.trim());
+    }, 350);
+    return () => window.clearTimeout(searchDebounceTimer);
+  }, [bookingSearchInputValue]);
 
   useEffect(() => {
     if (isSessionRestoring) {
@@ -167,7 +181,7 @@ export default function AdminDashboardPage() {
     }
     setIsLoadingBookings(true);
     setListError(null);
-    adminFetchBookingList({ statusFilter, adminToken })
+    adminFetchBookingList({ statusFilter, searchQuery: appliedBookingSearchQuery, adminToken })
       .then((responseBody) => {
         setBookingRows(responseBody.bookings || []);
         setStatusCounts(responseBody.counts || null);
@@ -176,7 +190,14 @@ export default function AdminDashboardPage() {
         setListError(error.message || 'Bookings could not be loaded.');
       })
       .finally(() => setIsLoadingBookings(false));
-  }, [isSessionRestoring, adminToken, statusFilter, listRefreshKey, router]);
+  }, [
+    isSessionRestoring,
+    adminToken,
+    statusFilter,
+    appliedBookingSearchQuery,
+    listRefreshKey,
+    router,
+  ]);
 
   if (isSessionRestoring) {
     return <AdminSessionLoading />;
@@ -252,6 +273,15 @@ export default function AdminDashboardPage() {
         )}
 
         <div className="admin-filter-row">
+          <label className="field">
+            <span>Search bookings</span>
+            <input
+              type="search"
+              value={bookingSearchInputValue}
+              onChange={(event) => setBookingSearchInputValue(event.target.value)}
+              placeholder="Reference, name, email, or phone"
+            />
+          </label>
           <label className="field">
             <span>Filter by status</span>
             <select

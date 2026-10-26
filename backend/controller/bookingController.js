@@ -12,10 +12,16 @@ import {
 
 import {
   performBookingReferenceLookup,
+  performBookingLookupBySearchValue,
+  AmbiguousBookingLookupError,
 } from '../services/bookingLookupService.js';
 
+import { InvalidBookingSearchValueError } from '../services/bookingSearchIdentifierService.js';
+
 import {
+  ambiguousBookingLookupResponse,
   bookingNotFoundResponse,
+  invalidBookingSearchValueResponse,
   missingRequiredFieldResponse,
   soldOutResponse,
   validationFailedResponse,
@@ -136,6 +142,35 @@ async function getBookingDetailsForReferenceLookup(req, res) {
   }
 }
 
+async function getBookingDetailsForSearchLookup(req, res) {
+  const bookingSearchValue = typeof req.query?.q === 'string' ? req.query.q : '';
+
+  if (!bookingSearchValue.trim()) {
+    return res.status(400).json(missingRequiredFieldResponse('Search value'));
+  }
+
+  try {
+    const lookupResult = await performBookingLookupBySearchValue(bookingSearchValue, {
+      allowAttendeeNameSearch: false,
+    });
+    if (!lookupResult) {
+      return res.status(404).json(bookingNotFoundResponse());
+    }
+    return res.status(200).json(lookupResult);
+  } catch (error) {
+    if (error instanceof InvalidBookingSearchValueError) {
+      return res.status(400).json(invalidBookingSearchValueResponse(error.message));
+    }
+    if (error instanceof AmbiguousBookingLookupError) {
+      return res
+        .status(409)
+        .json(ambiguousBookingLookupResponse(error.matchingBookingCount));
+    }
+    console.error('Error performing booking search lookup', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
 async function reactivateBookingHold(req, res) {
   const bookingId = parseInt(req.params.id, 10);
   const providedBookingReferenceCode = String(req.body?.booking_ref || '')
@@ -183,5 +218,6 @@ export default {
   getBookingRecordById,
   getBookingRecordByReferenceCode,
   getBookingDetailsForReferenceLookup,
+  getBookingDetailsForSearchLookup,
   reactivateBookingHold,
 };

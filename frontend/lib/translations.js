@@ -205,9 +205,9 @@ export const translations = {
     lookup: {
       title: 'Look up your booking',
       description:
-        'Enter your booking reference to view your booking status and download your ticket.',
-      referenceLabel: 'Booking reference',
-      referencePlaceholder: 'e.g. ABC123',
+        'Enter your booking reference, the email address you booked with, or your phone number to view your booking status and download your ticket.',
+      searchLabel: 'Booking reference, email, or phone number',
+      searchPlaceholder: 'e.g. ABC123, attendee@example.com, +255712345678',
       search: 'Search',
       bookingStatusLabel: 'Booking status',
       paymentStatusLabel: 'Payment status',
@@ -232,8 +232,11 @@ export const translations = {
         expired: 'Expired',
       },
       errors: {
-        invalidReference: 'Enter a valid booking reference.',
-        notFound: 'No booking matches that reference.',
+        invalidSearchValue: 'Enter a booking reference, email address, or phone number.',
+        notFound:
+          'No booking matches that booking reference, email address, or phone number.',
+        multipleMatches:
+          'More than one booking matches that search. Add more detail or use your booking reference.',
         downloadFailed: 'The ticket could not be downloaded. Please try again.',
         paymentMethodRequired: 'Choose a payment method to continue.',
         soldOut: 'The event is sold out, so this booking cannot be reactivated.',
@@ -541,9 +544,9 @@ export const translations = {
     lookup: {
       title: 'Tafuta booking yako',
       description:
-        'Weka namba ya kumbukumbu ya booking yako kuona hali yake na kupakua tikiti yako.',
-      referenceLabel: 'Namba ya kumbukumbu',
-      referencePlaceholder: 'mf. ABC123',
+        'Weka namba ya kumbukumbu ya booking, barua pepe uliyotumia kujiandikisha, au namba ya simu yako ili kuona hali ya booking na kupakua tikiti yako.',
+      searchLabel: 'Namba ya kumbukumbu, barua pepe, au namba ya simu',
+      searchPlaceholder: 'mf. ABC123, mshiriki@example.com, +255712345678',
       search: 'Tafuta',
       bookingStatusLabel: 'Hali ya booking',
       paymentStatusLabel: 'Hali ya malipo',
@@ -569,8 +572,11 @@ export const translations = {
         expired: 'Imeisha',
       },
       errors: {
-        invalidReference: 'Weka namba sahihi ya kumbukumbu ya booking.',
-        notFound: 'Hakuna booking inayolingana na namba hiyo.',
+        invalidSearchValue: 'Weka namba ya kumbukumbu, barua pepe, au namba ya simu.',
+        notFound:
+          'Hakuna booking inayolingana na namba ya kumbukumbu, barua pepe, au namba ya simu hiyo.',
+        multipleMatches:
+          'Booking zaidi ya moja zinalingana na utafutaji huo. Ongeza maelezo zaidi au tumia namba ya kumbukumbu.',
         downloadFailed: 'Tikiti haikuweza kupakuliwa. Tafadhali jaribu tena.',
         paymentMethodRequired: 'Chagua njia ya malipo ili kuendelea.',
         soldOut: 'Tukio limejaa, hivyo booking hii haiwezi kufufuliwa.',

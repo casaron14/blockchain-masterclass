@@ -3,6 +3,7 @@ import bookingController from "../controller/bookingController.js";
 import { verifyTurnstileChallengeToken } from "../middleware/turnstileVerifier.js";
 import {
   createStrictBookingRateLimiter,
+  createAttendeeBookingLookupRateLimiter,
   createGeneralRequestRateLimiter,
 } from "../middleware/rateLimiter.js";
 import { validatePositiveIntegerRouteParam } from "../middleware/requestValidators.js";
@@ -27,6 +28,12 @@ router.post(
   createStrictBookingRateLimiter(),
   validatePositiveIntegerRouteParam("id"),
   bookingController.reactivateBookingHold
+);
+
+router.get(
+  "/lookup",
+  createAttendeeBookingLookupRateLimiter(),
+  bookingController.getBookingDetailsForSearchLookup
 );
 
 router.get(

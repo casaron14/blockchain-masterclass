@@ -129,9 +129,35 @@ test('generateTicketPdfBuffer omits the payment block when no payment summary is
   const pdfBuffer = await generateTicketPdfBuffer(confirmedBooking);
 
   const drawnTicketText = readDrawnTextFromPdf(pdfBuffer);
-  assert.ok(drawnTicketText.includes('ELECTRONICTICKET'));
+  assert.ok(drawnTicketText.includes('BLOCKCHAINMASTERCLASS'));
+  assert.ok(drawnTicketText.includes('07/10/2026'));
+  assert.ok(drawnTicketText.includes('JengamustakabalikwaBlockchain'));
+  assert.ok(drawnTicketText.includes('VillageHallMafaoHouse'));
+  assert.ok(drawnTicketText.includes('Arusha,Tanzania'));
+  assert.ok(drawnTicketText.includes('inkryptus.com'));
+  assert.ok(drawnTicketText.includes('+255621745217'));
   assert.ok(drawnTicketText.includes(confirmedBooking.ref.replace('-', '')));
   assert.ok(!drawnTicketText.includes('PAYMENT'));
+});
+
+test('generateTicketPdfBuffer prints the attendee name and ticket reference', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+
+  const pdfBuffer = await generateTicketPdfBuffer(confirmedBooking);
+  const drawnTicketText = readDrawnTextFromPdf(pdfBuffer);
+
+  assert.ok(drawnTicketText.includes('ATTENDEE'));
+  assert.ok(drawnTicketText.includes(confirmedBooking.full_name.replace(/\s+/g, '')));
+  assert.ok(drawnTicketText.includes(`TICKETIDEVT-${confirmedBooking.ref}`));
+});
+
+test('generateTicketPdfBuffer embeds the Inkryptus logo and the QR code images', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+
+  const pdfBuffer = await generateTicketPdfBuffer(confirmedBooking);
+  const embeddedImageCount = (pdfBuffer.toString('latin1').match(/\/Subtype\s*\/Image/g) ?? []).length;
+
+  assert.ok(embeddedImageCount >= 2, 'the ticket should embed both the wordmark and the QR code');
 });
 
 test('generateTicketPdfBuffer renders a payment block when a payment summary is given', async () => {
@@ -150,11 +176,12 @@ test('generateTicketPdfBuffer renders a payment block when a payment summary is 
   assert.ok(pdfBuffer.length > 2000);
 
   const drawnTicketText = readDrawnTextFromPdf(pdfBuffer);
-  assert.ok(drawnTicketText.includes('ELECTRONICTICKET'));
   assert.ok(drawnTicketText.includes('PAYMENT'));
   assert.ok(drawnTicketText.includes('3.80USDT'));
-  assert.ok(drawnTicketText.includes('BlockNumber:101'));
-  assert.ok(drawnTicketText.includes(completingTransactionHash));
+  assert.ok(drawnTicketText.includes('BLOCK101'));
+  assert.ok(drawnTicketText.includes(`${completingTransactionHash.slice(0, 12)}...`));
+  assert.ok(drawnTicketText.includes(completingTransactionHash.slice(-6)));
+  assert.ok(!drawnTicketText.includes(completingTransactionHash));
 });
 
 test('downloadTicketPdfEndpoint returns a 404 for an unknown booking reference', async () => {

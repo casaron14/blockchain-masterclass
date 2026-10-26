@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { fetchBookingRecordById } from './bookingService.js';
 
 import { createConfiguredEmailTransport } from './emailTransportService.js';
+import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
 
 import {
   EVENT_TITLE,
@@ -42,22 +43,8 @@ export function getEventDetails() {
   };
 }
 
-export function buildTicketQrPayload(bookingRecord) {
-  const eventDetails = getEventDetails();
-  return {
-    ticketId: `EVT-${bookingRecord.ref}`,
-    bookingReference: bookingRecord.ref,
-    attendeeName: bookingRecord.full_name,
-    bookingId: bookingRecord.id,
-    eventTitle: eventDetails.eventTitle,
-    eventDate: eventDetails.eventDate,
-    eventLocation: eventDetails.eventLocation,
-  };
-}
-
 export async function renderTicketQrDataUrl(bookingRecord) {
-  const qrPayload = buildTicketQrPayload(bookingRecord);
-  return QRCode.toDataURL(JSON.stringify(qrPayload));
+  return QRCode.toDataURL(buildTicketQrCodeUrl(bookingRecord));
 }
 
 export function buildTicketEmailHtml(bookingRecord, qrDataUrl) {
@@ -145,12 +132,12 @@ async function fetchDeliveryRecordForBooking(bookingId) {
   return result.rows[0] ?? null;
 }
 
-async function insertDeliveryRecord(bookingId, qrPayload) {
+async function insertDeliveryRecord(bookingId, ticketQrCodeUrl) {
   const result = await pool.query(
     `INSERT INTO ticket_deliveries (booking_id, qr_payload)
      VALUES ($1, $2)
      RETURNING *`,
-    [bookingId, JSON.stringify(qrPayload)]
+    [bookingId, ticketQrCodeUrl]
   );
   return result.rows[0];
 }
@@ -258,11 +245,11 @@ export async function deliverTicketForConfirmedBooking(
     };
   }
 
-  const qrPayload = buildTicketQrPayload(bookingRecord);
+  const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
 
   const existingDeliveryRecord = await fetchDeliveryRecordForBooking(bookingId);
   const deliveryRecord =
-    existingDeliveryRecord ?? (await insertDeliveryRecord(bookingId, qrPayload));
+    existingDeliveryRecord ?? (await insertDeliveryRecord(bookingId, ticketQrCodeUrl));
 
   const receiptRecord = deliveryOptions.receiptRecord ?? null;
   const deliverReceiptEmail = deliveryOptions.deliverReceiptEmail ?? null;

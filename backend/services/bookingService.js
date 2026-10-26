@@ -149,6 +149,43 @@ export async function fetchBookingRecordByReferenceCode(bookingReferenceCode) {
   return result.rows[0] ?? null;
 }
 
+// Attendees can book more than once with the same contact details, so the
+// contact searches return every candidate and let the caller decide whether a
+// single booking can be resolved safely.
+export async function fetchBookingRecordsByEmailAddress(attendeeEmailAddress) {
+  const result = await pool.query(
+    `SELECT * FROM bookings
+      WHERE lower(email) = lower($1)
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [attendeeEmailAddress]
+  );
+  return result.rows;
+}
+
+export async function fetchBookingRecordsByPhoneNumber(attendeePhoneNumberDigits) {
+  const result = await pool.query(
+    `SELECT * FROM bookings
+      WHERE right(regexp_replace(phone_number, '[^0-9]', '', 'g'), 9) = $1
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [attendeePhoneNumberDigits]
+  );
+  return result.rows;
+}
+
+export async function fetchBookingRecordsByAttendeeNameFragment(attendeeNameFragment) {
+  const escapedNameFragment = attendeeNameFragment.replace(/[\\%_]/g, '\\$&');
+  const result = await pool.query(
+    `SELECT * FROM bookings
+      WHERE full_name ILIKE '%' || $1 || '%' ESCAPE '\\'
+      ORDER BY created_at DESC
+      LIMIT 20`,
+    [escapedNameFragment]
+  );
+  return result.rows;
+}
+
 export async function updateBookingStatus(bookingId, newBookingStatus) {
   const result = await pool.query(
     'UPDATE bookings SET status = $1 WHERE id = $2 RETURNING *',

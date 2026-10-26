@@ -36,3 +36,10 @@ export function createWebhookInboundRateLimiter() {
 export function createGeneralRequestRateLimiter() {
   return buildRateLimiterInstance({ requestLimit: 200 });
 }
+
+// The booking lookup accepts an email address, phone number, or partial name,
+// so it gets a tighter ceiling than ordinary reads to blunt attendee
+// enumeration while still allowing a few honest corrections.
+export function createAttendeeBookingLookupRateLimiter() {
+  return buildRateLimiterInstance({ requestLimit: 20 });
+}

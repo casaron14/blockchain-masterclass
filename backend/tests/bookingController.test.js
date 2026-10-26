@@ -119,3 +119,91 @@ test('reactivateBookingHold refuses an id-only request without the booking refer
   assert.equal(response.capturedResponse.statusCode, 400);
   assert.match(response.capturedResponse.body.message, /booking_ref/);
 });
+
+test('getBookingDetailsForSearchLookup rejects a missing search value with 400', async () => {
+  const response = createMockResponse();
+
+  await bookingController.getBookingDetailsForSearchLookup({ query: {} }, response);
+
+  assert.equal(response.capturedResponse.statusCode, 400);
+  assert.match(response.capturedResponse.body.message, /Search value/);
+});
+
+test('getBookingDetailsForSearchLookup rejects a one-character search value with 400', async () => {
+  const response = createMockResponse();
+
+  await bookingController.getBookingDetailsForSearchLookup({ query: { q: 'a' } }, response);
+
+  assert.equal(response.capturedResponse.statusCode, 400);
+  assert.equal(response.capturedResponse.body.error, 'INVALID_BOOKING_SEARCH_VALUE');
+});
+
+test('getBookingDetailsForSearchLookup returns 404 for an unknown email address', async () => {
+  const response = createMockResponse();
+
+  await bookingController.getBookingDetailsForSearchLookup(
+    { query: { q: 'nobody@example.com' } },
+    response
+  );
+
+  assert.equal(response.capturedResponse.statusCode, 404);
+  assert.equal(response.capturedResponse.body.message, 'Booking not found');
+});
+
+test('getBookingDetailsForSearchLookup returns 200 for an email address that matches one booking', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Controller Search User',
+    email: 'controller.search@example.com',
+    phone_number: '+255712345715',
+  });
+  const response = createMockResponse();
+
+  await bookingController.getBookingDetailsForSearchLookup(
+    { query: { q: 'controller.search@example.com' } },
+    response
+  );
+
+  assert.equal(response.capturedResponse.statusCode, 200);
+  assert.equal(response.capturedResponse.body.booking.id, bookingRecord.id);
+  assert.equal(response.capturedResponse.body.actions.canPayNow, true);
+});
+
+test('getBookingDetailsForSearchLookup returns 409 when the search matches several bookings', async () => {
+  await createBookingRecordWithActiveSeatHold({
+    full_name: 'Shared Lookup One',
+    email: 'shared.lookup@example.com',
+    phone_number: '+255712345716',
+  });
+  await createBookingRecordWithActiveSeatHold({
+    full_name: 'Shared Lookup Two',
+    email: 'shared.lookup@example.com',
+    phone_number: '+255712345717',
+  });
+  const response = createMockResponse();
+
+  await bookingController.getBookingDetailsForSearchLookup(
+    { query: { q: 'shared.lookup@example.com' } },
+    response
+  );
+
+  assert.equal(response.capturedResponse.statusCode, 409);
+  assert.equal(response.capturedResponse.body.error, 'AMBIGUOUS_BOOKING_LOOKUP');
+  assert.equal(response.capturedResponse.body.matchingBookingCount, 2);
+});
+
+test('getBookingDetailsForSearchLookup rejects an attendee name with 400', async () => {
+  await createBookingRecordWithActiveSeatHold({
+    full_name: 'Named Search User',
+    email: 'named.search@example.com',
+    phone_number: '+255712345718',
+  });
+  const response = createMockResponse();
+
+  await bookingController.getBookingDetailsForSearchLookup(
+    { query: { q: 'Named Search User' } },
+    response
+  );
+
+  assert.equal(response.capturedResponse.statusCode, 400);
+  assert.equal(response.capturedResponse.body.error, 'INVALID_BOOKING_SEARCH_VALUE');
+});

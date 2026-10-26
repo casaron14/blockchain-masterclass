@@ -9,6 +9,7 @@ import {
   confirmAdminBookingRecord,
   fetchAdminBookingList,
   fetchAdminBookingDetail,
+  buildAdminBookingListWhereClause,
   BookingNotConfirmableError,
   InvalidAdminBookingStatusError,
 } from '../services/adminBookingService.js';
@@ -286,4 +287,94 @@ test('fetchAdminBookingDetail returns order deposit details for crypto bookings'
 
   assert.equal(bookingDetail.booking.id, createdBooking.id);
   assert.equal(bookingDetail.payment.payment_method, 'usdt_bep20');
+});
+test('buildAdminBookingListWhereClause escapes wildcard characters in the search text', () => {
+  const { whereClause, queryParameters } = buildAdminBookingListWhereClause({
+    searchQuery: '50%_off',
+  });
+
+  assert.match(whereClause, /ILIKE/);
+  assert.deepEqual(queryParameters, ['%50\\%\\_off%']);
+});
+
+test('fetchAdminBookingList filters bookings by attendee name, email, phone, and reference', async () => {
+  const targetBooking = await createAdminBookingRecord({
+    full_name: 'Search Target',
+    email: 'target@example.com',
+    phone_number: '+255712345710',
+  });
+  const otherBooking = await createAdminBookingRecord({
+    full_name: 'Other Person',
+    email: 'other@example.com',
+    phone_number: '+255712345711',
+  });
+
+  const nameMatches = await fetchAdminBookingList({ searchQuery: 'search tar' });
+  const emailMatches = await fetchAdminBookingList({ searchQuery: 'target@example.com' });
+  const phoneMatches = await fetchAdminBookingList({ searchQuery: '0712345710' });
+  const referenceMatches = await fetchAdminBookingList({ searchQuery: targetBooking.ref });
+
+  assert.deepEqual(
+    nameMatches.map((row) => row.id),
+    [targetBooking.id]
+  );
+  assert.deepEqual(
+    emailMatches.map((row) => row.id),
+    [targetBooking.id]
+  );
+  assert.deepEqual(
+    phoneMatches.map((row) => row.id),
+    [targetBooking.id]
+  );
+  assert.deepEqual(
+    referenceMatches.map((row) => row.id),
+    [targetBooking.id]
+  );
+  assert.equal(
+    nameMatches.some((row) => row.id === otherBooking.id),
+    false
+  );
+});
+
+test('fetchAdminBookingList combines the status filter with the search query', async () => {
+  const pendingBooking = await createAdminBookingRecord({
+    full_name: 'Combined Pending',
+    email: 'combined.pending@example.com',
+    phone_number: '+255712345712',
+  });
+  const confirmedBooking = await createAdminBookingRecord({
+    full_name: 'Combined Confirmed',
+    email: 'combined.confirmed@example.com',
+    phone_number: '+255712345713',
+  });
+  await pool.query('UPDATE bookings SET status = $1 WHERE id = $2', [
+    'confirmed',
+    confirmedBooking.id,
+  ]);
+
+  const combinedMatches = await fetchAdminBookingList({
+    statusFilter: 'confirmed',
+    searchQuery: 'combined',
+  });
+
+  assert.deepEqual(
+    combinedMatches.map((row) => row.id),
+    [confirmedBooking.id]
+  );
+  assert.equal(
+    combinedMatches.some((row) => row.id === pendingBooking.id),
+    false
+  );
+});
+
+test('fetchAdminBookingList treats a typed percent sign as literal text', async () => {
+  await createAdminBookingRecord({
+    full_name: 'Literal Percent User',
+    email: 'literal.percent@example.com',
+    phone_number: '+255712345714',
+  });
+
+  const percentMatches = await fetchAdminBookingList({ searchQuery: '%' });
+
+  assert.deepEqual(percentMatches, []);
 });

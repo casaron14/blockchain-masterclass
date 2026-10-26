@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   createPaymentRecord,
-  lookupBookingByReferenceCode,
+  lookupBookingBySearchValue,
   reactivateExpiredBooking,
   triggerTicketPdfDownload,
 } from '@/lib/api';
@@ -17,15 +17,16 @@ import { useEvent } from '@/context/EventContext';
 import LoadingButton from '@/components/LoadingButton';
 import { buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
 
-const REFERENCE_PATTERN = /^[A-Z0-9]{4,12}$/;
+const MINIMUM_BOOKING_SEARCH_VALUE_LENGTH = 2;
+const MAXIMUM_BOOKING_SEARCH_VALUE_LENGTH = 120;
 
-export default function BookingReferenceLookup() {
+export default function BookingSearchLookup() {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
   const { slug, cryptoCurrency, cryptoNetwork, paymentMethods } = eventConfig;
   const router = useRouter();
 
-  const [referenceCode, setReferenceCode] = useState('');
+  const [bookingSearchValue, setBookingSearchValue] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [lookupError, setLookupError] = useState(null);
   const [lookupResult, setLookupResult] = useState(null);
@@ -35,28 +36,40 @@ export default function BookingReferenceLookup() {
   const [actionMessage, setActionMessage] = useState(null);
   const [actionTone, setActionTone] = useState('info');
 
-  async function handleLookupSubmit(event) {
+  async function handleBookingLookupSearchSubmit(event) {
     event.preventDefault();
     setLookupError(null);
     setLookupResult(null);
     setActionMessage(null);
 
-    const normalizedReference = referenceCode.trim().toUpperCase();
-    if (!REFERENCE_PATTERN.test(normalizedReference)) {
-      setLookupError(t('lookup.errors.invalidReference'));
+    const trimmedBookingSearchValue = bookingSearchValue.trim();
+    if (
+      trimmedBookingSearchValue.length < MINIMUM_BOOKING_SEARCH_VALUE_LENGTH ||
+      trimmedBookingSearchValue.length > MAXIMUM_BOOKING_SEARCH_VALUE_LENGTH
+    ) {
+      setLookupError(t('lookup.errors.invalidSearchValue'));
       return;
     }
 
     setIsSearching(true);
     try {
-      const lookupResultPayload = await lookupBookingByReferenceCode(normalizedReference);
+      const lookupResultPayload = await lookupBookingBySearchValue(trimmedBookingSearchValue);
       if (!lookupResultPayload) {
         setLookupError(t('lookup.errors.notFound'));
         return;
       }
       setLookupResult(lookupResultPayload);
     } catch (error) {
-      setLookupError(error.message || t('lookup.errors.notFound'));
+      const lookupErrorCode = error.responseBody?.error;
+      if (lookupErrorCode === 'AMBIGUOUS_BOOKING_LOOKUP') {
+        setLookupError(t('lookup.errors.multipleMatches'));
+      } else if (lookupErrorCode === 'INVALID_BOOKING_SEARCH_VALUE') {
+        setLookupError(error.message || t('lookup.errors.invalidSearchValue'));
+      } else if (error.status === 404) {
+        setLookupError(t('lookup.errors.notFound'));
+      } else {
+        setLookupError(error.message || t('lookup.errors.notFound'));
+      }
     } finally {
       setIsSearching(false);
     }
@@ -252,19 +265,19 @@ export default function BookingReferenceLookup() {
       <h2 className="card__title">{t('lookup.title')}</h2>
       <p className="muted">{t('lookup.description')}</p>
 
-      <form className="form" onSubmit={handleLookupSubmit} noValidate>
+      <form className="form" onSubmit={handleBookingLookupSearchSubmit} noValidate>
         <label className="field">
-          <span>{t('lookup.referenceLabel')}</span>
+          <span>{t('lookup.searchLabel')}</span>
           <input
             type="text"
-            value={referenceCode}
+            value={bookingSearchValue}
             onChange={(event) => {
-              setReferenceCode(event.target.value);
+              setBookingSearchValue(event.target.value);
               setLookupError(null);
             }}
-            placeholder={t('lookup.referencePlaceholder')}
+            placeholder={t('lookup.searchPlaceholder')}
             autoComplete="off"
-            autoCapitalize="characters"
+            autoCapitalize="none"
           />
           {lookupError && <span className="field-error">{lookupError}</span>}
         </label>

@@ -64,8 +64,8 @@ export async function fetchBookingRecordByReferenceCode(referenceCode) {
   return responseBody.booking;
 }
 
-export async function lookupBookingByReferenceCode(referenceCode) {
-  return request(`/api/bookings/lookup/${encodeURIComponent(referenceCode)}`);
+export async function lookupBookingBySearchValue(bookingSearchValue) {
+  return request(`/api/bookings/lookup?q=${encodeURIComponent(bookingSearchValue)}`);
 }
 
 export async function reactivateExpiredBooking(bookingId, bookingReferenceCode) {
@@ -214,8 +214,16 @@ function buildAdminAuthorizationHeaders(adminToken) {
   return { Authorization: `Bearer ${adminToken}` };
 }
 
-export function adminFetchBookingList({ statusFilter, adminToken }) {
-  const query = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : '';
+export function adminFetchBookingList({ statusFilter, searchQuery, adminToken }) {
+  const queryParameters = new URLSearchParams();
+  if (statusFilter) {
+    queryParameters.set('status', statusFilter);
+  }
+  if (searchQuery) {
+    queryParameters.set('q', searchQuery);
+  }
+  const serializedQueryParameters = queryParameters.toString();
+  const query = serializedQueryParameters ? `?${serializedQueryParameters}` : '';
   return request(`/api/admin/bookings${query}`, {
     headers: buildAdminAuthorizationHeaders(adminToken),
   });
@@ -376,8 +384,16 @@ async function downloadAuthorizedCsvFile(downloadPath, adminToken, fallbackFileN
   return downloadFileName;
 }
 
-export function adminDownloadBookingsCsv(adminToken, { statusFilter } = {}) {
-  const query = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : '';
+export function adminDownloadBookingsCsv(adminToken, { statusFilter, searchQuery } = {}) {
+  const queryParameters = new URLSearchParams();
+  if (statusFilter) {
+    queryParameters.set('status', statusFilter);
+  }
+  if (searchQuery) {
+    queryParameters.set('q', searchQuery);
+  }
+  const serializedQueryParameters = queryParameters.toString();
+  const query = serializedQueryParameters ? `?${serializedQueryParameters}` : '';
   return downloadAuthorizedCsvFile(
     `/api/admin/bookings/export.csv${query}`,
     adminToken,

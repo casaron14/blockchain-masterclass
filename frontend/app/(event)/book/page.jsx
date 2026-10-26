@@ -1,7 +1,7 @@
 'use client';
 
 import BookingForm from '@/components/BookingForm';
-import BookingReferenceLookup from '@/components/BookingReferenceLookup';
+import BookingSearchLookup from '@/components/BookingSearchLookup';
 import EventSummary from '@/components/EventSummary';
 import SeatAvailabilityBanner from '@/components/SeatAvailabilityBanner';
 import { useLanguage } from '@/context/LanguageContext';
@@ -37,7 +37,7 @@ export default function BookingPage() {
               <BookingForm />
             </section>
 
-            <BookingReferenceLookup />
+            <BookingSearchLookup />
           </div>
         </div>
       </div>
