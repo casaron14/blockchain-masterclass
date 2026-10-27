@@ -85,6 +85,51 @@ test('syncAdminBookingsToGoogleSheetEndpoint answers 503 when the Apps Script we
   );
 });
 
+test('syncAdminBookingsToGoogleSheetEndpoint explains when the deployed Apps Script is too old', async () => {
+  await createAdminBookingRecord({
+    full_name: 'Old Deployment Attendee',
+    email: 'old-deployment@example.com',
+    phone_number: '+255700000098',
+    utm_source: null,
+  });
+
+  await withWebhookEnvironment(
+    {
+      APPS_SCRIPT_TICKET_WEBHOOK_URL: TEST_WEBHOOK_URL,
+      APPS_SCRIPT_SHARED_SECRET: TEST_SHARED_SECRET,
+    },
+    async () => {
+      const previousFetchImplementation = globalThis.fetch;
+
+      globalThis.fetch = async () => ({
+        status: 200,
+        text: async () =>
+          JSON.stringify({ ok: false, error: 'delivery_metadata_missing' }),
+      });
+
+      try {
+        const mockResponse = createMockResponse();
+
+        await adminController.syncAdminBookingsToGoogleSheetEndpoint(
+          {},
+          mockResponse
+        );
+
+        assert.equal(mockResponse.capturedResponse.statusCode, 502);
+        assert.deepEqual(mockResponse.capturedResponse.body.failureReasons, [
+          'delivery_metadata_missing',
+        ]);
+        assert.match(
+          mockResponse.capturedResponse.body.message,
+          /deploy a new version/i
+        );
+      } finally {
+        globalThis.fetch = previousFetchImplementation;
+      }
+    }
+  );
+});
+
 test('syncAdminBookingsToGoogleSheetEndpoint sends every booking to the Apps Script web app', async () => {
   const createdBooking = await createAdminBookingRecord({
     full_name: 'Sheet Sync Attendee',

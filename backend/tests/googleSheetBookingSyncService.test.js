@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildBookingMirrorRecordForSheet,
+  buildGoogleSheetBookingSyncFailureMessage,
   buildGoogleSheetBookingSyncMessage,
   GoogleSheetBookingSyncError,
   resolveGoogleSheetSyncBatchSize,
@@ -283,6 +284,40 @@ test('buildGoogleSheetBookingSyncMessage describes an empty, complete, and parti
       syncedBookingCount: 2,
       failedBookingCount: 1,
     }),
-    'Synced 2 of 3 bookings. 1 failed; press Sync again.'
+    'Synced 2 of 3 bookings. 1 failed. Press Sync again.'
+  );
+  assert.equal(
+    buildGoogleSheetBookingSyncMessage({
+      totalBookingCount: 3,
+      syncedBookingCount: 2,
+      failedBookingCount: 1,
+      failureReasons: ['unauthorized'],
+    }),
+    'Synced 2 of 3 bookings. 1 failed. Reason: unauthorized. Press Sync again.'
+  );
+});
+
+test('buildGoogleSheetBookingSyncFailureMessage explains the deployment and secret failures', () => {
+  assert.match(
+    buildGoogleSheetBookingSyncFailureMessage(['delivery_metadata_missing']),
+    /does not understand the booking sync request.*deploy a new version/i
+  );
+  assert.match(
+    buildGoogleSheetBookingSyncFailureMessage(['unauthorized']),
+    /APPS_SCRIPT_SHARED_SECRET.*SHARED_SECRET/i
+  );
+  assert.match(
+    buildGoogleSheetBookingSyncFailureMessage([
+      'APPS_SCRIPT_RESPONSE_NOT_JSON',
+    ]),
+    /\/exec URL/
+  );
+  assert.match(
+    buildGoogleSheetBookingSyncFailureMessage(['something_unknown']),
+    /Check the Apps Script deployment/
+  );
+  assert.match(
+    buildGoogleSheetBookingSyncFailureMessage(['APPS_SCRIPT_HTTP_404']),
+    /HTTP 404.*deployment URL/
   );
 });

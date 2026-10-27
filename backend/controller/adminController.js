@@ -19,6 +19,7 @@ import {
 } from '../services/adminCsvExportService.js';
 
 import {
+  buildGoogleSheetBookingSyncFailureMessage,
   buildGoogleSheetBookingSyncMessage,
   GoogleSheetBookingSyncError,
   syncAllBookingsToGoogleSheet,
@@ -204,10 +205,15 @@ async function syncAdminBookingsToGoogleSheetEndpoint(req, res) {
     }
 
     if (error instanceof GoogleSheetBookingSyncError) {
+      console.error('google_sheet_booking_sync_failed', {
+        failureReasons: error.syncSummary.failureReasons,
+      });
+
       return res.status(502).json({
         ...error.syncSummary,
-        message:
-          'Google Sheets sync failed for every booking. Check the Apps Script deployment and try again.',
+        message: buildGoogleSheetBookingSyncFailureMessage(
+          error.syncSummary.failureReasons
+        ),
         error: error.code,
       });
     }

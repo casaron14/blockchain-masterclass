@@ -140,13 +140,19 @@ export async function syncAllBookingsToGoogleSheet(options = {}) {
       syncSummary.createdBookingCount += Number(responseBody.createdCount) || 0;
       syncSummary.updatedBookingCount += Number(responseBody.updatedCount) || 0;
     } catch (error) {
-      syncSummary.failedBatchCount += 1;
-      syncSummary.failedBookingCount += bookingBatch.length;
-      syncSummary.failureReasons.push(
+      const failureReasonCode =
         error instanceof AppsScriptWebhookError
           ? error.errorCode
-          : 'GOOGLE_SHEET_BATCH_FAILED'
-      );
+          : 'GOOGLE_SHEET_BATCH_FAILED';
+
+      console.error('google_sheet_booking_sync_batch_failed', {
+        bookingCount: bookingBatch.length,
+        failureReasonCode,
+      });
+
+      syncSummary.failedBatchCount += 1;
+      syncSummary.failedBookingCount += bookingBatch.length;
+      syncSummary.failureReasons.push(failureReasonCode);
     }
   }
 
@@ -171,16 +177,74 @@ export function buildGoogleSheetBookingSyncMessage(syncSummary) {
   }
 
   if (syncSummary.failedBookingCount > 0) {
+    const failureReasonSuffix =
+      Array.isArray(syncSummary.failureReasons) &&
+      syncSummary.failureReasons.length > 0
+        ? ` Reason: ${syncSummary.failureReasons.join(', ')}.`
+        : '';
+
     return (
       `Synced ${syncSummary.syncedBookingCount} of ` +
       `${syncSummary.totalBookingCount} bookings. ` +
-      `${syncSummary.failedBookingCount} failed; press Sync again.`
+      `${syncSummary.failedBookingCount} failed.` +
+      failureReasonSuffix +
+      ' Press Sync again.'
     );
   }
 
   return (
     `Synced ${syncSummary.syncedBookingCount} booking` +
     `${syncSummary.syncedBookingCount === 1 ? '' : 's'} to Google Sheets.`
+  );
+}
+
+const GOOGLE_SHEET_SYNC_FAILURE_MESSAGE_BY_REASON = {
+  delivery_metadata_missing:
+    'The Apps Script deployment does not understand the booking sync request. Paste the updated apps-script/Code.gs into the Apps Script editor and deploy a new version.',
+  invalid_request:
+    'The Apps Script deployment rejected the booking sync request. Paste the updated apps-script/Code.gs and deploy a new version.',
+  unauthorized:
+    'Apps Script rejected the shared secret. Make APPS_SCRIPT_SHARED_SECRET match the SHARED_SECRET script property exactly.',
+  apps_script_secret_not_configured:
+    'Add the SHARED_SECRET script property in Apps Script → Project Settings → Script Properties.',
+  spreadsheet_not_available:
+    'The Apps Script is not bound to the Google Sheet. Create it from Extensions → Apps Script inside the Sheet.',
+  APPS_SCRIPT_RESPONSE_NOT_JSON:
+    'Apps Script did not return JSON. Redeploy with Who has access: Anyone and use the /exec URL, not the /dev URL.',
+  APPS_SCRIPT_REQUEST_TIMED_OUT:
+    'Apps Script did not answer in time. Retry; if it keeps happening, raise APPS_SCRIPT_REQUEST_TIMEOUT_MS.',
+  APPS_SCRIPT_REQUEST_FAILED:
+    'The server could not reach Apps Script. Check APPS_SCRIPT_TICKET_WEBHOOK_URL and the deployment status.',
+  script_busy:
+    'Another Apps Script request is running. Wait a few seconds and press Sync again.',
+  booking_batch_too_large:
+    'The sync batch is too large. Set GOOGLE_SHEET_SYNC_BATCH_SIZE to 500 or less.',
+  booking_reference_missing:
+    'A booking has no reference code. Check the booking record in the database.',
+  internal_error:
+    'Apps Script failed internally. Open Extensions → Apps Script → Executions to see the exact error.',
+};
+
+export function buildGoogleSheetBookingSyncFailureMessage(
+  failureReasonCodes = []
+) {
+  const primaryFailureReasonCode = failureReasonCodes[0] || '';
+
+  if (primaryFailureReasonCode.startsWith('APPS_SCRIPT_HTTP_')) {
+    const httpStatusCode = primaryFailureReasonCode.replace(
+      'APPS_SCRIPT_HTTP_',
+      ''
+    );
+
+    return (
+      `Google returned HTTP ${httpStatusCode} when the server called Apps Script. ` +
+      'Check the deployment URL and access setting, then retry.'
+    );
+  }
+
+  return (
+    GOOGLE_SHEET_SYNC_FAILURE_MESSAGE_BY_REASON[primaryFailureReasonCode] ||
+    'Google Sheets sync failed. Check the Apps Script deployment and try again.'
   );
 }
 

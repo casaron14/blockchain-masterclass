@@ -189,11 +189,20 @@ export default function AdminDashboardPage() {
           `Synced ${syncResponse.syncedBookingCount ?? 0} booking(s).`,
       });
     } catch (error) {
+      const failureReasonCodes = Array.isArray(error.responseBody?.failureReasons)
+        ? error.responseBody.failureReasons
+        : [];
+      const failureReasonSuffix =
+        failureReasonCodes.length > 0
+          ? ` (${failureReasonCodes.join(', ')})`
+          : '';
+
       setGoogleSheetSyncFeedback({
         tone: 'error',
         message:
-          error.message ||
-          'The bookings could not be synced to Google Sheets.',
+          (error.message ||
+            'The bookings could not be synced to Google Sheets.') +
+          failureReasonSuffix,
       });
     } finally {
       setIsSyncingBookingsToGoogleSheet(false);

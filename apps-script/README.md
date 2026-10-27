@@ -190,7 +190,7 @@ did not; pressing the button again retries every row.
 | `delivery_in_progress` | A previous execution reserved this delivery key and did not finish | Wait up to 15 minutes; the backend retry then sends normally |
 | `script_busy` | Another delivery held the lock for 30 seconds | Retry; the backend records a retryable failure |
 | `spreadsheet_not_available` | The script is not bound to a Sheet | Create the script from **Extensions → Apps Script** inside the Sheet |
-| Backend says `APPS_SCRIPT_RESPONSE_NOT_JSON` | The deployment is not public, or the URL is wrong | Redeploy with **Who has access: Anyone**, copy the `/exec` URL again |
+| Backend says `APPS_SCRIPT_RESPONSE_NOT_JSON` | The deployment is not public, the URL is wrong, or you copied a `/dev` URL | Redeploy with **Who has access: Anyone** and copy the `/exec` URL again |
 | Backend says `APPS_SCRIPT_WEBHOOK_URL_INVALID` | The URL is not a `script.google.com/macros/s/.../exec` URL | Copy the deployment URL exactly |
 | Admin sync says the webhook is not configured | `APPS_SCRIPT_TICKET_WEBHOOK_URL` or `APPS_SCRIPT_SHARED_SECRET` is missing on the server | Add both, then redeploy the backend |
 | Admin sync says every batch failed | The deployment is not public, the secret rotated, or Apps Script is down | Open the `/exec` URL in a browser, then check the secret and deployment access |
