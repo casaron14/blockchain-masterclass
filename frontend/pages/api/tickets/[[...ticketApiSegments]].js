@@ -8,6 +8,8 @@ export const config = {
     bodyParser: false,
     externalResolver: true,
   },
+  // A redelivery renders the PNG and waits for the email provider.
+  maxDuration: 60,
 };
 
 export default function forwardTicketApiRequestToExpressRouter(request, response) {

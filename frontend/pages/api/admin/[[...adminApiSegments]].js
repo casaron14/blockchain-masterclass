@@ -8,6 +8,9 @@ export const config = {
     bodyParser: false,
     externalResolver: true,
   },
+  // Confirming a booking renders the ticket PNG and waits for the email
+  // provider, so the default Hobby timeout is too short.
+  maxDuration: 60,
 };
 
 export default function forwardAdminApiRequestToExpressRouter(request, response) {

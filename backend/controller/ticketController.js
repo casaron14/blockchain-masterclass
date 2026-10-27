@@ -40,9 +40,9 @@ async function redeliverTicketEmailEndpoint(req, res) {
         [TICKET_EMAIL_INVALID_RECIPIENT_REASON]:
           'This booking has no valid attendee email address',
         [TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON]:
-          'The Gmail hourly sending limit has been reached; try again later',
+          'The hourly sending limit has been reached; try again later',
         [TICKET_EMAIL_DAILY_LIMIT_REACHED_REASON]:
-          'The Gmail daily sending limit has been reached; try again tomorrow',
+          'The daily sending limit has been reached; try again tomorrow',
       };
 
       return res.status(409).json({

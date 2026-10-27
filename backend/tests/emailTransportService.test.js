@@ -118,7 +118,7 @@ test('createConfiguredEmailTransport creates an SMTP transport with a sendMail m
 test('createConfiguredEmailTransport rejects an unknown provider instead of attempting a send', async () => {
   await assert.rejects(
     () => createConfiguredEmailTransport({ providerName: 'gmail_api' }),
-    /EMAIL_PROVIDER_UNSUPPORTED:gmail_api\. Use "gmail" or "smtp"/
+    /EMAIL_PROVIDER_UNSUPPORTED:gmail_api\. Use "apps_script", "gmail" or "smtp"/
   );
 });
 

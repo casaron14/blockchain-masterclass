@@ -22,7 +22,7 @@ export function resolveBookingConfirmationMessage(confirmationResult) {
       return {
         tone: 'info',
         message:
-          'Booking confirmed, but the Gmail sending limit has been reached. Use “Resend ticket email” later, or move to a transactional provider for higher volume.',
+          'Booking confirmed, but the daily sending limit has been reached. Use “Resend ticket email” after the quota resets.',
       };
     }
 

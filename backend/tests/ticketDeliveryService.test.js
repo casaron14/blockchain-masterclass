@@ -423,6 +423,73 @@ test('sendTicketEmailToAttendee attaches only the ticket PNG when no receipt exi
   assert.equal(sentMessages[0].attachments[0].contentType, 'image/png');
 });
 
+test('sendTicketEmailToAttendee posts the PNG and booking mirror to the Apps Script web app', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  const previousFetch = globalThis.fetch;
+  const previousEnvironment = {
+    EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+    APPS_SCRIPT_TICKET_WEBHOOK_URL: process.env.APPS_SCRIPT_TICKET_WEBHOOK_URL,
+    APPS_SCRIPT_SHARED_SECRET: process.env.APPS_SCRIPT_SHARED_SECRET,
+    MAIL_FROM_NAME: process.env.MAIL_FROM_NAME,
+    EVENT_TIME_LABEL: process.env.EVENT_TIME_LABEL,
+  };
+  const recordedRequests = [];
+
+  globalThis.fetch = async (requestUrl, requestOptions) => {
+    recordedRequests.push({ requestUrl, requestOptions });
+    return {
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          deliveryId: 'apps-script-delivery-id',
+          remainingDailyQuota: 89,
+        }),
+    };
+  };
+
+  try {
+    process.env.EMAIL_PROVIDER = 'apps_script';
+    process.env.APPS_SCRIPT_TICKET_WEBHOOK_URL =
+      'https://script.google.com/macros/s/AKfycb-test-deployment/exec';
+    process.env.APPS_SCRIPT_SHARED_SECRET = 'test-shared-secret';
+    process.env.MAIL_FROM_NAME = 'DienAcademy Events';
+    process.env.EVENT_TIME_LABEL = '6:00 PM';
+
+    const sendResult = await sendTicketEmailToAttendee(confirmedBooking);
+
+    assert.equal(sendResult.providerMessageId, 'apps-script-delivery-id');
+    assert.equal(recordedRequests.length, 1);
+
+    const postedRequestBody = JSON.parse(recordedRequests[0].requestOptions.body);
+    assert.equal(
+      postedRequestBody.emailRequest.deliveryKey,
+      `ticket:${confirmedBooking.ref}`
+    );
+    assert.equal(postedRequestBody.emailRequest.emailKind, 'ticket');
+    assert.equal(postedRequestBody.emailRequest.booking.attendeeName, 'Ticket User');
+    assert.equal(postedRequestBody.emailRequest.event.timeLabel, '6:00 PM');
+    assert.equal(postedRequestBody.emailRequest.ticket.currency, 'TZS');
+    assert.equal(postedRequestBody.emailRequest.attachments.length, 1);
+
+    const ticketAttachment = postedRequestBody.emailRequest.attachments[0];
+    assert.equal(ticketAttachment.fileName, `ticket-${confirmedBooking.ref}.png`);
+    assert.equal(ticketAttachment.mimeType, 'image/png');
+    const decodedTicketPngBuffer = Buffer.from(ticketAttachment.base64Content, 'base64');
+    assert.equal(decodedTicketPngBuffer.subarray(1, 4).toString(), 'PNG');
+  } finally {
+    globalThis.fetch = previousFetch;
+
+    for (const [variableName, previousValue] of Object.entries(previousEnvironment)) {
+      if (previousValue === undefined) {
+        delete process.env[variableName];
+      } else {
+        process.env[variableName] = previousValue;
+      }
+    }
+  }
+});
+
 test('deliverTicketForConfirmedBooking sends the receipt email after the ticket when a receipt is given', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const receiptRecord = await createPendingPaymentReceiptForBooking(

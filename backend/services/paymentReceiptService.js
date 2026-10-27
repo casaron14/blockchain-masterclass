@@ -9,9 +9,13 @@ import pool from '../config/db.js';
 import { fetchBookingRecordById } from './bookingService.js';
 
 import {
-  createConfiguredEmailTransport,
   resolveOutboundEmailSenderIdentity,
+  sendOutboundEmailThroughConfiguredProvider,
 } from './emailTransportService.js';
+import {
+  EMAIL_DELIVERY_KIND_RECEIPT,
+  buildBookingEmailDeliveryMetadata,
+} from './bookingEmailDeliveryMetadataService.js';
 import { fetchPaymentRecordById } from './paymentService.js';
 
 import { buildExplorerTransactionUrl } from './blockExplorerService.js';
@@ -415,23 +419,31 @@ export async function deliverPaymentReceiptEmailToAttendee(bookingId, options = 
       }
     : await buildPaymentReceiptPdfArtifactForBooking(bookingId, receiptRecord);
 
-  const receiptTransport =
-    options.transport ?? (await createConfiguredEmailTransport());
+  const outboundEmailMessage = {
+    from: resolveOutboundEmailSenderIdentity(),
+    to: bookingRecord.email,
+    subject: buildPaymentReceiptEmailSubject(bookingRecord),
+    html: buildPaymentReceiptEmailHtml(bookingRecord, receiptRecord),
+    attachments: [
+      {
+        filename: receiptArtifact.fileName,
+        content: receiptArtifact.pdfBuffer,
+        contentType: 'application/pdf',
+      },
+    ],
+  };
 
   try {
-    await receiptTransport.sendMail({
-      from: resolveOutboundEmailSenderIdentity(),
-      to: bookingRecord.email,
-      subject: buildPaymentReceiptEmailSubject(bookingRecord),
-      html: buildPaymentReceiptEmailHtml(bookingRecord, receiptRecord),
-      attachments: [
-        {
-          filename: receiptArtifact.fileName,
-          content: receiptArtifact.pdfBuffer,
-          contentType: 'application/pdf',
-        },
-      ],
-    });
+    if (options.transport) {
+      await options.transport.sendMail(outboundEmailMessage);
+    } else {
+      await sendOutboundEmailThroughConfiguredProvider(outboundEmailMessage, {
+        deliveryMetadata: buildBookingEmailDeliveryMetadata(
+          bookingRecord,
+          EMAIL_DELIVERY_KIND_RECEIPT
+        ),
+      });
+    }
   } catch (emailError) {
     const failureReason = emailError?.message || 'Unknown receipt email delivery error';
     await markPaymentReceiptFailed(receiptRecord.id, failureReason);

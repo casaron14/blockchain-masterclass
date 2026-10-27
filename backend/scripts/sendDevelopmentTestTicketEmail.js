@@ -91,6 +91,8 @@ async function runDevelopmentTicketEmailSmokeTest() {
           bookingId: bookingRecord.id,
           bookingReferenceCode: bookingRecord.ref,
           recipientEmailAddress,
+          deliveryId: deliveryResult.deliveryId,
+          providerMessageId: deliveryResult.providerMessageId,
           attachmentFileName: deliveryResult.ticketAttachmentFileName,
           previewFilePath,
         },

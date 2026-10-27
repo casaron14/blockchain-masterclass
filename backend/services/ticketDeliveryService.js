@@ -4,9 +4,15 @@ import QRCode from 'qrcode';
 import { fetchBookingRecordById } from './bookingService.js';
 
 import {
-  createConfiguredEmailTransport,
+  EMAIL_PROVIDER_APPS_SCRIPT,
+  resolveEmailTransportProviderName,
   resolveOutboundEmailSenderIdentity,
+  sendOutboundEmailThroughConfiguredProvider,
 } from './emailTransportService.js';
+import {
+  EMAIL_DELIVERY_KIND_TICKET,
+  buildBookingEmailDeliveryMetadata,
+} from './bookingEmailDeliveryMetadataService.js';
 import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
 import {
   EVENT_DATE_LABEL,
@@ -33,7 +39,6 @@ export const TICKET_EMAIL_INVALID_RECIPIENT_REASON = 'invalid_attendee_email_add
 
 const TICKET_EMAIL_SEND_CLAIM_LEASE_MINUTES = 15;
 const DEFAULT_TICKET_EMAIL_HOURLY_LIMIT = 20;
-const DEFAULT_TICKET_EMAIL_DAILY_LIMIT = 500;
 
 // A deployment can run without email: the attendee downloads the ticket PDF
 // from the booking lookup. Setting EMAIL_DELIVERY_ENABLED=false stops a
@@ -219,10 +224,8 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
       ? { qrDataUrl: options.qrDataUrl, ticketPngBuffer: options.ticketPngBuffer }
       : await generateTicketPngArtifactForBooking(bookingRecord);
 
-  const transport = options.transport ?? (await createConfiguredEmailTransport());
   const senderIdentity = resolveOutboundEmailSenderIdentity();
-
-  await transport.sendMail({
+  const outboundEmailMessage = {
     from: senderIdentity,
     to: attendeeEmailAddress,
     subject: buildTicketEmailSubject(bookingRecord),
@@ -233,12 +236,27 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
       bookingRecord,
       options.receiptPdfArtifact ?? null
     ),
-  });
+  };
+
+  const sendOutcome = options.transport
+    ? {
+        providerMessageId:
+          (await options.transport.sendMail(outboundEmailMessage))?.messageId ?? null,
+        duplicate: false,
+      }
+    : await sendOutboundEmailThroughConfiguredProvider(outboundEmailMessage, {
+        deliveryMetadata: buildBookingEmailDeliveryMetadata(
+          bookingRecord,
+          EMAIL_DELIVERY_KIND_TICKET
+        ),
+      });
 
   return {
     qrDataUrl,
     ticketPngBuffer,
     ticketAttachmentFileName: `ticket-${bookingRecord.ref}.png`,
+    providerMessageId: sendOutcome.providerMessageId,
+    deliveryWasDuplicate: sendOutcome.duplicate === true,
   };
 }
 
@@ -360,9 +378,15 @@ export function resolveTicketEmailHourlyLimit() {
 }
 
 export function resolveTicketEmailDailyLimit() {
+  // A consumer Google account can send about 100 recipients per day from Apps
+  // Script, so the local guard stops at 90 and leaves headroom for a manual
+  // resend. Gmail SMTP allows roughly 500.
+  const defaultDailyLimit =
+    resolveEmailTransportProviderName() === EMAIL_PROVIDER_APPS_SCRIPT ? 90 : 500;
+
   return resolveConfiguredTicketEmailLimit(
     process.env.TICKET_EMAIL_DAILY_LIMIT,
-    DEFAULT_TICKET_EMAIL_DAILY_LIMIT
+    defaultDailyLimit
   );
 }
 
@@ -558,6 +582,8 @@ async function deliverTicketEmailForConfirmedBooking(
       bookingId: bookingRecord.id,
       recipientEmailAddress: attendeeEmailAddress,
       ticketAttachmentFileName: sendResult?.ticketAttachmentFileName ?? null,
+      providerMessageId: sendResult?.providerMessageId ?? null,
+      deliveryWasDuplicate: sendResult?.deliveryWasDuplicate === true,
       receipt: receiptDelivery,
     };
   } catch (error) {

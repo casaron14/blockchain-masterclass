@@ -202,33 +202,60 @@ Required for the current production setup:
 - An admin account, either `ADMIN_USERNAME` plus `ADMIN_PASSWORD_HASH`, or a
   database-backed account created with `npm run admin:create`.
 - `EMAIL_DELIVERY_ENABLED=false` when the deployment does not send email at
-  all (see "Running without email" below). Otherwise `GMAIL_USER` and
-  `GMAIL_APP_PASSWORD` are required, and both must be server-side variables:
-  never add a `NEXT_PUBLIC_` prefix and never expose them to the browser.
-  `GMAIL_APP_PASSWORD` is a 16-character Google app password, not the account
-  password.
-- Optional email settings: `EMAIL_PROVIDER=gmail` (the default when
-  `GMAIL_USER` is set), `MAIL_FROM_NAME` (defaults to `DienAcademy Events`),
-  `EVENT_TIME_LABEL` (adds a time to the ticket image),
+  all (see "Running without email" below). Otherwise pick one provider:
+  - **Google Apps Script (recommended, no password):**
+    `EMAIL_PROVIDER=apps_script`, `APPS_SCRIPT_TICKET_WEBHOOK_URL` and
+    `APPS_SCRIPT_SHARED_SECRET`. Follow `apps-script/README.md` to deploy the
+    script and create the Sheet. Both values are server-side secrets: never add
+    a `NEXT_PUBLIC_` prefix.
+  - **Gmail SMTP:** `EMAIL_PROVIDER=gmail`, `GMAIL_USER` and
+    `GMAIL_APP_PASSWORD`. `GMAIL_APP_PASSWORD` is a 16-character Google app
+    password, not the account password.
+- Optional email settings: `MAIL_FROM_NAME` (defaults to
+  `DienAcademy Events`), `EVENT_TIME_LABEL` (adds a time to the ticket image),
+  `APPS_SCRIPT_REQUEST_TIMEOUT_MS` (default `15000`),
   `TICKET_EMAIL_HOURLY_LIMIT` / `TICKET_EMAIL_DAILY_LIMIT` (defaults `20` and
-  `500`; set `0` to disable a guard), and
+  `90` for Apps Script or `500` for Gmail SMTP; set `0` to disable a guard), and
   `TICKET_EMAIL_MAX_RETRIES_PER_RUN` (default `5`, the most ticket or receipt
   emails one scheduled retry run may send).
 - `TURNSTILE_SECRET_KEY` in production: booking and login are rejected without
   it.
 
-Ticket emails are PNG images rendered with `next/og` and sent through Gmail
-SMTP with Nodemailer on the Node.js runtime. Gmail's free tier allows roughly
-500 recipients per day and about 20 messages per hour in practice. The app
-sends one message per booking and counts delivered tickets before sending; if
-you expect more volume, move to a transactional provider such as Brevo's free
-plan (300 emails/day), which only requires changing
-`backend/services/emailTransportService.js` to point the SMTP transport at
-Brevo instead of `smtp.gmail.com`.
+Ticket emails are PNG images rendered with `next/og` on the Node.js runtime.
+The delivery provider is explicit: `apps_script` posts the message to the Apps
+Script web app, which sends it with `MailApp` and mirrors the delivery into a
+Google Sheet; `gmail` sends it through `smtp.gmail.com` with Nodemailer. The app
+sends one message per booking and counts delivered tickets before sending.
+
+Apps Script allows about **100 recipients per day** on a free `@gmail.com`
+account (about 1,500 on Google Workspace), so the local daily guard defaults to
+90 for that provider. Gmail SMTP allows roughly 500 recipients per day and about
+20 messages per hour in practice. For higher volume on either provider, move to
+a transactional service such as Brevo's free plan (300 emails/day) and point
+the SMTP transport at it in `backend/services/emailTransportService.js`.
 
 The current checkout accepts offline Lipa Namba payments only. Blockchain
 signing, RPC, and wallet variables are not needed unless a crypto payment flow
 is explicitly re-enabled.
+
+### Google Apps Script email delivery (simplest setup)
+
+1. Create a Google Sheet and open **Extensions → Apps Script**.
+2. Paste `apps-script/Code.gs`, then enable the manifest and paste
+   `apps-script/appsscript.json`.
+3. Add a `SHARED_SECRET` script property with a long random value.
+4. Run `sendTestEmailToScriptOwner` once to authorize `MailApp`.
+5. **Deploy → New deployment → Web app**, with **Execute as: Me** and **Who has
+   access: Anyone**, then copy the URL ending in `/exec`.
+6. In the hosting project set `EMAIL_PROVIDER=apps_script`,
+   `APPS_SCRIPT_TICKET_WEBHOOK_URL`, `APPS_SCRIPT_SHARED_SECRET` (the same
+   value), and `MAIL_FROM_NAME`.
+
+The full walkthrough, Sheet columns, quota behaviour and troubleshooting are in
+`apps-script/README.md`. The Sheet is a delivery log and booking mirror;
+PostgreSQL remains the source of truth. The script refuses every request when
+the shared secret is missing or wrong, and never sends the same delivery key
+twice.
 
 ### Admin sign-in from environment variables
 
@@ -343,8 +370,8 @@ Tickets do not depend on email. The PDF is generated on demand from the booking
 record by `GET /api/tickets/:bookingRef/download`, so every confirmed attendee
 can download it from **Look up your booking** with their reference code.
 
-To smoke-test the real Gmail delivery in development, send a throwaway booking
-to your own inbox:
+To smoke-test real delivery in development, send a throwaway booking to your
+own inbox:
 
 ```bash
 cd backend
@@ -353,7 +380,8 @@ DEV_TEST_TICKET_RECIPIENT_EMAIL='you@gmail.com' npm run test:ticket-email
 
 The script refuses to run in production, writes a copy of the PNG to
 `backend/out/tickets/`, sends the same email a confirmation sends, and deletes
-the throwaway booking afterwards.
+the throwaway booking afterwards. With `EMAIL_PROVIDER=apps_script`, the same
+delivery also appears in the Sheet; check that row before trusting the setup.
 
 Set `EMAIL_DELIVERY_ENABLED=false` on a deployment that should not send mail.
 With that flag:
@@ -427,8 +455,9 @@ delivery is required.
    two as "Coming soon".
 4. Create a test booking, confirm it in the admin, then open **Look up your
    booking** with its reference: the ticket PDF must download. Repeat on the
-   success page. With email enabled, the ticket and receipt emails must arrive
-   as well.
+   success page. With email enabled, the ticket email must arrive with the PNG
+   attached. When `EMAIL_PROVIDER=apps_script`, the same delivery must appear in
+   the Sheet with `Delivery status = sent`.
 5. Call `/api/cron/tick` with the wrong bearer token → `401`; with the right one
    → `200` and a job outcome list.
 6. Confirm `POST /api/payments/<id>/initiate-azampesa` returns `409`.

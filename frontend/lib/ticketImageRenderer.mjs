@@ -20,6 +20,7 @@ import {
   EVENT_TITLE,
   PLATFORM_BRAND_NAME,
   PLATFORM_WEBSITE_ADDRESS,
+  TICKET_TYPE_LABEL,
 } from '../../shared/eventConfig.js';
 
 export const TICKET_IMAGE_WIDTH = 1200;
@@ -33,7 +34,6 @@ const TICKET_SECONDARY_TEXT_COLOR = '#615A4D';
 const TICKET_HAIRLINE_COLOR = '#CAC6BD';
 const TICKET_MONO_FONT_STACK = "'Courier New', Courier, monospace";
 const TICKET_BODY_FONT_STACK = 'Helvetica, Arial, sans-serif';
-const TICKET_DEFAULT_TICKET_TYPE_LABEL = 'General Admission';
 
 export function buildTicketCodeForBooking(bookingRecord) {
   const bookingReferenceCode = String(bookingRecord?.ref ?? '').trim().toUpperCase();
@@ -106,8 +106,7 @@ export function buildTicketImageElement(bookingRecord, options = {}) {
   const attendeeName = String(bookingRecord?.full_name ?? 'Attendee').trim();
   const eventTimeLabel = String(options.eventTimeLabel ?? '').trim();
   const ticketTypeLabel =
-    String(options.ticketTypeLabel ?? TICKET_DEFAULT_TICKET_TYPE_LABEL).trim() ||
-    TICKET_DEFAULT_TICKET_TYPE_LABEL;
+    String(options.ticketTypeLabel ?? TICKET_TYPE_LABEL).trim() || TICKET_TYPE_LABEL;
 
   const attendeeNameFontSize = attendeeName.length > 28 ? 30 : 36;
 

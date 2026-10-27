@@ -21,6 +21,10 @@ backend/cache/
 .DS_Store
 .vercel
 
+# Apps Script CLI project binding and OAuth credentials
+**/.clasp.json
+**/.clasprc.json
+
 # Test and tooling output
 coverage/
 
@@ -29,3 +33,4 @@ coverage/
 *.md
 !README.md
 !DEPLOYMENT.md
+!apps-script/README.md

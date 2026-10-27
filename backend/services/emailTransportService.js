@@ -1,11 +1,16 @@
 // Single place that decides how outbound email leaves this backend.
 //
-//   EMAIL_PROVIDER=gmail -> Gmail SMTP on port 465 with a Google app password
-//   EMAIL_PROVIDER=smtp  -> any SMTP server via nodemailer (MailHog, Brevo, ...)
+//   EMAIL_PROVIDER=apps_script -> a deployed Google Apps Script web app
+//                                 (MailApp + a Google Sheet delivery log)
+//   EMAIL_PROVIDER=gmail       -> Gmail SMTP on port 465 with an app password
+//   EMAIL_PROVIDER=smtp        -> any SMTP server via nodemailer (MailHog, Brevo, ...)
 //
 // Gmail is the default whenever GMAIL_USER is configured, so a deployment only
-// has to add the two server-side variables. Nothing in this module may be
-// imported by a client component: GMAIL_APP_PASSWORD must never reach a browser.
+// has to add the two server-side variables. Apps Script is never inferred: it
+// must be selected explicitly so a placeholder webhook URL cannot take over an
+// existing SMTP deployment. Nothing in this module may be imported by a client
+// component: GMAIL_APP_PASSWORD and APPS_SCRIPT_SHARED_SECRET must never reach a
+// browser.
 //
 // The ticket renderer and these transports are Node-only because they read
 // environment variables, open TCP sockets and use Buffer. The API routes that
@@ -15,8 +20,14 @@ import nodemailer from 'nodemailer';
 
 import { PLATFORM_BRAND_NAME, SUPPORT_EMAIL_ADDRESS } from './eventConfigService.js';
 
+import {
+  APPS_SCRIPT_EMAIL_PROVIDER,
+  sendEmailThroughAppsScriptWebApp,
+} from './appsScriptEmailDeliveryService.js';
+
 export const EMAIL_PROVIDER_GMAIL = 'gmail';
 export const EMAIL_PROVIDER_SMTP = 'smtp';
+export const EMAIL_PROVIDER_APPS_SCRIPT = APPS_SCRIPT_EMAIL_PROVIDER;
 
 const GMAIL_SMTP_HOST = 'smtp.gmail.com';
 const GMAIL_SMTP_PORT = 465;
@@ -81,7 +92,10 @@ export function createSmtpEmailTransport() {
 }
 
 // Nodemailer accepts a display-name object, which is what makes the sender
-// recognizable in an inbox instead of showing a bare address.
+// recognizable in an inbox instead of showing a bare address. Apps Script
+// always sends from the account that deployed the script; MAIL_FROM is used
+// there only as the reply-to fallback, while MAIL_FROM_NAME becomes the visible
+// name.
 export function resolveOutboundEmailSenderIdentity() {
   const configuredProvider = resolveEmailTransportProviderName();
   const configuredSenderAddress = process.env.MAIL_FROM?.trim();
@@ -103,6 +117,35 @@ export function resolveOutboundEmailSenderIdentity() {
   };
 }
 
+// One call site decides whether a message goes through Nodemailer or the Apps
+// Script web app. Ticket and receipt emails both use this, so switching
+// providers never changes their content.
+export async function sendOutboundEmailThroughConfiguredProvider(
+  outboundEmailMessage,
+  options = {}
+) {
+  const providerName = options.providerName ?? resolveEmailTransportProviderName();
+
+  if (providerName === EMAIL_PROVIDER_APPS_SCRIPT) {
+    return sendEmailThroughAppsScriptWebApp(
+      outboundEmailMessage,
+      options.deliveryMetadata ?? null,
+      options
+    );
+  }
+
+  const emailTransport =
+    options.transport ?? (await createConfiguredEmailTransport({ providerName }));
+  const sendInformation = await emailTransport.sendMail(outboundEmailMessage);
+
+  return {
+    provider: providerName,
+    providerMessageId: sendInformation?.messageId ?? null,
+    duplicate: false,
+    remainingDailyQuota: null,
+  };
+}
+
 export async function createConfiguredEmailTransport(options = {}) {
   const providerName = options.providerName ?? resolveEmailTransportProviderName();
 
@@ -114,7 +157,13 @@ export async function createConfiguredEmailTransport(options = {}) {
     return createSmtpEmailTransport();
   }
 
+  if (providerName === EMAIL_PROVIDER_APPS_SCRIPT) {
+    throw new Error(
+      'EMAIL_PROVIDER_APPS_SCRIPT_USES_WEBHOOK: call sendOutboundEmailThroughConfiguredProvider instead'
+    );
+  }
+
   throw new Error(
-    `EMAIL_PROVIDER_UNSUPPORTED:${providerName}. Use "${EMAIL_PROVIDER_GMAIL}" or "${EMAIL_PROVIDER_SMTP}".`
+    `EMAIL_PROVIDER_UNSUPPORTED:${providerName}. Use "${EMAIL_PROVIDER_APPS_SCRIPT}", "${EMAIL_PROVIDER_GMAIL}" or "${EMAIL_PROVIDER_SMTP}".`
   );
 }

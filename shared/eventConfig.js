@@ -91,6 +91,11 @@ export const SEAT_CAPACITY = primaryEventConfiguration.seatCapacity;
 export const SEAT_HOLD_DURATION_MINUTES = primaryEventConfiguration.seatHoldMinutes;
 export const PHONE_PLACEHOLDER = primaryEventConfiguration.phonePlaceholder;
 
+// The event sells a single admission tier, so every ticket carries the same
+// label. It lives here because both the PNG renderer and the email delivery
+// metadata need the exact same text.
+export const TICKET_TYPE_LABEL = 'General Admission';
+
 export const SUPPORT_EMAIL_ADDRESS = primaryEventConfiguration.contact.supportEmail;
 export const SUPPORT_PHONE_NUMBER = primaryEventConfiguration.contact.supportPhone;
 export const ADDRESS_LINE_1 = primaryEventConfiguration.contact.addressLine1;

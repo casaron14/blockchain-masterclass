@@ -58,7 +58,7 @@ test('resolveBookingConfirmationMessage explains the Gmail limit instead of clai
   });
 
   assert.equal(confirmationMessage.tone, 'info');
-  assert.match(confirmationMessage.message, /Gmail sending limit/i);
+  assert.match(confirmationMessage.message, /daily sending limit/i);
   assert.match(confirmationMessage.message, /Resend ticket email/i);
 });
 
