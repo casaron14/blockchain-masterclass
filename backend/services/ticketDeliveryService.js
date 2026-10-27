@@ -693,7 +693,7 @@ export function buildTicketEmailDeliveryFailureMessage(failureReason) {
   }
 
   if (failureReasonText.includes('gmail_quota_check_failed')) {
-    return 'Gmail could not read the sending quota. Run sendTestEmailToScriptOwner or diagnoseTicketEmailDelivery in the Apps Script editor, approve the Gmail permission, then retry.';
+    return 'Gmail could not read the sending quota. Run sendTestEmailToScriptOwner or diagnoseTicketEmailDelivery in the Apps Script editor and approve the Gmail permission. If it still fails, redeploy the current Code.gs so the send is attempted and the real Gmail error is returned.';
   }
 
   if (failureReasonText.includes('mail_send_failed')) {

@@ -83,7 +83,6 @@ var SAFE_ERROR_CODES = {
   invalid_attachment: true,
   attachment_too_large: true,
   mail_send_failed: true,
-  gmail_quota_check_failed: true,
   daily_quota_exhausted: true,
   delivery_in_progress: true,
   script_busy: true,
@@ -150,7 +149,7 @@ function handleEmailDeliveryRequest(requestBody) {
       ok: true,
       duplicate: true,
       deliveryId: existingDeliveryRow['Delivery id'],
-      remainingDailyQuota: readRemainingDailyQuotaOrNull(),
+      remainingDailyQuota: readRemainingDailyQuota(),
     });
   }
 
@@ -165,7 +164,11 @@ function handleEmailDeliveryRequest(requestBody) {
     return buildJsonResponse({ ok: false, error: 'delivery_in_progress' });
   }
 
-  if (readRemainingDailyQuota() <= 0) {
+  // A failed quota read is not proof that the quota is exhausted. Proceed with
+  // the send and let Gmail return the real error if it cannot send. The backend
+  // already enforces its own daily cap, so this guard is best-effort.
+  var remainingDailyQuota = readRemainingDailyQuota();
+  if (remainingDailyQuota !== null && remainingDailyQuota <= 0) {
     upsertDeliveryRow(deliverySheet, existingDeliveryRow, emailRequest, {
       deliveryStatus: 'failed',
       deliveryId: '',
@@ -232,7 +235,7 @@ function handleEmailDeliveryRequest(requestBody) {
   return buildJsonResponse({
     ok: true,
     deliveryId: deliveryId,
-    remainingDailyQuota: readRemainingDailyQuotaOrNull(),
+    remainingDailyQuota: readRemainingDailyQuota(),
   });
 }
 
@@ -465,22 +468,30 @@ function buildMailAttachments(attachments) {
   });
 }
 
+// GmailApp does not expose getRemainingDailyQuota in every Apps Script runtime;
+// MailApp is the documented quota reader. If neither is available, or the read
+// fails, return null. Callers treat null as "unknown", never as zero, so a
+// missing permission surfaces as the real send error instead of a fake quota
+// exhaustion.
 function readRemainingDailyQuota() {
   try {
-    return GmailApp.getRemainingDailyQuota();
-  } catch (quotaError) {
-    console.error('gmail_quota_check_failed: ' + quotaError.message);
-    throw new Error('gmail_quota_check_failed');
-  }
-}
+    if (
+      typeof MailApp !== 'undefined' &&
+      typeof MailApp.getRemainingDailyQuota === 'function'
+    ) {
+      return MailApp.getRemainingDailyQuota();
+    }
 
-// After a successful send, a quota-read failure must not turn a delivered
-// message into a reported failure. The quota field is optional for the backend.
-function readRemainingDailyQuotaOrNull() {
-  try {
-    return GmailApp.getRemainingDailyQuota();
+    if (
+      typeof GmailApp !== 'undefined' &&
+      typeof GmailApp.getRemainingDailyQuota === 'function'
+    ) {
+      return GmailApp.getRemainingDailyQuota();
+    }
+
+    return null;
   } catch (quotaError) {
-    console.error('gmail_quota_read_after_send_failed: ' + quotaError.message);
+    console.error('mail_quota_check_failed: ' + quotaError.message);
     return null;
   }
 }
@@ -704,8 +715,7 @@ function diagnoseTicketEmailDelivery() {
       SpreadsheetApp.getActiveSpreadsheet()
     );
 
-    diagnosticReport.remainingDailyQuota =
-      GmailApp.getRemainingDailyQuota();
+    diagnosticReport.remainingDailyQuota = readRemainingDailyQuota();
 
     var ownerEmailAddress =
       Session.getActiveUser().getEmail() ||

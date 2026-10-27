@@ -125,9 +125,12 @@ function createAppsScriptTestEnvironment(options = {}) {
         ...advancedOptions,
       });
     },
+  };
+
+  const mailApplication = {
     getRemainingDailyQuota() {
       if (failOnQuotaCheck) {
-        throw new Error('Gmail permission is missing');
+        throw new Error('Mail quota permission is missing');
       }
 
       return remainingDailyQuota;
@@ -138,6 +141,7 @@ function createAppsScriptTestEnvironment(options = {}) {
     console,
     SpreadsheetApp: spreadsheetApplication,
     GmailApp: gmailApplication,
+    MailApp: mailApplication,
     PropertiesService: {
       getScriptProperties() {
         return {
@@ -238,6 +242,9 @@ function createAppsScriptTestEnvironment(options = {}) {
     invokeDoGet() {
       const response = sandbox.doGet();
       return JSON.parse(response.getContent());
+    },
+    invokeDiagnose() {
+      return sandbox.diagnoseTicketEmailDelivery();
     },
     invokeSendTestEmail() {
       return sandbox.sendTestEmailToScriptOwner();
@@ -443,7 +450,7 @@ test('doPost never sends the same delivery key twice', () => {
   assert.equal(deliveryRow['Attempt count'], 1);
 });
 
-test('doPost reports a Gmail permission failure instead of pretending the quota is zero', () => {
+test('doPost attempts the send when the Gmail quota cannot be read', () => {
   const appsScriptEnvironment = createAppsScriptTestEnvironment();
   appsScriptEnvironment.setFailOnQuotaCheck(true);
 
@@ -451,11 +458,9 @@ test('doPost reports a Gmail permission failure instead of pretending the quota 
     buildWebhookRequestBody()
   );
 
-  assert.deepEqual(responsePayload, {
-    ok: false,
-    error: 'gmail_quota_check_failed',
-  });
-  assert.equal(appsScriptEnvironment.sentMessages.length, 0);
+  assert.equal(responsePayload.ok, true);
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
+  assert.equal(appsScriptEnvironment.sentMessages[0].to, 'attendee@example.com');
 });
 
 test('doPost records a failed row and does not send when the daily quota is exhausted', () => {
@@ -749,6 +754,20 @@ test('doPost sync_bookings writes attendee text as plain text so a name cannot b
     ],
     formulaLikeAttendeeName
   );
+});
+
+test('diagnoseTicketEmailDelivery still tests the send when the quota reader is unavailable', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+  appsScriptEnvironment.setFailOnQuotaCheck(true);
+
+  const diagnosticReport = appsScriptEnvironment.invokeDiagnose();
+
+  assert.equal(diagnosticReport.sharedSecretConfigured, true);
+  assert.equal(diagnosticReport.spreadsheetAvailable, true);
+  assert.equal(diagnosticReport.remainingDailyQuota, null);
+  assert.equal(diagnosticReport.testEmailSent, true);
+  assert.equal(diagnosticReport.errorMessage, '');
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
 });
 
 test('doGet reports a public deployment health check', () => {

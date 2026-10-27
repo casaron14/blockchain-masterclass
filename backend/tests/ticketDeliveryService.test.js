@@ -371,7 +371,7 @@ test('buildTicketEmailDeliveryFailureMessage explains Apps Script sign-in and de
     buildTicketEmailDeliveryFailureMessage(
       'APPS_SCRIPT_WEBHOOK_FAILED:gmail_quota_check_failed'
     ),
-    /diagnoseTicketEmailDelivery.*Gmail permission/i
+    /diagnoseTicketEmailDelivery.*Gmail permission.*redeploy the current Code\.gs/i
   );
   assert.match(
     buildTicketEmailDeliveryFailureMessage('SMTP refused connection'),

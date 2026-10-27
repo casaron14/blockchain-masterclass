@@ -41,8 +41,9 @@ admin dashboard and PostgreSQL remain the source of truth.
 2. Approve the permission screen. The email arrives at the Google account that
    owns the Sheet.
 3. If you do not receive it, run `diagnoseTicketEmailDelivery` and check
-   **Executions**. It reports whether the secret, Sheet, Gmail quota, and a live
-   Gmail send all work.
+   **Executions**. It reports whether the secret, Sheet, Gmail quota (when
+   readable), and a live Gmail send all work. A null quota is reported as
+   unknown, not as a failure; the live send is the real test.
 4. Open the `/exec` URL in a private window. It should return
    `{"ok":true,"service":"ticket-email-and-sheet-sync"}`. A Google sign-in page
    means the deployment is not anonymous yet.
@@ -167,8 +168,12 @@ did not; pressing the button again retries every row.
   The backend's own daily guard defaults to **90** when the provider is
   `apps_script`, leaving headroom for a manual resend. A Google Workspace
   account raises the Apps Script limit to about 1,500/day.
-- The script also asks `GmailApp.getRemainingDailyQuota()` before sending and
-  records `daily_quota_exhausted` instead of attempting a send that will fail.
+- The script asks `MailApp.getRemainingDailyQuota()` before sending and records
+  `daily_quota_exhausted` when the quota is explicitly zero. `GmailApp` does not
+  expose that method in every runtime, so the script falls back to the
+  `GmailApp` method only if it exists, then to “unknown”. If the quota cannot be
+  read, it logs the failure and still attempts the send, so Gmail returns the
+  real permission or rate-limit error instead of a misleading quota error.
 - `GmailApp` needs one authorization run after the script is pasted or the
   deployment is moved to a new version. Run `sendTestEmailToScriptOwner` once.
 - Delivery is serialized with `LockService`, so two concurrent confirmations
@@ -196,7 +201,7 @@ did not; pressing the button again retries every row.
 | `apps_script_secret_not_configured` | `SHARED_SECRET` script property is missing | Add it in Project Settings → Script Properties |
 | `daily_quota_exhausted` | The Google account hit its daily send limit | Wait for the quota reset, or use a Workspace account |
 | `mail_send_failed` | `GmailApp` rejected the message: missing Gmail authorization, an invalid attendee address, a rate limit, or an attachment problem | Read the exact text in the `Ticket deliveries` tab, `Error` column, or **Apps Script → Executions**. Run `diagnoseTicketEmailDelivery`, confirm **Execute as: Me**, correct the attendee email, then resend |
-| `gmail_quota_check_failed` | The script cannot read `GmailApp.getRemainingDailyQuota()`, usually because Gmail permission was never granted | Run `sendTestEmailToScriptOwner` or `diagnoseTicketEmailDelivery` in the editor and approve the Gmail permission |
+| `gmail_quota_check_failed` | An older deployment blocked the send because `GmailApp.getRemainingDailyQuota()` is not a function in that runtime | Redeploy the current `Code.gs`; it uses `MailApp` for the quota read when available, treats an unreadable quota as unknown, and attempts the send so Gmail returns the real error |
 | `delivery_in_progress` | A previous execution reserved this delivery key and did not finish | Wait up to 15 minutes; the backend retry then sends normally |
 | `script_busy` | Another delivery held the lock for 30 seconds | Retry; the backend records a retryable failure |
 | `spreadsheet_not_available` | The script is not bound to a Sheet | Create the script from **Extensions → Apps Script** inside the Sheet |
