@@ -1,7 +1,7 @@
 // Sends outbound email through a Google Apps Script web app instead of SMTP.
 //
 // The Apps Script deployment (apps-script/Code.gs) sends the message with
-// MailApp, writes one row per delivery into a Google Sheet, and refuses a
+// GmailApp, writes one row per delivery into a Google Sheet, and refuses a
 // second send for the same delivery key. That makes the Sheet a human-readable
 // mirror of every confirmed booking while Postgres stays the source of truth.
 //

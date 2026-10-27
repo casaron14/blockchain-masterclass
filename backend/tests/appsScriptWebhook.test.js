@@ -1,6 +1,6 @@
 // Exercises the real apps-script/Code.gs inside a fake Apps Script runtime.
 // This is the closest we can get to "does the deployed web app behave" without
-// a Google account: MailApp, SpreadsheetApp, PropertiesService, Utilities and
+// a Google account: GmailApp, SpreadsheetApp, PropertiesService, Utilities and
 // LockService are replaced with in-memory fakes, and doPost runs unchanged.
 
 import { test } from 'node:test';
@@ -88,6 +88,7 @@ function createAppsScriptTestEnvironment(options = {}) {
   );
   let remainingDailyQuota = options.remainingDailyQuota ?? 99;
   let failOnSend = options.failOnSend === true;
+  let failOnQuotaCheck = false;
   let generatedUuidCount = 0;
 
   function getOrCreateFakeSheet(sheetName) {
@@ -111,18 +112,24 @@ function createAppsScriptTestEnvironment(options = {}) {
     },
   };
 
-  const mailApplication = {
-    sendMail(mailOptions) {
+  const gmailApplication = {
+    sendEmail(recipientEmailAddress, emailSubject, emailBody, advancedOptions = {}) {
       if (failOnSend) {
         throw new Error('Gmail service refused the message');
       }
 
-      sentMessages.push(mailOptions);
-    },
-    sendEmail(mailOptions) {
-      sentMessages.push(mailOptions);
+      sentMessages.push({
+        to: recipientEmailAddress,
+        subject: emailSubject,
+        body: emailBody,
+        ...advancedOptions,
+      });
     },
     getRemainingDailyQuota() {
+      if (failOnQuotaCheck) {
+        throw new Error('Gmail permission is missing');
+      }
+
       return remainingDailyQuota;
     },
   };
@@ -130,7 +137,7 @@ function createAppsScriptTestEnvironment(options = {}) {
   const sandbox = {
     console,
     SpreadsheetApp: spreadsheetApplication,
-    MailApp: mailApplication,
+    GmailApp: gmailApplication,
     PropertiesService: {
       getScriptProperties() {
         return {
@@ -215,6 +222,9 @@ function createAppsScriptTestEnvironment(options = {}) {
     setFailOnSend(nextFailOnSend) {
       failOnSend = nextFailOnSend;
     },
+    setFailOnQuotaCheck(nextFailOnQuotaCheck) {
+      failOnQuotaCheck = nextFailOnQuotaCheck;
+    },
     invokeDoPost(requestBody) {
       const response = sandbox.doPost({
         postData: {
@@ -223,6 +233,10 @@ function createAppsScriptTestEnvironment(options = {}) {
         },
       });
 
+      return JSON.parse(response.getContent());
+    },
+    invokeDoGet() {
+      const response = sandbox.doGet();
       return JSON.parse(response.getContent());
     },
     invokeSendTestEmail() {
@@ -429,6 +443,21 @@ test('doPost never sends the same delivery key twice', () => {
   assert.equal(deliveryRow['Attempt count'], 1);
 });
 
+test('doPost reports a Gmail permission failure instead of pretending the quota is zero', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+  appsScriptEnvironment.setFailOnQuotaCheck(true);
+
+  const responsePayload = appsScriptEnvironment.invokeDoPost(
+    buildWebhookRequestBody()
+  );
+
+  assert.deepEqual(responsePayload, {
+    ok: false,
+    error: 'gmail_quota_check_failed',
+  });
+  assert.equal(appsScriptEnvironment.sentMessages.length, 0);
+});
+
 test('doPost records a failed row and does not send when the daily quota is exhausted', () => {
   const appsScriptEnvironment = createAppsScriptTestEnvironment({
     remainingDailyQuota: 0,
@@ -464,6 +493,7 @@ test('doPost records a mail failure and retries the same row on the next attempt
   assert.deepEqual(failedResponsePayload, {
     ok: false,
     error: 'mail_send_failed',
+    mailErrorMessage: 'Gmail service refused the message',
   });
 
   const failedDeliveryRow = readDeliveryRowByKey(
@@ -719,6 +749,17 @@ test('doPost sync_bookings writes attendee text as plain text so a name cannot b
     ],
     formulaLikeAttendeeName
   );
+});
+
+test('doGet reports a public deployment health check', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  assert.deepEqual(appsScriptEnvironment.invokeDoGet(), {
+    ok: true,
+    service: 'ticket-email-and-sheet-sync',
+    supportsBookingSync: true,
+  });
+  assert.equal(appsScriptEnvironment.deliverySheet, undefined);
 });
 
 test('sendTestEmailToScriptOwner sends one authorization check email', () => {

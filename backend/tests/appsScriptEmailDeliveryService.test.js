@@ -305,6 +305,28 @@ test('parseAppsScriptEmailDeliveryResponse surfaces a safe remote error code', (
   );
 });
 
+test('parseAppsScriptEmailDeliveryResponse keeps the Gmail failure detail for the admin', () => {
+  assert.throws(
+    () =>
+      parseAppsScriptEmailDeliveryResponse(
+        200,
+        JSON.stringify({
+          ok: false,
+          error: 'mail_send_failed',
+          mailErrorMessage: 'Invalid email: attendee@example.com',
+        })
+      ),
+    (error) => {
+      assert.equal(error.errorCode, 'mail_send_failed');
+      assert.equal(
+        error.remoteErrorMessage,
+        'Invalid email: [redacted-email]'
+      );
+      return true;
+    }
+  );
+});
+
 test('parseAppsScriptEmailDeliveryResponse never echoes an unsafe remote error string', () => {
   assert.throws(
     () =>

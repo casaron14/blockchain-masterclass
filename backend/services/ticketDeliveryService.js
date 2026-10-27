@@ -587,7 +587,12 @@ async function deliverTicketEmailForConfirmedBooking(
       receipt: receiptDelivery,
     };
   } catch (error) {
-    const failureReason = error.message || 'Unknown email delivery error';
+    const providerFailureReason =
+      error.message || 'Unknown email delivery error';
+    const failureReason = error.remoteErrorMessage
+      ? `${providerFailureReason}: ${error.remoteErrorMessage}`
+      : providerFailureReason;
+
     await markTicketEmailSendFailedForBooking(deliveryRecord.id, failureReason);
     logError('ticket_email_delivery_failed', {
       bookingId: bookingRecord.id,
@@ -685,6 +690,23 @@ export function buildTicketEmailDeliveryFailureMessage(failureReason) {
 
   if (failureReasonText.includes('APPS_SCRIPT_ATTACHMENT_TOO_LARGE')) {
     return 'The ticket attachment is larger than the Apps Script limit. Reduce the attachment size and retry.';
+  }
+
+  if (failureReasonText.includes('gmail_quota_check_failed')) {
+    return 'Gmail could not read the sending quota. Run sendTestEmailToScriptOwner or diagnoseTicketEmailDelivery in the Apps Script editor, approve the Gmail permission, then retry.';
+  }
+
+  if (failureReasonText.includes('mail_send_failed')) {
+    const mailFailureDetail = failureReasonText
+      .split('mail_send_failed')
+      .slice(1)
+      .join('mail_send_failed')
+      .replace(/^:\s*/, '')
+      .trim();
+
+    return mailFailureDetail
+      ? `Google's mail service rejected the message: ${mailFailureDetail}. Check the Ticket deliveries sheet Error column and Apps Script Executions.`
+      : "Google's mail service rejected the message. Check the Ticket deliveries sheet Error column and Apps Script Executions for the exact reason.";
   }
 
   if (failureReasonText) {

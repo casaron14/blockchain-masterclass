@@ -23,16 +23,33 @@ const APPS_SCRIPT_EXEC_DEPLOYMENT_URL_PATTERN =
 const APPS_SCRIPT_DEV_DEPLOYMENT_URL_PATTERN =
   /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/dev$/;
 const DEFAULT_APPS_SCRIPT_REQUEST_TIMEOUT_MS = 15000;
+const MAXIMUM_REMOTE_ERROR_MESSAGE_LENGTH = 300;
+const EMAIL_ADDRESS_IN_ERROR_MESSAGE_PATTERN =
+  /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const SAFE_REMOTE_ERROR_CODE_PATTERN = /^[a-z0-9_]{1,64}$/;
 const PLACEHOLDER_WEBHOOK_URL_PATTERN = /replace|your-|example\.com/i;
 const PLACEHOLDER_SHARED_SECRET_PATTERN = /replace|your-/i;
 
+function normalizeRemoteErrorMessage(remoteErrorMessage) {
+  const normalizedRemoteErrorMessage = String(remoteErrorMessage ?? '')
+    .replace(EMAIL_ADDRESS_IN_ERROR_MESSAGE_PATTERN, '[redacted-email]')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return normalizedRemoteErrorMessage
+    ? normalizedRemoteErrorMessage.slice(0, MAXIMUM_REMOTE_ERROR_MESSAGE_LENGTH)
+    : null;
+}
+
 export class AppsScriptWebhookError extends Error {
-  constructor(errorCode) {
+  constructor(errorCode, options = {}) {
     super(`APPS_SCRIPT_WEBHOOK_FAILED:${errorCode}`);
     this.name = 'AppsScriptWebhookError';
     this.code = APPS_SCRIPT_WEBHOOK_ERROR_CODE;
     this.errorCode = errorCode;
+    this.remoteErrorMessage = normalizeRemoteErrorMessage(
+      options.remoteErrorMessage
+    );
   }
 }
 
@@ -107,7 +124,10 @@ export function parseAppsScriptWebhookResponse(responseStatus, responseText) {
 
   if (responseBody?.ok !== true) {
     throw new AppsScriptWebhookError(
-      normalizeRemoteErrorCode(responseBody?.error)
+      normalizeRemoteErrorCode(responseBody?.error),
+      {
+        remoteErrorMessage: responseBody?.mailErrorMessage,
+      }
     );
   }
 

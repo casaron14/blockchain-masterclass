@@ -5,7 +5,7 @@ server. The booking backend keeps using PostgreSQL, and posts each confirmed
 booking to a Google Apps Script web app. The script:
 
 1. checks a shared secret,
-2. sends the ticket email (PNG attached) with `MailApp`,
+2. sends the ticket email (PNG attached) with `GmailApp`,
 3. writes one row per delivery into the bound Google Sheet.
 
 The Sheet is a **delivery log and booking mirror**, not the database. The
@@ -40,8 +40,12 @@ admin dashboard and PostgreSQL remain the source of truth.
 1. In the editor, select `sendTestEmailToScriptOwner` and click **Run**.
 2. Approve the permission screen. The email arrives at the Google account that
    owns the Sheet.
-3. If you do not receive it, check **Executions** for the error before
-   continuing.
+3. If you do not receive it, run `diagnoseTicketEmailDelivery` and check
+   **Executions**. It reports whether the secret, Sheet, Gmail quota, and a live
+   Gmail send all work.
+4. Open the `/exec` URL in a private window. It should return
+   `{"ok":true,"service":"ticket-email-and-sheet-sync"}`. A Google sign-in page
+   means the deployment is not anonymous yet.
 
 ## 4. Deploy the web app
 
@@ -163,8 +167,10 @@ did not; pressing the button again retries every row.
   The backend's own daily guard defaults to **90** when the provider is
   `apps_script`, leaving headroom for a manual resend. A Google Workspace
   account raises the Apps Script limit to about 1,500/day.
-- The script also asks `MailApp.getRemainingDailyQuota()` before sending and
+- The script also asks `GmailApp.getRemainingDailyQuota()` before sending and
   records `daily_quota_exhausted` instead of attempting a send that will fail.
+- `GmailApp` needs one authorization run after the script is pasted or the
+  deployment is moved to a new version. Run `sendTestEmailToScriptOwner` once.
 - Delivery is serialized with `LockService`, so two concurrent confirmations
   cannot both send the same delivery key.
 - The data range is formatted as plain text, so an attendee name starting with
@@ -189,6 +195,8 @@ did not; pressing the button again retries every row.
 | `unauthorized` | `APPS_SCRIPT_SHARED_SECRET` does not match `SHARED_SECRET` | Copy the script property again, redeploy if needed |
 | `apps_script_secret_not_configured` | `SHARED_SECRET` script property is missing | Add it in Project Settings → Script Properties |
 | `daily_quota_exhausted` | The Google account hit its daily send limit | Wait for the quota reset, or use a Workspace account |
+| `mail_send_failed` | `GmailApp` rejected the message: missing Gmail authorization, an invalid attendee address, a rate limit, or an attachment problem | Read the exact text in the `Ticket deliveries` tab, `Error` column, or **Apps Script → Executions**. Run `diagnoseTicketEmailDelivery`, confirm **Execute as: Me**, correct the attendee email, then resend |
+| `gmail_quota_check_failed` | The script cannot read `GmailApp.getRemainingDailyQuota()`, usually because Gmail permission was never granted | Run `sendTestEmailToScriptOwner` or `diagnoseTicketEmailDelivery` in the editor and approve the Gmail permission |
 | `delivery_in_progress` | A previous execution reserved this delivery key and did not finish | Wait up to 15 minutes; the backend retry then sends normally |
 | `script_busy` | Another delivery held the lock for 30 seconds | Retry; the backend records a retryable failure |
 | `spreadsheet_not_available` | The script is not bound to a Sheet | Create the script from **Extensions → Apps Script** inside the Sheet |

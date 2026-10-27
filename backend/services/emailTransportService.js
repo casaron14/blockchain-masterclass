@@ -1,7 +1,7 @@
 // Single place that decides how outbound email leaves this backend.
 //
 //   EMAIL_PROVIDER=apps_script -> a deployed Google Apps Script web app
-//                                 (MailApp + a Google Sheet delivery log)
+//                                 (GmailApp + a Google Sheet delivery log)
 //   EMAIL_PROVIDER=gmail       -> Gmail SMTP on port 465 with an app password
 //   EMAIL_PROVIDER=smtp        -> any SMTP server via nodemailer (MailHog, Brevo, ...)
 //

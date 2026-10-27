@@ -224,7 +224,7 @@ Required for the current production setup:
 
 Ticket emails are PNG images rendered with `next/og` on the Node.js runtime.
 The delivery provider is explicit: `apps_script` posts the message to the Apps
-Script web app, which sends it with `MailApp` and mirrors the delivery into a
+Script web app, which sends it with `GmailApp` and mirrors the delivery into a
 Google Sheet; `gmail` sends it through `smtp.gmail.com` with Nodemailer. The app
 sends one message per booking and counts delivered tickets before sending.
 
@@ -245,7 +245,8 @@ is explicitly re-enabled.
 2. Paste `apps-script/Code.gs`, then enable the manifest and paste
    `apps-script/appsscript.json`.
 3. Add a `SHARED_SECRET` script property with a long random value.
-4. Run `sendTestEmailToScriptOwner` once to authorize `MailApp`.
+4. Run `sendTestEmailToScriptOwner` once to authorize `GmailApp`. If it fails,
+   run `diagnoseTicketEmailDelivery` and check **Apps Script → Executions**.
 5. **Deploy → New deployment → Web app**, with **Execute as: Me** and **Who has
    access: Anyone**, then copy the URL ending in `/exec`.
 6. In the hosting project set `EMAIL_PROVIDER=apps_script`,

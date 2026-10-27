@@ -362,6 +362,18 @@ test('buildTicketEmailDeliveryFailureMessage explains Apps Script sign-in and de
     /did not return JSON.*\/exec/i
   );
   assert.match(
+    buildTicketEmailDeliveryFailureMessage(
+      'APPS_SCRIPT_WEBHOOK_FAILED:mail_send_failed: Invalid email: attendee@example.com'
+    ),
+    /mail service rejected the message: Invalid email: attendee@example.com/
+  );
+  assert.match(
+    buildTicketEmailDeliveryFailureMessage(
+      'APPS_SCRIPT_WEBHOOK_FAILED:gmail_quota_check_failed'
+    ),
+    /diagnoseTicketEmailDelivery.*Gmail permission/i
+  );
+  assert.match(
     buildTicketEmailDeliveryFailureMessage('SMTP refused connection'),
     /Ticket email delivery failed: SMTP refused connection/
   );

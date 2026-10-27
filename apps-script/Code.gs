@@ -12,6 +12,11 @@
  * apps-script/README.md. The backend calls it from
  * backend/services/appsScriptWebhookClientService.js.
  *
+ * GmailApp is used instead of MailApp because GmailApp supports the same
+ * attachments and HTML body while matching the working confirmation-email
+ * setup used by the event team. Run sendTestEmailToScriptOwner once after
+ * pasting this file to grant the Gmail permission.
+ *
  * The script never trusts the caller's metadata for anything security-related:
  * the recipient and attachments come from the request body, the shared secret is
  * compared in constant time, and a repeated delivery key never sends twice.
@@ -78,12 +83,24 @@ var SAFE_ERROR_CODES = {
   invalid_attachment: true,
   attachment_too_large: true,
   mail_send_failed: true,
+  gmail_quota_check_failed: true,
   daily_quota_exhausted: true,
   delivery_in_progress: true,
   script_busy: true,
   booking_batch_too_large: true,
   booking_reference_missing: true,
 };
+
+// A public GET is a deployment health check, not a data endpoint. It lets an
+// operator confirm in an incognito window that the /exec URL is anonymous and
+// that the new script version is live before retrying a ticket resend.
+function doGet() {
+  return buildJsonResponse({
+    ok: true,
+    service: 'ticket-email-and-sheet-sync',
+    supportsBookingSync: true,
+  });
+}
 
 function doPost(requestEvent) {
   var scriptLock = LockService.getScriptLock();
@@ -133,7 +150,7 @@ function handleEmailDeliveryRequest(requestBody) {
       ok: true,
       duplicate: true,
       deliveryId: existingDeliveryRow['Delivery id'],
-      remainingDailyQuota: readRemainingDailyQuota(),
+      remainingDailyQuota: readRemainingDailyQuotaOrNull(),
     });
   }
 
@@ -160,7 +177,7 @@ function handleEmailDeliveryRequest(requestBody) {
 
   var deliveryId = Utilities.getUuid();
 
-  // Reserve the key before sending. If the process dies after MailApp accepts
+  // Reserve the key before sending. If the process dies after Gmail accepts
   // the message, the row stays "sending" and the lease prevents a duplicate.
   upsertDeliveryRow(deliverySheet, existingDeliveryRow, emailRequest, {
     deliveryStatus: 'sending',
@@ -171,23 +188,39 @@ function handleEmailDeliveryRequest(requestBody) {
   var reservedDeliveryRow = findDeliveryRow(deliverySheet, emailRequest.deliveryKey);
 
   try {
-    MailApp.sendMail({
-      to: emailRequest.recipientEmailAddress,
-      subject: emailRequest.emailSubject,
-      body: emailRequest.emailTextBody,
+    var mailOptions = {
       htmlBody: emailRequest.emailHtmlBody,
       name: emailRequest.senderDisplayName,
-      replyTo: emailRequest.replyToEmailAddress,
       attachments: buildMailAttachments(emailRequest.attachments),
-    });
+    };
+
+    // An empty replyTo is rejected by GmailApp, so only add it when the backend
+    // supplied a valid fallback address.
+    if (emailRequest.replyToEmailAddress) {
+      mailOptions.replyTo = emailRequest.replyToEmailAddress;
+    }
+
+    GmailApp.sendEmail(
+      emailRequest.recipientEmailAddress,
+      emailRequest.emailSubject,
+      emailRequest.emailTextBody,
+      mailOptions
+    );
   } catch (mailError) {
+    var mailErrorMessage = truncateErrorMessage(mailError && mailError.message);
+    console.error('mail_send_failed: ' + mailErrorMessage);
+
     upsertDeliveryRow(deliverySheet, reservedDeliveryRow, emailRequest, {
       deliveryStatus: 'failed',
       deliveryId: deliveryId,
-      errorMessage: truncateErrorMessage(mailError && mailError.message),
+      errorMessage: mailErrorMessage,
     }, 0);
 
-    return buildJsonResponse({ ok: false, error: 'mail_send_failed' });
+    return buildJsonResponse({
+      ok: false,
+      error: 'mail_send_failed',
+      mailErrorMessage: mailErrorMessage,
+    });
   }
 
   upsertDeliveryRow(deliverySheet, reservedDeliveryRow, emailRequest, {
@@ -199,7 +232,7 @@ function handleEmailDeliveryRequest(requestBody) {
   return buildJsonResponse({
     ok: true,
     deliveryId: deliveryId,
-    remainingDailyQuota: readRemainingDailyQuota(),
+    remainingDailyQuota: readRemainingDailyQuotaOrNull(),
   });
 }
 
@@ -434,9 +467,21 @@ function buildMailAttachments(attachments) {
 
 function readRemainingDailyQuota() {
   try {
-    return MailApp.getRemainingDailyQuota();
+    return GmailApp.getRemainingDailyQuota();
   } catch (quotaError) {
-    return 0;
+    console.error('gmail_quota_check_failed: ' + quotaError.message);
+    throw new Error('gmail_quota_check_failed');
+  }
+}
+
+// After a successful send, a quota-read failure must not turn a delivered
+// message into a reported failure. The quota field is optional for the backend.
+function readRemainingDailyQuotaOrNull() {
+  try {
+    return GmailApp.getRemainingDailyQuota();
+  } catch (quotaError) {
+    console.error('gmail_quota_read_after_send_failed: ' + quotaError.message);
+    return null;
   }
 }
 
@@ -619,17 +664,74 @@ function buildJsonResponse(responsePayload) {
 }
 
 /**
- * Runs inside the Apps Script editor once to grant the MailApp permission and
+ * Runs inside the Apps Script editor once to grant the Gmail permission and
  * prove the deployment can send. It does not touch the Sheet.
  */
 function sendTestEmailToScriptOwner() {
   var ownerEmailAddress = Session.getActiveUser().getEmail();
-  MailApp.sendEmail({
-    to: ownerEmailAddress,
-    subject: 'Ticket email web app is connected',
-    body:
-      'If you can read this, the Apps Script deployment can send ticket emails.',
-  });
+  GmailApp.sendEmail(
+    ownerEmailAddress,
+    'Ticket email web app is connected',
+    'If you can read this, the Apps Script deployment can send ticket emails.'
+  );
 
   return ownerEmailAddress;
+}
+
+/**
+ * Runs inside the Apps Script editor to diagnose the real webhook path.
+ * It checks the secret, the bound Sheet, the Gmail quota, and a live send,
+ * then writes the result to Apps Script -> Executions.
+ *
+ * It sends one short test email to the script owner; it does not send a ticket
+ * and does not write a delivery row.
+ */
+function diagnoseTicketEmailDelivery() {
+  var diagnosticReport = {
+    sharedSecretConfigured: false,
+    spreadsheetAvailable: false,
+    remainingDailyQuota: null,
+    testEmailSent: false,
+    errorMessage: '',
+  };
+
+  try {
+    diagnosticReport.sharedSecretConfigured = Boolean(
+      PropertiesService.getScriptProperties().getProperty('SHARED_SECRET')
+    );
+
+    diagnosticReport.spreadsheetAvailable = Boolean(
+      SpreadsheetApp.getActiveSpreadsheet()
+    );
+
+    diagnosticReport.remainingDailyQuota =
+      GmailApp.getRemainingDailyQuota();
+
+    var ownerEmailAddress =
+      Session.getActiveUser().getEmail() ||
+      Session.getEffectiveUser().getEmail();
+
+    if (!ownerEmailAddress) {
+      throw new Error('No owner email address is available for the test send');
+    }
+
+    GmailApp.sendEmail(
+      ownerEmailAddress,
+      'Ticket email diagnostic passed',
+      'GmailApp can send from this Apps Script deployment.'
+    );
+    diagnosticReport.testEmailSent = true;
+  } catch (diagnosticError) {
+    diagnosticReport.errorMessage =
+      diagnosticError && diagnosticError.message
+        ? diagnosticError.message
+        : String(diagnosticError);
+
+    console.error(
+      'diagnoseTicketEmailDelivery failed: ' + diagnosticReport.errorMessage
+    );
+  }
+
+  console.log(JSON.stringify(diagnosticReport));
+  return diagnosticReport;
 }
