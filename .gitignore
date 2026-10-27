@@ -10,9 +10,11 @@ frontend/out/
 backend/out/
 backend/cache/
 
-# Environment files (including templates); keep local credentials out of Git.
+# Environment files; keep local credentials out of Git, but keep the public
+# placeholder template reviewable.
 **/.env
 **/.env.*
+!**/.env.example
 
 # Logs and editor files
 *.log

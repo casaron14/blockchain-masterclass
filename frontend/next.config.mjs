@@ -8,6 +8,13 @@ const frontendRootDirectory = path.dirname(fileURLToPath(import.meta.url));
 // backend/ and shared/ files in their deployed bundles.
 const repositoryRootDirectory = path.resolve(frontendRootDirectory, '..');
 
+// .env.local is loaded first so a developer can override the shared .env
+// without editing the file that documents the deployment defaults. Vercel
+// injects real environment variables before this runs, so they still win.
+dotenv.config({
+  path: path.resolve(repositoryRootDirectory, '.env.local'),
+  quiet: true,
+});
 dotenv.config({
   path: path.resolve(repositoryRootDirectory, '.env'),
   quiet: true,
@@ -65,6 +72,9 @@ const nextConfig = {
       './node_modules/pdfkit/js/data/**/*',
       './node_modules/pdfkit/js/standard-fonts/**/*',
       './node_modules/bcrypt/**/*',
+      // next/og renders the ticket PNG with Satori + resvg, which load WASM
+      // and font data from the compiled package at runtime.
+      './node_modules/next/dist/compiled/@vercel/og/**/*',
     ],
   },
   serverExternalPackages: SERVER_DEPENDENCIES_LOADED_AT_RUNTIME,

@@ -7,6 +7,33 @@ export function resolveBookingConfirmationMessage(confirmationResult) {
   const ticketDelivery = confirmationResult?.ticketDelivery;
 
   if (ticketDelivery?.skipped) {
+    if (ticketDelivery.reason === 'ticket_already_sent') {
+      return {
+        tone: 'success',
+        message:
+          'Booking confirmed. This attendee was already emailed a ticket, so no second email was sent.',
+      };
+    }
+
+    if (
+      ticketDelivery.reason === 'gmail_hourly_limit_reached' ||
+      ticketDelivery.reason === 'gmail_daily_limit_reached'
+    ) {
+      return {
+        tone: 'info',
+        message:
+          'Booking confirmed, but the Gmail sending limit has been reached. Use “Resend ticket email” later, or move to a transactional provider for higher volume.',
+      };
+    }
+
+    if (ticketDelivery.reason === 'invalid_attendee_email_address') {
+      return {
+        tone: 'error',
+        message:
+          'Booking confirmed, but the attendee email address is not valid. Correct the email and use “Resend ticket email”.',
+      };
+    }
+
     return {
       tone: 'success',
       message:

@@ -99,6 +99,11 @@ CREATE TABLE IF NOT EXISTS bookings (
   email           TEXT NOT NULL,
   status          booking_status NOT NULL DEFAULT 'pending',
 
+  -- set only after the ticket email has been accepted by the mail server.
+  -- A NULL value means no ticket has been delivered yet, so a confirmation
+  -- retry or a repeated webhook may still attempt delivery.
+  ticket_sent_at  TIMESTAMPTZ,
+
   -- which invite link / marketing channel this attendee arrived through
   -- (e.g. "neema" for a personal invite, or a campaign source). NULL means
   -- the attendee did not arrive through a tracked link.
@@ -115,8 +120,13 @@ CREATE TABLE IF NOT EXISTS bookings (
   CONSTRAINT bookings_email_format_chk CHECK (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$')
 );
 
--- add the column to an existing deployment without dropping data
+-- add the columns to an existing deployment without dropping data
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS utm_source TEXT;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_sent_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_bookings_ticket_sent_at
+  ON bookings (ticket_sent_at)
+  WHERE ticket_sent_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_bookings_phone  ON bookings (phone_number);
 CREATE INDEX IF NOT EXISTS idx_bookings_email  ON bookings (email);
@@ -354,6 +364,11 @@ CREATE TABLE IF NOT EXISTS ticket_deliveries (
   last_error       TEXT,
   sent_at          TIMESTAMPTZ,
 
+  -- short-lived lock so two confirmations for the same booking cannot both
+  -- send a ticket. It is cleared on success or failure and expires on its own
+  -- if the process dies mid-send.
+  send_claimed_at  TIMESTAMPTZ,
+
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -364,6 +379,8 @@ CREATE TABLE IF NOT EXISTS ticket_deliveries (
 -- surfaces a 500 on every ticket delivery.
 ALTER TABLE ticket_deliveries
   ADD COLUMN IF NOT EXISTS status delivery_status NOT NULL DEFAULT 'pending';
+ALTER TABLE ticket_deliveries
+  ADD COLUMN IF NOT EXISTS send_claimed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_ticket_deliveries_status
   ON ticket_deliveries (status);

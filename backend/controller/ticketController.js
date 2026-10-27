@@ -2,7 +2,12 @@ import fs from 'node:fs';
 
 import {
   redeliverFailedTicketEmail,
+  TICKET_EMAIL_ALREADY_SENT_REASON,
   TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+  TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON,
+  TICKET_EMAIL_DAILY_LIMIT_REACHED_REASON,
+  TICKET_EMAIL_INVALID_RECIPIENT_REASON,
+  TICKET_EMAIL_SEND_IN_PROGRESS_REASON,
 } from '../services/ticketDeliveryService.js';
 import { fetchBookingRecordByReferenceCode } from '../services/bookingService.js';
 import { generateTicketPdfBuffer } from '../services/ticketPdfService.js';
@@ -25,11 +30,25 @@ async function redeliverTicketEmailEndpoint(req, res) {
     }
 
     if (deliveryResult.skipped) {
+      const skipMessageByReason = {
+        [TICKET_EMAIL_DELIVERY_DISABLED_REASON]:
+          'Email delivery is disabled; the attendee downloads the ticket from the booking lookup',
+        [TICKET_EMAIL_ALREADY_SENT_REASON]:
+          'This ticket has already been emailed to the attendee',
+        [TICKET_EMAIL_SEND_IN_PROGRESS_REASON]:
+          'A ticket email is already being sent for this booking',
+        [TICKET_EMAIL_INVALID_RECIPIENT_REASON]:
+          'This booking has no valid attendee email address',
+        [TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON]:
+          'The Gmail hourly sending limit has been reached; try again later',
+        [TICKET_EMAIL_DAILY_LIMIT_REACHED_REASON]:
+          'The Gmail daily sending limit has been reached; try again tomorrow',
+      };
+
       return res.status(409).json({
         message:
-          deliveryResult.reason === TICKET_EMAIL_DELIVERY_DISABLED_REASON
-            ? 'Email delivery is disabled; the attendee downloads the ticket from the booking lookup'
-            : 'Ticket is only available for confirmed bookings',
+          skipMessageByReason[deliveryResult.reason] ??
+          'Ticket is only available for confirmed bookings',
         bookingId: deliveryResult.bookingId,
         reason: deliveryResult.reason ?? null,
       });

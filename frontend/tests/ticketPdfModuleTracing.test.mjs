@@ -65,3 +65,15 @@ test('pdfkit stays outside the webpack bundle so it resolves its own font module
     'pdfkit must be listed in serverExternalPackages to load #standard-fonts at runtime',
   );
 });
+
+test('the API function trace includes the next/og WASM and font assets', () => {
+  const apiTracingIncludeGlobs =
+    nextConfig.outputFileTracingIncludes[API_FUNCTION_TRACING_KEY];
+
+  assert.ok(
+    apiTracingIncludeGlobs.some((tracingIncludeGlob) =>
+      tracingIncludeGlob.includes('node_modules/next/dist/compiled/@vercel/og'),
+    ),
+    'next/og must be traced so the ticket PNG can render in a deployed function',
+  );
+});

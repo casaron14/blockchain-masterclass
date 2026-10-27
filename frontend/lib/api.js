@@ -258,6 +258,13 @@ export function adminConfirmBooking(bookingId, adminToken) {
   });
 }
 
+export function adminRedeliverTicketEmail(bookingId, adminToken) {
+  return request(`/api/tickets/redeliver/${bookingId}`, {
+    method: 'POST',
+    headers: buildAdminAuthorizationHeaders(adminToken),
+  });
+}
+
 export async function fetchAdminOfflinePaymentReceiptFile(bookingId, adminToken) {
   const response = await fetch(`${API_BASE_URL}/api/admin/bookings/${bookingId}/offline-receipt`, {
     headers: buildAdminAuthorizationHeaders(adminToken),

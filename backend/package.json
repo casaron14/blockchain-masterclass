@@ -11,6 +11,7 @@
     "local:pay": "node local-dev/simulateUsdtPayment.mjs",
     "test": "TEST_DATABASE_NAME=masterclass_test DB_DATABASE=masterclass_test npm run test:isolated",
     "test:isolated": "node --test --test-concurrency=1 --test-force-exit 'tests/**/*.test.js'",
+    "test:ticket-email": "node scripts/sendDevelopmentTestTicketEmail.js",
     "db:migrate": "node scripts/runDatabaseMigrations.js",
     "sweep:prepare": "node scripts/prepareSweepBatchForOfflineSigning.js",
     "sweep:sign": "node scripts/signSweepBatchOnOfflineMachine.js",

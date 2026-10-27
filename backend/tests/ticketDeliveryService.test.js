@@ -10,6 +10,8 @@ import {
   deliverTicketForConfirmedBooking,
   redeliverFailedTicketEmail,
   sendTicketEmailToAttendee,
+  TICKET_EMAIL_ALREADY_SENT_REASON,
+  TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON,
   TICKET_EMAIL_DELIVERY_DISABLED_REASON,
 } from '../services/ticketDeliveryService.js';
 
@@ -18,6 +20,7 @@ import { buildTicketQrCodeUrl } from '../services/ticketQrCodeService.js';
 import {
   createBookingRecordWithActiveSeatHold,
   confirmBookingSeatWithinCapacity,
+  fetchBookingRecordById,
 } from '../services/bookingService.js';
 
 import { createPendingPaymentRecordForBooking } from '../services/paymentService.js';
@@ -202,9 +205,13 @@ test('deliverTicketForConfirmedBooking records a sent delivery on success', asyn
   assert.ok(deliveryRecord.sent_at);
   assert.equal(deliveryRecord.attempt_count, 1);
   assert.equal(deliveryRecord.qr_payload, 'https://link.inkryptus.com/?referral=');
+
+  const refreshedBooking = await fetchBookingRecordById(confirmedBooking.id);
+  assert.ok(refreshedBooking.ticket_sent_at);
+  assert.equal(refreshedBooking.ticket_sent_at.getTime(), deliveryRecord.sent_at.getTime());
 });
 
-test('deliverTicketForConfirmedBooking records a failed delivery with a reason', async () => {
+test('deliverTicketForConfirmedBooking records a failed delivery and leaves ticket_sent_at empty', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const failingSender = async () => {
     throw new Error('SMTP refused connection');
@@ -219,6 +226,119 @@ test('deliverTicketForConfirmedBooking records a failed delivery with a reason',
   assert.equal(deliveryRecord.status, 'failed');
   assert.equal(deliveryRecord.last_error, 'SMTP refused connection');
   assert.equal(deliveryRecord.attempt_count, 1);
+
+  const refreshedBooking = await fetchBookingRecordById(confirmedBooking.id);
+  assert.equal(refreshedBooking.ticket_sent_at, null);
+});
+
+test('deliverTicketForConfirmedBooking sends once when two confirmations race', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  let sendCount = 0;
+  let releaseFirstSend;
+  const firstSendMayFinish = new Promise((resolve) => {
+    releaseFirstSend = resolve;
+  });
+
+  const slowFirstSender = async () => {
+    sendCount += 1;
+    await firstSendMayFinish;
+    return { ok: true };
+  };
+
+  const firstDelivery = deliverTicketForConfirmedBooking(
+    confirmedBooking.id,
+    slowFirstSender
+  );
+
+  // Let the first caller take the claim before the second caller checks it.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const secondDelivery = await deliverTicketForConfirmedBooking(
+    confirmedBooking.id,
+    async () => {
+      sendCount += 1;
+      return { ok: true };
+    }
+  );
+
+  releaseFirstSend();
+  const firstDeliveryResult = await firstDelivery;
+
+  assert.equal(firstDeliveryResult.delivered, true);
+  assert.equal(secondDelivery.delivered, false);
+  assert.equal(secondDelivery.skipped, true);
+  assert.equal(sendCount, 1);
+
+  const deliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
+  assert.equal(deliveryRecord.status, 'sent');
+  assert.equal(deliveryRecord.attempt_count, 1);
+});
+
+test('deliverTicketForConfirmedBooking never sends a second ticket for the same booking', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  const sentBookingIds = [];
+  const stubSender = async (bookingRecord) => {
+    sentBookingIds.push(bookingRecord.id);
+    return { ok: true };
+  };
+
+  const firstResult = await deliverTicketForConfirmedBooking(
+    confirmedBooking.id,
+    stubSender
+  );
+  const secondResult = await deliverTicketForConfirmedBooking(
+    confirmedBooking.id,
+    stubSender
+  );
+
+  assert.equal(firstResult.delivered, true);
+  assert.equal(secondResult.delivered, false);
+  assert.equal(secondResult.skipped, true);
+  assert.equal(secondResult.reason, TICKET_EMAIL_ALREADY_SENT_REASON);
+  assert.deepEqual(sentBookingIds, [confirmedBooking.id]);
+});
+
+test('deliverTicketForConfirmedBooking stops at the configured hourly Gmail limit', async () => {
+  const previousHourlyLimit = process.env.TICKET_EMAIL_HOURLY_LIMIT;
+  process.env.TICKET_EMAIL_HOURLY_LIMIT = '1';
+
+  try {
+    const firstBooking = await createConfirmedBooking();
+    const secondBooking = await createConfirmedBooking();
+    const sentBookingIds = [];
+    const stubSender = async (bookingRecord) => {
+      sentBookingIds.push(bookingRecord.id);
+      return { ok: true };
+    };
+
+    const firstResult = await deliverTicketForConfirmedBooking(
+      firstBooking.id,
+      stubSender
+    );
+    const secondResult = await deliverTicketForConfirmedBooking(
+      secondBooking.id,
+      stubSender
+    );
+
+    assert.equal(firstResult.delivered, true);
+    assert.equal(secondResult.delivered, false);
+    assert.equal(secondResult.skipped, true);
+    assert.equal(secondResult.reason, TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON);
+    assert.deepEqual(sentBookingIds, [firstBooking.id]);
+
+    const secondDeliveryRecord = await fetchDeliveryRecordForBooking(secondBooking.id);
+    assert.equal(secondDeliveryRecord.status, 'failed');
+    assert.equal(secondDeliveryRecord.last_error, TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON);
+
+    const secondBookingAfterAttempt = await fetchBookingRecordById(secondBooking.id);
+    assert.equal(secondBookingAfterAttempt.ticket_sent_at, null);
+  } finally {
+    if (previousHourlyLimit === undefined) {
+      delete process.env.TICKET_EMAIL_HOURLY_LIMIT;
+    } else {
+      process.env.TICKET_EMAIL_HOURLY_LIMIT = previousHourlyLimit;
+    }
+  }
 });
 
 test('redeliverFailedTicketEmail flips a failed delivery to sent', async () => {
@@ -239,9 +359,12 @@ test('redeliverFailedTicketEmail flips a failed delivery to sent', async () => {
   assert.equal(redelivered.status, 'sent');
   assert.equal(redelivered.last_error, null);
   assert.equal(redelivered.attempt_count, 2);
+
+  const refreshedBooking = await fetchBookingRecordById(confirmedBooking.id);
+  assert.ok(refreshedBooking.ticket_sent_at);
 });
 
-test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to the email', async () => {
+test('sendTicketEmailToAttendee attaches the ticket PNG and any receipt PDF to the email', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const sentMessages = [];
   const recordingTransport = {
@@ -262,14 +385,17 @@ test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to t
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].to, confirmedBooking.email);
-  assert.match(sentMessages[0].html, /^data:image\/png;base64,|.*base64,/s);
+  assert.match(sentMessages[0].html, /Your ticket is ready/);
+  assert.match(sentMessages[0].html, new RegExp(`EVT-${confirmedBooking.ref}`));
   assert.equal(sentMessages[0].attachments.length, 2);
 
   const ticketAttachment = sentMessages[0].attachments[0];
-  assert.equal(ticketAttachment.filename, `ticket-${confirmedBooking.ref}.pdf`);
-  assert.equal(ticketAttachment.contentType, 'application/pdf');
+  assert.equal(ticketAttachment.filename, `ticket-${confirmedBooking.ref}.png`);
+  assert.equal(ticketAttachment.contentType, 'image/png');
   assert.ok(Buffer.isBuffer(ticketAttachment.content));
-  assert.equal(ticketAttachment.content.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(ticketAttachment.content.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(ticketAttachment.content.readUInt32BE(16), 1200);
+  assert.equal(ticketAttachment.content.readUInt32BE(20), 630);
 
   const receiptAttachment = sentMessages[0].attachments[1];
   assert.equal(
@@ -280,7 +406,7 @@ test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to t
   assert.equal(receiptAttachment.content.subarray(0, 5).toString(), '%PDF-');
 });
 
-test('sendTicketEmailToAttendee attaches only the ticket PDF when no receipt exists', async () => {
+test('sendTicketEmailToAttendee attaches only the ticket PNG when no receipt exists', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const sentMessages = [];
   const recordingTransport = {
@@ -293,7 +419,8 @@ test('sendTicketEmailToAttendee attaches only the ticket PDF when no receipt exi
   await sendTicketEmailToAttendee(confirmedBooking, { transport: recordingTransport });
 
   assert.equal(sentMessages[0].attachments.length, 1);
-  assert.equal(sentMessages[0].attachments[0].filename, `ticket-${confirmedBooking.ref}.pdf`);
+  assert.equal(sentMessages[0].attachments[0].filename, `ticket-${confirmedBooking.ref}.png`);
+  assert.equal(sentMessages[0].attachments[0].contentType, 'image/png');
 });
 
 test('deliverTicketForConfirmedBooking sends the receipt email after the ticket when a receipt is given', async () => {

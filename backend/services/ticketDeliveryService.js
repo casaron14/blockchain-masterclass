@@ -3,20 +3,37 @@ import QRCode from 'qrcode';
 
 import { fetchBookingRecordById } from './bookingService.js';
 
-import { createConfiguredEmailTransport } from './emailTransportService.js';
-import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
-
 import {
-  EVENT_TITLE,
+  createConfiguredEmailTransport,
+  resolveOutboundEmailSenderIdentity,
+} from './emailTransportService.js';
+import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
+import {
   EVENT_DATE_LABEL,
   EVENT_LOCATION,
+  EVENT_TITLE,
+  PLATFORM_BRAND_NAME,
 } from './eventConfigService.js';
+import {
+  InvalidAttendeeEmailAddressError,
+  validateAttendeeEmailAddressForTicketDelivery,
+} from './attendeeEmailAddressValidator.js';
+import { logError, logWarning } from '../utils/applicationLogger.js';
 
 export const DEFAULT_EVENT_TITLE = EVENT_TITLE;
 export const DEFAULT_EVENT_DATE = EVENT_DATE_LABEL;
 export const DEFAULT_EVENT_LOCATION = EVENT_LOCATION;
 
 export const TICKET_EMAIL_DELIVERY_DISABLED_REASON = 'email_delivery_disabled';
+export const TICKET_EMAIL_ALREADY_SENT_REASON = 'ticket_already_sent';
+export const TICKET_EMAIL_SEND_IN_PROGRESS_REASON = 'ticket_email_send_in_progress';
+export const TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON = 'gmail_hourly_limit_reached';
+export const TICKET_EMAIL_DAILY_LIMIT_REACHED_REASON = 'gmail_daily_limit_reached';
+export const TICKET_EMAIL_INVALID_RECIPIENT_REASON = 'invalid_attendee_email_address';
+
+const TICKET_EMAIL_SEND_CLAIM_LEASE_MINUTES = 15;
+const DEFAULT_TICKET_EMAIL_HOURLY_LIMIT = 20;
+const DEFAULT_TICKET_EMAIL_DAILY_LIMIT = 500;
 
 // A deployment can run without email: the attendee downloads the ticket PDF
 // from the booking lookup. Setting EMAIL_DELIVERY_ENABLED=false stops a
@@ -47,43 +64,123 @@ export async function renderTicketQrDataUrl(bookingRecord) {
   return QRCode.toDataURL(buildTicketQrCodeUrl(bookingRecord));
 }
 
-export function buildTicketEmailHtml(bookingRecord, qrDataUrl) {
-  const eventDetails = getEventDetails();
-  return `
-    <h2>Your ticket for ${eventDetails.eventTitle}</h2>
-    <p>Hi ${bookingRecord.full_name},</p>
-    <p>Thank you for your booking. Here are your ticket details:</p>
-    <table style="border-collapse: collapse;">
-      <tr><td><strong>Ticket ID</strong></td><td>EVT-${bookingRecord.ref}</td></tr>
-      <tr><td><strong>Booking Reference</strong></td><td>${bookingRecord.ref}</td></tr>
-      <tr><td><strong>Event</strong></td><td>${eventDetails.eventTitle}</td></tr>
-      <tr><td><strong>Date</strong></td><td>${eventDetails.eventDate}</td></tr>
-      <tr><td><strong>Location</strong></td><td>${eventDetails.eventLocation}</td></tr>
-    </table>
-    <p><img src="${qrDataUrl}" alt="Ticket QR code" style="width: 180px; height: 180px;" /></p>
-    <p>Present this QR code at the venue for check-in.</p>
-  `;
+function escapeHtmlTextForTicketEmail(htmlTextValue) {
+  return String(htmlTextValue)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 export function buildTicketEmailSubject(bookingRecord) {
-  const eventDetails = getEventDetails();
-  return `Your ticket for ${eventDetails.eventTitle} (${bookingRecord.ref})`;
+  return `Your ${EVENT_TITLE} ticket (EVT-${bookingRecord.ref})`;
 }
 
 export function resolveTicketSenderAddress() {
-  return process.env.MAIL_FROM || 'tickets@blockchainmasterclass.example';
+  return resolveOutboundEmailSenderIdentity().address;
+}
+
+export function buildTicketEmailHtml(bookingRecord) {
+  const eventDetails = getEventDetails();
+  const attendeeName = escapeHtmlTextForTicketEmail(bookingRecord.full_name);
+  const eventTitle = escapeHtmlTextForTicketEmail(eventDetails.eventTitle);
+  const eventDate = escapeHtmlTextForTicketEmail(eventDetails.eventDate);
+  const eventLocation = escapeHtmlTextForTicketEmail(eventDetails.eventLocation);
+  const ticketCode = escapeHtmlTextForTicketEmail(`EVT-${bookingRecord.ref}`);
+  const brandName = escapeHtmlTextForTicketEmail(PLATFORM_BRAND_NAME);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your ticket for ${eventTitle}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#E9E2D5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E9E2D5;">
+    <tr>
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:560px;background-color:#F2EDE3;border:1px solid #CAC6BD;">
+          <tr>
+            <td style="background-color:#14120E;padding:26px 30px;border-bottom:3px solid #A34A25;">
+              <div style="font-family:'Courier New',Courier,monospace;font-size:12px;letter-spacing:3px;color:#C9703F;">${brandName.toUpperCase()}</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:27px;line-height:1.2;color:#F2EDE3;margin-top:14px;">Your ticket is ready</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 30px 0 30px;">
+              <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#14120E;">Hi ${attendeeName},</p>
+              <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#615A4D;">Your booking is confirmed. Your ticket is attached to this email as a PNG image. Show it on your phone at the entrance.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 30px 0 30px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;width:38%;">EVENT</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#14120E;">${eventTitle}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;">DATE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#14120E;">${eventDate}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;">VENUE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#14120E;">${eventLocation}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;">TICKET CODE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:13px;color:#14120E;">${ticketCode}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:26px 30px 30px 30px;">
+              <div style="border-top:1px dashed #A34A25;padding-top:16px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#615A4D;">
+                Keep this email. If you cannot open the attachment, download the PDF from the booking lookup using reference ${escapeHtmlTextForTicketEmail(bookingRecord.ref)}.
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export function buildTicketEmailText(bookingRecord) {
+  const eventDetails = getEventDetails();
+  const ticketCode = `EVT-${bookingRecord.ref}`;
+
+  return [
+    `Hi ${bookingRecord.full_name},`,
+    '',
+    `Your booking for ${eventDetails.eventTitle} is confirmed.`,
+    `Date: ${eventDetails.eventDate}`,
+    `Venue: ${eventDetails.eventLocation}`,
+    `Ticket code: ${ticketCode}`,
+    '',
+    `Your ticket is attached as ticket-${bookingRecord.ref}.png. Show it on your phone at the entrance.`,
+    '',
+    `You can also download the PDF from the booking lookup using reference ${bookingRecord.ref}.`,
+    '',
+    PLATFORM_BRAND_NAME,
+  ].join('\n');
 }
 
 export function buildTicketEmailAttachments(
-  ticketPdfBuffer,
+  ticketPngBuffer,
   bookingRecord,
   receiptPdfArtifact = null
 ) {
   const attachments = [
     {
-      filename: `ticket-${bookingRecord.ref}.pdf`,
-      content: ticketPdfBuffer,
-      contentType: 'application/pdf',
+      filename: `ticket-${bookingRecord.ref}.png`,
+      content: ticketPngBuffer,
+      contentType: 'image/png',
     },
   ];
 
@@ -98,86 +195,232 @@ export function buildTicketEmailAttachments(
   return attachments;
 }
 
-export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
-  const { generateTicketPdfBuffer } = await import('./ticketPdfService.js');
+// next/og is a Next.js package. Load it only when a ticket is actually being
+// rendered so the Express process can still start when email is disabled.
+async function generateTicketPngArtifactForBooking(bookingRecord) {
+  const { renderTicketPngBufferForBooking, renderBookingCodeQrDataUrl } =
+    await import('../../frontend/lib/ticketImageRenderer.mjs');
 
-  const qrDataUrl = await renderTicketQrDataUrl(bookingRecord);
-  const ticketPdfBuffer = await generateTicketPdfBuffer(
-    bookingRecord,
-    options.paymentSummary ?? null
-  );
+  const qrDataUrl = await renderBookingCodeQrDataUrl(bookingRecord);
+  const ticketPngBuffer = await renderTicketPngBufferForBooking(bookingRecord, {
+    qrDataUrl,
+    eventTimeLabel: process.env.EVENT_TIME_LABEL?.trim() || '',
+  });
+
+  return { qrDataUrl, ticketPngBuffer };
+}
+
+export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
+  const attendeeEmailAddress =
+    validateAttendeeEmailAddressForTicketDelivery(bookingRecord);
+
+  const { qrDataUrl, ticketPngBuffer } =
+    options.ticketPngBuffer && options.qrDataUrl
+      ? { qrDataUrl: options.qrDataUrl, ticketPngBuffer: options.ticketPngBuffer }
+      : await generateTicketPngArtifactForBooking(bookingRecord);
+
   const transport = options.transport ?? (await createConfiguredEmailTransport());
-  const fromAddress = resolveTicketSenderAddress();
+  const senderIdentity = resolveOutboundEmailSenderIdentity();
 
   await transport.sendMail({
-    from: fromAddress,
-    to: bookingRecord.email,
+    from: senderIdentity,
+    to: attendeeEmailAddress,
     subject: buildTicketEmailSubject(bookingRecord),
-    html: buildTicketEmailHtml(bookingRecord, qrDataUrl),
+    text: buildTicketEmailText(bookingRecord),
+    html: buildTicketEmailHtml(bookingRecord),
     attachments: buildTicketEmailAttachments(
-      ticketPdfBuffer,
+      ticketPngBuffer,
       bookingRecord,
       options.receiptPdfArtifact ?? null
     ),
   });
 
-  return { qrDataUrl };
+  return {
+    qrDataUrl,
+    ticketPngBuffer,
+    ticketAttachmentFileName: `ticket-${bookingRecord.ref}.png`,
+  };
 }
 
-async function fetchDeliveryRecordForBooking(bookingId) {
-  const result = await pool.query(
-    'SELECT * FROM ticket_deliveries WHERE booking_id = $1',
-    [bookingId]
-  );
-  return result.rows[0] ?? null;
-}
+// The claim is the single atomic gate. Two confirmations may both reach this
+// function, but only the one whose UPDATE finds a free claim (or an expired
+// claim) gets a row back. The booking's ticket_sent_at is checked in the same
+// statement, so an already-delivered ticket can never be claimed again.
+export async function claimTicketEmailSendForBooking(bookingRecord) {
+  const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
 
-async function insertDeliveryRecord(bookingId, ticketQrCodeUrl) {
-  const result = await pool.query(
+  await pool.query(
     `INSERT INTO ticket_deliveries (booking_id, qr_payload)
      VALUES ($1, $2)
-     RETURNING *`,
-    [bookingId, ticketQrCodeUrl]
+     ON CONFLICT (booking_id) DO NOTHING`,
+    [bookingRecord.id, ticketQrCodeUrl]
   );
-  return result.rows[0];
+
+  const claimResult = await pool.query(
+    `UPDATE ticket_deliveries AS ticket_delivery
+        SET send_claimed_at = now(),
+            attempt_count = ticket_delivery.attempt_count + 1,
+            last_error = NULL,
+            updated_at = now()
+      WHERE ticket_delivery.booking_id = $1
+        AND ticket_delivery.status IN ('pending', 'failed')
+        AND (
+          ticket_delivery.send_claimed_at IS NULL
+          OR ticket_delivery.send_claimed_at < now() - ($2 * INTERVAL '1 minute')
+        )
+        AND EXISTS (
+          SELECT 1
+            FROM bookings AS booking_record
+           WHERE booking_record.id = ticket_delivery.booking_id
+             AND booking_record.status = 'confirmed'
+             AND booking_record.ticket_sent_at IS NULL
+        )
+      RETURNING ticket_delivery.*`,
+    [bookingRecord.id, TICKET_EMAIL_SEND_CLAIM_LEASE_MINUTES]
+  );
+
+  return claimResult.rows[0] ?? null;
 }
 
-async function markDeliverySent(deliveryId) {
-  await pool.query(
-    `UPDATE ticket_deliveries
-        SET status = 'sent', last_error = NULL, sent_at = now(), updated_at = now(),
-            attempt_count = attempt_count + 1
-      WHERE id = $1`,
-    [deliveryId]
-  );
+async function markTicketEmailDeliveredForBooking(bookingRecord, deliveryRecord) {
+  const databaseClient = await pool.connect();
+
+  try {
+    await databaseClient.query('BEGIN');
+
+    await databaseClient.query(
+      `UPDATE bookings
+          SET ticket_sent_at = now(), updated_at = now()
+        WHERE id = $1 AND ticket_sent_at IS NULL`,
+      [bookingRecord.id]
+    );
+
+    await databaseClient.query(
+      `UPDATE ticket_deliveries
+          SET status = 'sent',
+              sent_at = now(),
+              send_claimed_at = NULL,
+              last_error = NULL,
+              updated_at = now()
+        WHERE id = $1`,
+      [deliveryRecord.id]
+    );
+
+    await databaseClient.query('COMMIT');
+  } catch (error) {
+    await databaseClient.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    databaseClient.release();
+  }
 }
 
-async function markDeliveryFailed(deliveryId, errorMessage) {
+async function markTicketEmailSendFailedForBooking(deliveryRecordId, failureReason) {
   await pool.query(
     `UPDATE ticket_deliveries
-        SET status = 'failed', last_error = $1, updated_at = now(),
-            attempt_count = attempt_count + 1
+        SET status = 'failed',
+            send_claimed_at = NULL,
+            last_error = $1,
+            updated_at = now()
       WHERE id = $2`,
-    [errorMessage, deliveryId]
+    [failureReason, deliveryRecordId]
   );
 }
 
-export async function fetchFailedTicketDeliveryRecordsBelowMaxAttempts(maxAttempts) {
-  const result = await pool.query(
-    `SELECT td.*
-       FROM ticket_deliveries td
-       JOIN bookings b ON b.id = td.booking_id
-      WHERE td.status = 'failed'
-        AND b.status = 'confirmed'
-        AND td.attempt_count < $1
-      ORDER BY td.updated_at ASC`,
-    [maxAttempts]
+async function recordTicketEmailSendBlockedForBooking(bookingId, blockedReason) {
+  await pool.query(
+    `INSERT INTO ticket_deliveries (booking_id, status, last_error)
+     VALUES ($1, 'failed', $2)
+     ON CONFLICT (booking_id) DO UPDATE
+       SET status = 'failed',
+           send_claimed_at = NULL,
+           last_error = EXCLUDED.last_error,
+           updated_at = now()
+     WHERE ticket_deliveries.status <> 'sent'`,
+    [bookingId, blockedReason]
   );
-  return result.rows;
 }
 
-export function resolveTicketDeliveryMaxAttempts() {
-  return Number(process.env.TICKET_DELIVERY_MAX_ATTEMPTS || 5);
+function resolveConfiguredTicketEmailLimit(environmentValue, defaultLimit) {
+  if (environmentValue === undefined || environmentValue === '') {
+    return defaultLimit;
+  }
+
+  const parsedLimit = Number(environmentValue);
+  return Number.isFinite(parsedLimit) && parsedLimit >= 0
+    ? Math.floor(parsedLimit)
+    : defaultLimit;
+}
+
+export function resolveTicketEmailHourlyLimit() {
+  return resolveConfiguredTicketEmailLimit(
+    process.env.TICKET_EMAIL_HOURLY_LIMIT,
+    DEFAULT_TICKET_EMAIL_HOURLY_LIMIT
+  );
+}
+
+export function resolveTicketEmailDailyLimit() {
+  return resolveConfiguredTicketEmailLimit(
+    process.env.TICKET_EMAIL_DAILY_LIMIT,
+    DEFAULT_TICKET_EMAIL_DAILY_LIMIT
+  );
+}
+
+// Gmail's free tier is about 20 messages per hour and 500 recipients per day.
+// The count reads the ticket delivery ledger, which has one row per booking, so
+// one booking counts as one recipient. Set a limit to 0 to disable that guard.
+export async function checkTicketEmailSendQuota() {
+  const hourlyLimit = resolveTicketEmailHourlyLimit();
+  const dailyLimit = resolveTicketEmailDailyLimit();
+
+  if (hourlyLimit === 0 && dailyLimit === 0) {
+    return { allowed: true, hourlyLimit, dailyLimit };
+  }
+
+  const quotaResult = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE sent_at >= now() - INTERVAL '1 hour'
+       )::int AS hourly_sent_count,
+       COUNT(*) FILTER (
+         WHERE sent_at >= now() - INTERVAL '24 hours'
+       )::int AS daily_sent_count
+     FROM ticket_deliveries
+     WHERE status = 'sent' AND sent_at IS NOT NULL`
+  );
+
+  const { hourly_sent_count: hourlySentCount, daily_sent_count: dailySentCount } =
+    quotaResult.rows[0];
+
+  if (dailyLimit > 0 && dailySentCount >= dailyLimit) {
+    return {
+      allowed: false,
+      reason: TICKET_EMAIL_DAILY_LIMIT_REACHED_REASON,
+      hourlyLimit,
+      dailyLimit,
+      hourlySentCount,
+      dailySentCount,
+    };
+  }
+
+  if (hourlyLimit > 0 && hourlySentCount >= hourlyLimit) {
+    return {
+      allowed: false,
+      reason: TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON,
+      hourlyLimit,
+      dailyLimit,
+      hourlySentCount,
+      dailySentCount,
+    };
+  }
+
+  return {
+    allowed: true,
+    hourlyLimit,
+    dailyLimit,
+    hourlySentCount,
+    dailySentCount,
+  };
 }
 
 // The receipt PDF is produced (not marked issued) before the ticket email goes
@@ -219,55 +462,90 @@ export async function deliverPaymentReceiptAfterTicketDelivery(
   }
 }
 
-export async function deliverTicketForConfirmedBooking(
-  bookingId,
-  sendTicketEmail = sendTicketEmailToAttendee,
-  deliveryOptions = {}
+async function deliverTicketEmailForConfirmedBooking(
+  bookingRecord,
+  sendTicketEmail,
+  deliveryOptions
 ) {
-  const bookingRecord = await fetchBookingRecordById(bookingId);
-  if (!bookingRecord) {
-    return null;
-  }
-
-  if (bookingRecord.status !== 'confirmed') {
-    return { skipped: true, bookingId: bookingRecord.id };
-  }
-
-  if (!isTicketEmailDeliveryEnabled()) {
-    // No delivery row is written: the ticket is generated from the booking on
-    // demand by GET /api/tickets/:bookingRef/download, so there is nothing to
-    // retry and nothing the retry job can pick up.
+  if (bookingRecord.ticket_sent_at) {
     return {
       delivered: false,
       skipped: true,
-      reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+      reason: TICKET_EMAIL_ALREADY_SENT_REASON,
       bookingId: bookingRecord.id,
     };
   }
 
-  const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
+  let attendeeEmailAddress;
+  try {
+    attendeeEmailAddress = validateAttendeeEmailAddressForTicketDelivery(bookingRecord);
+  } catch (error) {
+    if (error instanceof InvalidAttendeeEmailAddressError) {
+      logError('ticket_email_invalid_recipient', {
+        bookingId: bookingRecord.id,
+        reason: TICKET_EMAIL_INVALID_RECIPIENT_REASON,
+      });
+      return {
+        delivered: false,
+        skipped: true,
+        reason: TICKET_EMAIL_INVALID_RECIPIENT_REASON,
+        bookingId: bookingRecord.id,
+      };
+    }
+    throw error;
+  }
 
-  const existingDeliveryRecord = await fetchDeliveryRecordForBooking(bookingId);
-  const deliveryRecord =
-    existingDeliveryRecord ?? (await insertDeliveryRecord(bookingId, ticketQrCodeUrl));
+  const quotaCheck = await checkTicketEmailSendQuota();
+  if (!quotaCheck.allowed) {
+    await recordTicketEmailSendBlockedForBooking(bookingRecord.id, quotaCheck.reason);
+    logWarning('ticket_email_rate_limited', {
+      bookingId: bookingRecord.id,
+      reason: quotaCheck.reason,
+      hourlySentCount: quotaCheck.hourlySentCount,
+      dailySentCount: quotaCheck.dailySentCount,
+      hourlyLimit: quotaCheck.hourlyLimit,
+      dailyLimit: quotaCheck.dailyLimit,
+    });
+    return {
+      delivered: false,
+      skipped: true,
+      reason: quotaCheck.reason,
+      bookingId: bookingRecord.id,
+    };
+  }
+
+  const deliveryRecord = await claimTicketEmailSendForBooking(bookingRecord);
+  if (!deliveryRecord) {
+    const refreshedBookingRecord = await fetchBookingRecordById(bookingRecord.id);
+
+    return {
+      delivered: false,
+      skipped: true,
+      reason: refreshedBookingRecord?.ticket_sent_at
+        ? TICKET_EMAIL_ALREADY_SENT_REASON
+        : TICKET_EMAIL_SEND_IN_PROGRESS_REASON,
+      bookingId: bookingRecord.id,
+    };
+  }
 
   const receiptRecord = deliveryOptions.receiptRecord ?? null;
   const deliverReceiptEmail = deliveryOptions.deliverReceiptEmail ?? null;
-  const builtReceiptPdf = receiptRecord
-    ? await buildReceiptPdfAttachmentForTicketEmail(bookingId, receiptRecord)
-    : null;
 
   try {
-    await sendTicketEmail(bookingRecord, {
+    const builtReceiptPdf = receiptRecord
+      ? await buildReceiptPdfAttachmentForTicketEmail(bookingRecord.id, receiptRecord)
+      : null;
+
+    const sendResult = await sendTicketEmail(bookingRecord, {
       receiptPdfArtifact: builtReceiptPdf,
       paymentSummary: deliveryOptions.paymentSummary ?? null,
     });
-    await markDeliverySent(deliveryRecord.id);
+    await markTicketEmailDeliveredForBooking(bookingRecord, deliveryRecord);
 
     const receiptDelivery =
       builtReceiptPdf && deliverReceiptEmail
         ? await deliverPaymentReceiptAfterTicketDelivery(
-            bookingId,
+            bookingRecord.id,
             receiptRecord,
             builtReceiptPdf,
             deliverReceiptEmail
@@ -278,61 +556,139 @@ export async function deliverTicketForConfirmedBooking(
       delivered: true,
       deliveryId: deliveryRecord.id,
       bookingId: bookingRecord.id,
+      recipientEmailAddress: attendeeEmailAddress,
+      ticketAttachmentFileName: sendResult?.ticketAttachmentFileName ?? null,
       receipt: receiptDelivery,
     };
   } catch (error) {
-    const errorMessage = error.message || 'Unknown email delivery error';
-    await markDeliveryFailed(deliveryRecord.id, errorMessage);
+    const failureReason = error.message || 'Unknown email delivery error';
+    await markTicketEmailSendFailedForBooking(deliveryRecord.id, failureReason);
+    logError('ticket_email_delivery_failed', {
+      bookingId: bookingRecord.id,
+      deliveryId: deliveryRecord.id,
+      reason: failureReason,
+    });
+
     return {
       delivered: false,
       deliveryId: deliveryRecord.id,
       bookingId: bookingRecord.id,
-      reason: errorMessage,
+      reason: failureReason,
     };
   }
 }
 
-export async function redeliverFailedTicketEmail(bookingId, sendTicketEmail = sendTicketEmailToAttendee) {
-  const bookingRecord = await fetchBookingRecordById(bookingId);
-  if (!bookingRecord) {
-    return null;
-  }
-
-  if (bookingRecord.status !== 'confirmed') {
-    return { skipped: true, bookingId: bookingRecord.id };
-  }
-
-  if (!isTicketEmailDeliveryEnabled()) {
-    return {
-      delivered: false,
-      skipped: true,
-      reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
-      bookingId: bookingRecord.id,
-    };
-  }
-
-  const existingDeliveryRecord = await fetchDeliveryRecordForBooking(bookingId);
-
-  if (!existingDeliveryRecord) {
-    return deliverTicketForConfirmedBooking(bookingId, sendTicketEmail);
-  }
-
+export async function deliverTicketForConfirmedBooking(
+  bookingId,
+  sendTicketEmail = sendTicketEmailToAttendee,
+  deliveryOptions = {}
+) {
   try {
-    await sendTicketEmail(bookingRecord);
-    await markDeliverySent(existingDeliveryRecord.id);
-    return {
-      delivered: true,
-      deliveryId: existingDeliveryRecord.id,
-      bookingId: bookingRecord.id,
-    };
+    const bookingRecord = await fetchBookingRecordById(bookingId);
+    if (!bookingRecord) {
+      return null;
+    }
+
+    if (bookingRecord.status !== 'confirmed') {
+      return { skipped: true, bookingId: bookingRecord.id };
+    }
+
+    if (!isTicketEmailDeliveryEnabled()) {
+      // No delivery row is written: the ticket is generated from the booking on
+      // demand by GET /api/tickets/:bookingRef/download, so there is nothing to
+      // retry and nothing the retry job can pick up.
+      return {
+        delivered: false,
+        skipped: true,
+        reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+        bookingId: bookingRecord.id,
+      };
+    }
+
+    return await deliverTicketEmailForConfirmedBooking(
+      bookingRecord,
+      sendTicketEmail,
+      deliveryOptions
+    );
   } catch (error) {
-    const errorMessage = error.message || 'Unknown email delivery error';
-    await markDeliveryFailed(existingDeliveryRecord.id, errorMessage);
+    // A mail or database failure must never undo a confirmed booking.
+    logError('ticket_email_delivery_unexpected_failure', {
+      bookingId,
+      reason: error.message || 'Unknown ticket delivery error',
+    });
     return {
       delivered: false,
-      deliveryId: existingDeliveryRecord.id,
-      bookingId: bookingRecord.id,
-      reason: errorMessage,
+      bookingId,
+      reason: error.message || 'Unknown ticket delivery error',
     };
   }
+}
+
+export async function redeliverFailedTicketEmail(
+  bookingId,
+  sendTicketEmail = sendTicketEmailToAttendee
+) {
+  try {
+    const bookingRecord = await fetchBookingRecordById(bookingId);
+    if (!bookingRecord) {
+      return null;
+    }
+
+    if (bookingRecord.status !== 'confirmed') {
+      return { skipped: true, bookingId: bookingRecord.id };
+    }
+
+    if (!isTicketEmailDeliveryEnabled()) {
+      return {
+        delivered: false,
+        skipped: true,
+        reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+        bookingId: bookingRecord.id,
+      };
+    }
+
+    if (bookingRecord.ticket_sent_at) {
+      return {
+        delivered: false,
+        skipped: true,
+        reason: TICKET_EMAIL_ALREADY_SENT_REASON,
+        bookingId: bookingRecord.id,
+      };
+    }
+
+    return await deliverTicketEmailForConfirmedBooking(
+      bookingRecord,
+      sendTicketEmail,
+      {}
+    );
+  } catch (error) {
+    logError('ticket_email_redelivery_failed', {
+      bookingId,
+      reason: error.message || 'Unknown ticket redelivery error',
+    });
+    return {
+      delivered: false,
+      bookingId,
+      reason: error.message || 'Unknown ticket redelivery error',
+    };
+  }
+}
+
+export async function fetchFailedTicketDeliveryRecordsBelowMaxAttempts(maxAttempts) {
+  const result = await pool.query(
+    `SELECT td.*
+       FROM ticket_deliveries td
+       JOIN bookings b ON b.id = td.booking_id
+      WHERE td.status = 'failed'
+        AND b.status = 'confirmed'
+        AND b.ticket_sent_at IS NULL
+        AND td.attempt_count < $1
+      ORDER BY td.updated_at ASC`,
+    [maxAttempts]
+  );
+  return result.rows;
+}
+
+export function resolveTicketDeliveryMaxAttempts() {
+  return Number(process.env.TICKET_DELIVERY_MAX_ATTEMPTS || 5);
 }

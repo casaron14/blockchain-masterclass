@@ -202,10 +202,29 @@ Required for the current production setup:
 - An admin account, either `ADMIN_USERNAME` plus `ADMIN_PASSWORD_HASH`, or a
   database-backed account created with `npm run admin:create`.
 - `EMAIL_DELIVERY_ENABLED=false` when the deployment does not send email at
-  all (see "Running without email" below). Otherwise the SMTP transport
-  variables and `MAIL_FROM` are required.
+  all (see "Running without email" below). Otherwise `GMAIL_USER` and
+  `GMAIL_APP_PASSWORD` are required, and both must be server-side variables:
+  never add a `NEXT_PUBLIC_` prefix and never expose them to the browser.
+  `GMAIL_APP_PASSWORD` is a 16-character Google app password, not the account
+  password.
+- Optional email settings: `EMAIL_PROVIDER=gmail` (the default when
+  `GMAIL_USER` is set), `MAIL_FROM_NAME` (defaults to `DienAcademy Events`),
+  `EVENT_TIME_LABEL` (adds a time to the ticket image),
+  `TICKET_EMAIL_HOURLY_LIMIT` / `TICKET_EMAIL_DAILY_LIMIT` (defaults `20` and
+  `500`; set `0` to disable a guard), and
+  `TICKET_EMAIL_MAX_RETRIES_PER_RUN` (default `5`, the most ticket or receipt
+  emails one scheduled retry run may send).
 - `TURNSTILE_SECRET_KEY` in production: booking and login are rejected without
   it.
+
+Ticket emails are PNG images rendered with `next/og` and sent through Gmail
+SMTP with Nodemailer on the Node.js runtime. Gmail's free tier allows roughly
+500 recipients per day and about 20 messages per hour in practice. The app
+sends one message per booking and counts delivered tickets before sending; if
+you expect more volume, move to a transactional provider such as Brevo's free
+plan (300 emails/day), which only requires changing
+`backend/services/emailTransportService.js` to point the SMTP transport at
+Brevo instead of `smtp.gmail.com`.
 
 The current checkout accepts offline Lipa Namba payments only. Blockchain
 signing, RPC, and wallet variables are not needed unless a crypto payment flow
@@ -299,12 +318,13 @@ runs the due jobs sequentially, can use the plan maximum.
 
 ## 3. Local development
 
-Create a private repository-root `.env` and set the values you need. Use the
-Supabase **Session pooler** PostgreSQL URL when connecting locally; use the
-local `DB_*` settings only when running a local PostgreSQL server. The project
-HTTPS URL and publishable key are not substitutes for a PostgreSQL URL. Both
-the frontend and backend load the same root file; environment variables
-already supplied by the shell or hosting platform take precedence.
+Create a private repository-root `.env` and set the values you need. For
+machine-local secrets, put them in a repository-root `.env.local` instead:
+both apps load `.env.local` first, then `.env`, and platform-provided variables
+always win. Use the Supabase **Session pooler** PostgreSQL URL when connecting
+locally; use the local `DB_*` settings only when running a local PostgreSQL
+server. The project HTTPS URL and publishable key are not substitutes for a
+PostgreSQL URL. Both the frontend and backend load the same root files.
 
 ```bash
 # Terminal 1 — Next.js + the Express API through /api/* (one process)
@@ -322,6 +342,18 @@ the same origin. Set it only to point a browser at a separately hosted API.
 Tickets do not depend on email. The PDF is generated on demand from the booking
 record by `GET /api/tickets/:bookingRef/download`, so every confirmed attendee
 can download it from **Look up your booking** with their reference code.
+
+To smoke-test the real Gmail delivery in development, send a throwaway booking
+to your own inbox:
+
+```bash
+cd backend
+DEV_TEST_TICKET_RECIPIENT_EMAIL='you@gmail.com' npm run test:ticket-email
+```
+
+The script refuses to run in production, writes a copy of the PNG to
+`backend/out/tickets/`, sends the same email a confirmation sends, and deletes
+the throwaway booking afterwards.
 
 Set `EMAIL_DELIVERY_ENABLED=false` on a deployment that should not send mail.
 With that flag:
@@ -353,6 +385,14 @@ The backend image creates `backend/out/receipts` and `backend/out/tickets` and
 runs as the unprivileged `node` user. Set `DOCUMENT_STORAGE_MODE=local` there if
 you want PDFs kept on disk; email attachments are generated in memory either
 way.
+
+Ticket emails render their PNG with the frontend's `next/og` renderer
+(`frontend/lib/ticketImageRenderer.mjs`). The backend image does not copy
+`frontend/`, so a standalone API container cannot render tickets: confirmation
+still succeeds, the delivery is recorded as failed with an explicit reason, and
+the PDF download keeps working. Run the combined Vercel deployment (or a
+container that mounts `frontend/` next to `backend/`) when ticket email
+delivery is required.
 
 ## 5. Payments: what is live
 

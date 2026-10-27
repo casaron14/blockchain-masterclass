@@ -8,7 +8,10 @@ import pool from '../config/db.js';
 
 import { fetchBookingRecordById } from './bookingService.js';
 
-import { createConfiguredEmailTransport } from './emailTransportService.js';
+import {
+  createConfiguredEmailTransport,
+  resolveOutboundEmailSenderIdentity,
+} from './emailTransportService.js';
 import { fetchPaymentRecordById } from './paymentService.js';
 
 import { buildExplorerTransactionUrl } from './blockExplorerService.js';
@@ -387,7 +390,7 @@ export async function buildPaymentReceiptPdfForConfirmedPayment(bookingId, recei
 }
 
 export function resolveReceiptSenderAddress() {
-  return process.env.MAIL_FROM || 'tickets@blockchainmasterclass.example';
+  return resolveOutboundEmailSenderIdentity().address;
 }
 
 export async function deliverPaymentReceiptEmailToAttendee(bookingId, options = {}) {
@@ -417,7 +420,7 @@ export async function deliverPaymentReceiptEmailToAttendee(bookingId, options = 
 
   try {
     await receiptTransport.sendMail({
-      from: resolveReceiptSenderAddress(),
+      from: resolveOutboundEmailSenderIdentity(),
       to: bookingRecord.email,
       subject: buildPaymentReceiptEmailSubject(bookingRecord),
       html: buildPaymentReceiptEmailHtml(bookingRecord, receiptRecord),

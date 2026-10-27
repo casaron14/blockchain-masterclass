@@ -304,6 +304,59 @@ test('runTicketDeliveryRetryJob sends nothing when email delivery is disabled', 
   }
 });
 
+test('runTicketDeliveryRetryJob never retries more tickets than the per-run cap', async () => {
+  const firstConfirmedBooking = await createConfirmedBooking();
+  const secondConfirmedBooking = await createConfirmedBooking();
+  const thirdConfirmedBooking = await createConfirmedBooking();
+
+  await recordFailedTicketDeliveryForBooking(firstConfirmedBooking.id, 1);
+  await recordFailedTicketDeliveryForBooking(secondConfirmedBooking.id, 1);
+  await recordFailedTicketDeliveryForBooking(thirdConfirmedBooking.id, 1);
+
+  const retriedBookingIds = [];
+  const retrySummary = await runTicketDeliveryRetryJob({
+    maxPerRun: 2,
+    retryTicketDelivery: async (bookingId) => {
+      retriedBookingIds.push(bookingId);
+      return { delivered: true, bookingId };
+    },
+  });
+
+  assert.equal(retriedBookingIds.length, 2);
+  assert.equal(retrySummary.length, 2);
+  assert.ok(
+    retriedBookingIds.every((retriedBookingId) =>
+      [firstConfirmedBooking.id, secondConfirmedBooking.id, thirdConfirmedBooking.id].includes(
+        retriedBookingId
+      )
+    )
+  );
+});
+
+test('runTicketDeliveryRetryJob never retries more receipts than the per-run cap', async () => {
+  const firstConfirmedBooking = await createConfirmedBooking();
+  const secondConfirmedBooking = await createConfirmedBooking();
+
+  await createPendingPaymentReceiptForBooking(firstConfirmedBooking.id);
+  await createPendingPaymentReceiptForBooking(secondConfirmedBooking.id);
+
+  const deliveredReceiptBookingIds = [];
+  const retrySummary = await runTicketDeliveryRetryJob({
+    maxPerRun: 1,
+    retryTicketDelivery: async () => {
+      throw new Error('no failed ticket delivery should be retried in this test');
+    },
+    deliverReceiptEmail: async (bookingId) => {
+      deliveredReceiptBookingIds.push(bookingId);
+      return { delivered: true };
+    },
+  });
+
+  assert.equal(deliveredReceiptBookingIds.length, 1);
+  assert.equal(retrySummary.length, 1);
+  assert.equal(retrySummary[0].target, 'receipt');
+});
+
 test('runTicketDeliveryRetryJob is safe to call repeatedly with nothing left to retry', async () => {
   const confirmedBooking = await createConfirmedBooking();
   await createPendingPaymentReceiptForBooking(confirmedBooking.id);

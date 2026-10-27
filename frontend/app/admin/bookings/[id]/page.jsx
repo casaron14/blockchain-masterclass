@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   adminConfirmBooking,
   adminFetchBookingDetail,
+  adminRedeliverTicketEmail,
   adminUpdateBooking,
 } from '@/lib/api';
 import { useAdmin } from '@/context/AdminContext';
@@ -53,6 +54,9 @@ export default function AdminBookingDetailPage({ params }) {
   const [bookingConfirmationTone, setBookingConfirmationTone] = useState('info');
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const [isConfirmingBooking, setIsConfirmingBooking] = useState(false);
+  const [isResendingTicketEmail, setIsResendingTicketEmail] = useState(false);
+  const [ticketResendMessage, setTicketResendMessage] = useState(null);
+  const [ticketResendTone, setTicketResendTone] = useState('info');
   const hasScrolledToReceiptRef = useRef(false);
 
   useEffect(() => {
@@ -176,6 +180,30 @@ export default function AdminBookingDetailPage({ params }) {
     }
   }
 
+  // A failed ticket email is retried from the booking record, never from an
+  // address typed into the browser. The API resolves the attendee email from
+  // the booking id and refuses a second send for an already-delivered ticket.
+  async function handleResendTicketEmail() {
+    setTicketResendMessage(null);
+    setIsResendingTicketEmail(true);
+    try {
+      await adminRedeliverTicketEmail(bookingId, adminToken);
+      const refreshedDetail = await adminFetchBookingDetail(bookingId, adminToken);
+      applyRefreshedBookingDetail(refreshedDetail);
+      setTicketResendTone('success');
+      setTicketResendMessage(
+        `Ticket email sent to ${refreshedDetail.booking.email}.`
+      );
+    } catch (error) {
+      setTicketResendTone('error');
+      setTicketResendMessage(
+        error.message || 'The ticket email could not be sent. Check the server log.'
+      );
+    } finally {
+      setIsResendingTicketEmail(false);
+    }
+  }
+
   if (isSessionRestoring) {
     return <AdminSessionLoading statusLabel="Restoring your admin session…" />;
   }
@@ -242,6 +270,18 @@ export default function AdminBookingDetailPage({ params }) {
                 Confirm booking
               </LoadingButton>
             )}
+            {isBookingConfirmed && !booking.ticket_sent_at && (
+              <LoadingButton
+                type="button"
+                className="btn btn-secondary"
+                autoLoading={false}
+                loading={isResendingTicketEmail}
+                loadingLabel="Sending ticket…"
+                onClick={handleResendTicketEmail}
+              >
+                Resend ticket email
+              </LoadingButton>
+            )}
           </div>
         </div>
 
@@ -272,7 +312,15 @@ export default function AdminBookingDetailPage({ params }) {
             label="Payment confirmed at"
             value={payment?.confirmed_at ? formatAdminTimestamp(payment.confirmed_at) : '—'}
           />
+          <DetailItem
+            label="Ticket emailed at"
+            value={booking.ticket_sent_at ? formatAdminTimestamp(booking.ticket_sent_at) : '—'}
+          />
         </div>
+
+        {ticketResendMessage && (
+          <p className={`status-message ${ticketResendTone}`}>{ticketResendMessage}</p>
+        )}
 
         {order && (
           <div className="admin-detail-grid">
