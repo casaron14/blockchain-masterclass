@@ -18,6 +18,18 @@ import {
   buildCsvExportFileName,
 } from '../services/adminCsvExportService.js';
 
+import {
+  buildGoogleSheetBookingSyncMessage,
+  GoogleSheetBookingSyncError,
+  syncAllBookingsToGoogleSheet,
+} from '../services/googleSheetBookingSyncService.js';
+
+import {
+  AppsScriptWebhookError,
+  APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED_ERROR_CODE,
+  APPS_SCRIPT_WEBHOOK_URL_INVALID_ERROR_CODE,
+} from '../services/appsScriptWebhookClientService.js';
+
 import { BookingNotFoundError, SoldOutError } from '../services/bookingService.js';
 
 import { sendCsvFileDownloadResponse } from '../utils/csvDownloadResponse.js';
@@ -170,6 +182,43 @@ async function confirmAdminBookingEndpoint(req, res) {
   }
 }
 
+async function syncAdminBookingsToGoogleSheetEndpoint(req, res) {
+  try {
+    const syncSummary = await syncAllBookingsToGoogleSheet();
+
+    return res.status(200).json({
+      ...syncSummary,
+      message: buildGoogleSheetBookingSyncMessage(syncSummary),
+    });
+  } catch (error) {
+    if (
+      error instanceof AppsScriptWebhookError &&
+      (error.errorCode === APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED_ERROR_CODE ||
+        error.errorCode === APPS_SCRIPT_WEBHOOK_URL_INVALID_ERROR_CODE)
+    ) {
+      return res.status(503).json({
+        message:
+          'Google Sheets sync is not configured. Set APPS_SCRIPT_TICKET_WEBHOOK_URL and APPS_SCRIPT_SHARED_SECRET on the server.',
+        error: error.errorCode,
+      });
+    }
+
+    if (error instanceof GoogleSheetBookingSyncError) {
+      return res.status(502).json({
+        ...error.syncSummary,
+        message:
+          'Google Sheets sync failed for every booking. Check the Apps Script deployment and try again.',
+        error: error.code,
+      });
+    }
+
+    console.error('Error syncing admin bookings to Google Sheets', error);
+    return res.status(500).json({
+      message: 'Error syncing bookings to Google Sheets',
+    });
+  }
+}
+
 export default {
   fetchAdminSummaryReport,
   fetchAdminBookingListEndpoint,
@@ -178,4 +227,5 @@ export default {
   createAdminBookingEndpoint,
   updateAdminBookingEndpoint,
   confirmAdminBookingEndpoint,
+  syncAdminBookingsToGoogleSheetEndpoint,
 };

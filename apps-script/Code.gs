@@ -1,6 +1,7 @@
 /**
- * Google Apps Script web app that sends ticket and receipt emails and mirrors
- * every delivery attempt into the bound Google Sheet.
+ * Google Apps Script web app that sends ticket and receipt emails, mirrors
+ * every delivery attempt into the bound Google Sheet, and syncs the booking
+ * list into the "Bookings" tab.
  *
  * Deploy this file inside the Sheet (Extensions -> Apps Script), then publish
  * it as a Web App:
@@ -9,7 +10,7 @@
  *
  * Setup, including the SHARED_SECRET script property, is documented in
  * apps-script/README.md. The backend calls it from
- * backend/services/appsScriptEmailDeliveryService.js.
+ * backend/services/appsScriptWebhookClientService.js.
  *
  * The script never trusts the caller's metadata for anything security-related:
  * the recipient and attachments come from the request body, the shared secret is
@@ -40,8 +41,26 @@ var DELIVERY_SHEET_HEADERS = [
   'Last attempted at',
 ];
 
+var BOOKING_MIRROR_SHEET_NAME = 'Bookings';
+var BOOKING_MIRROR_SHEET_HEADERS = [
+  'Booking reference',
+  'Attendee name',
+  'Email address',
+  'Phone number',
+  'Booking status',
+  'Payment status',
+  'Payment method',
+  'Amount',
+  'Currency',
+  'Referral',
+  'Ticket sent at',
+  'Booking created at',
+  'Last synced at',
+];
+
 var MAXIMUM_REQUEST_BYTES = 12 * 1024 * 1024;
 var MAXIMUM_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+var MAXIMUM_BOOKINGS_PER_SYNC_REQUEST = 500;
 var MAXIMUM_ERROR_LENGTH = 500;
 var LOCK_WAIT_MILLISECONDS = 30000;
 var DELIVERY_LEASE_MILLISECONDS = 15 * 60 * 1000;
@@ -62,6 +81,8 @@ var SAFE_ERROR_CODES = {
   daily_quota_exhausted: true,
   delivery_in_progress: true,
   script_busy: true,
+  booking_batch_too_large: true,
+  booking_reference_missing: true,
 };
 
 function doPost(requestEvent) {
@@ -72,7 +93,27 @@ function doPost(requestEvent) {
       return buildJsonResponse({ ok: false, error: 'script_busy' });
     }
 
-    return handleEmailDeliveryRequest(requestEvent);
+    var expectedSharedSecret = PropertiesService.getScriptProperties().getProperty(
+      'SHARED_SECRET'
+    );
+
+    if (!expectedSharedSecret) {
+      return buildJsonResponse({
+        ok: false,
+        error: 'apps_script_secret_not_configured',
+      });
+    }
+
+    var requestBody = parseJsonRequestBody(requestEvent);
+    if (!secretsMatch(requestBody.sharedSecret, expectedSharedSecret)) {
+      return buildJsonResponse({ ok: false, error: 'unauthorized' });
+    }
+
+    if (requestBody.requestType === 'sync_bookings') {
+      return handleBookingSyncRequest(requestBody);
+    }
+
+    return handleEmailDeliveryRequest(requestBody);
   } catch (error) {
     return buildJsonResponse({ ok: false, error: readSafeErrorCode(error) });
   } finally {
@@ -82,23 +123,7 @@ function doPost(requestEvent) {
   }
 }
 
-function handleEmailDeliveryRequest(requestEvent) {
-  var expectedSharedSecret = PropertiesService.getScriptProperties().getProperty(
-    'SHARED_SECRET'
-  );
-
-  if (!expectedSharedSecret) {
-    return buildJsonResponse({
-      ok: false,
-      error: 'apps_script_secret_not_configured',
-    });
-  }
-
-  var requestBody = parseJsonRequestBody(requestEvent);
-  if (!secretsMatch(requestBody.sharedSecret, expectedSharedSecret)) {
-    return buildJsonResponse({ ok: false, error: 'unauthorized' });
-  }
-
+function handleEmailDeliveryRequest(requestBody) {
   var emailRequest = validateEmailRequest(requestBody.emailRequest);
   var deliverySheet = getOrCreateDeliverySheet();
   var existingDeliveryRow = findDeliveryRow(deliverySheet, emailRequest.deliveryKey);
@@ -175,6 +200,107 @@ function handleEmailDeliveryRequest(requestEvent) {
     ok: true,
     deliveryId: deliveryId,
     remainingDailyQuota: readRemainingDailyQuota(),
+  });
+}
+
+function handleBookingSyncRequest(requestBody) {
+  var bookings = requestBody.bookings;
+
+  if (!Array.isArray(bookings)) {
+    throw new Error('invalid_request');
+  }
+
+  if (bookings.length > MAXIMUM_BOOKINGS_PER_SYNC_REQUEST) {
+    throw new Error('booking_batch_too_large');
+  }
+
+  var bookingMirrorSheet = getOrCreateBookingMirrorSheet();
+  var syncSummary = upsertBookingMirrorRows(
+    bookingMirrorSheet,
+    bookings,
+    requestBody.syncedAt || formatTimestamp(new Date())
+  );
+
+  return buildJsonResponse({
+    ok: true,
+    requestType: 'sync_bookings',
+    syncedCount: syncSummary.syncedCount,
+    createdCount: syncSummary.createdCount,
+    updatedCount: syncSummary.updatedCount,
+  });
+}
+
+function upsertBookingMirrorRows(bookingMirrorSheet, bookings, syncedAt) {
+  var existingRows = readSheetRowsByHeader(
+    bookingMirrorSheet,
+    BOOKING_MIRROR_SHEET_HEADERS
+  );
+  var rowIndexByBookingReference = {};
+
+  existingRows.forEach(function (existingRow, rowIndex) {
+    var existingBookingReference = String(
+      existingRow['Booking reference'] || ''
+    );
+    if (existingBookingReference) {
+      rowIndexByBookingReference[existingBookingReference] = rowIndex;
+    }
+  });
+
+  var createdCount = 0;
+  var updatedCount = 0;
+
+  bookings.forEach(function (booking) {
+    var bookingReference = String(booking.bookingReference || '').trim();
+    if (!bookingReference) {
+      throw new Error('booking_reference_missing');
+    }
+
+    var bookingRowValues = buildBookingMirrorRowValues(booking, syncedAt);
+    var existingRowIndex = rowIndexByBookingReference[bookingReference];
+
+    if (typeof existingRowIndex === 'number') {
+      existingRows[existingRowIndex] = bookingRowValues;
+      updatedCount += 1;
+      return;
+    }
+
+    rowIndexByBookingReference[bookingReference] = existingRows.length;
+    existingRows.push(bookingRowValues);
+    createdCount += 1;
+  });
+
+  if (existingRows.length > 0) {
+    bookingMirrorSheet
+      .getRange(2, 1, existingRows.length, BOOKING_MIRROR_SHEET_HEADERS.length)
+      .setValues(existingRows);
+  }
+
+  return {
+    syncedCount: createdCount + updatedCount,
+    createdCount: createdCount,
+    updatedCount: updatedCount,
+  };
+}
+
+function buildBookingMirrorRowValues(booking, syncedAt) {
+  var valuesByHeader = {
+    'Booking reference': String(booking.bookingReference || ''),
+    'Attendee name': String(booking.attendeeName || ''),
+    'Email address': String(booking.emailAddress || ''),
+    'Phone number': String(booking.phoneNumber || ''),
+    'Booking status': String(booking.bookingStatus || ''),
+    'Payment status': String(booking.paymentStatus || ''),
+    'Payment method': String(booking.paymentMethod || ''),
+    Amount: booking.paymentAmount == null ? '' : booking.paymentAmount,
+    Currency: String(booking.paymentCurrency || ''),
+    Referral: String(booking.referrerName || ''),
+    'Ticket sent at': String(booking.ticketSentAt || ''),
+    'Booking created at': String(booking.bookingCreatedAt || ''),
+    'Last synced at': String(syncedAt || ''),
+  };
+
+  return BOOKING_MIRROR_SHEET_HEADERS.map(function (headerLabel) {
+    return valuesByHeader[headerLabel];
   });
 }
 
@@ -315,46 +441,68 @@ function readRemainingDailyQuota() {
 }
 
 function getOrCreateDeliverySheet() {
+  return getOrCreateSheet(DELIVERY_SHEET_NAME, DELIVERY_SHEET_HEADERS);
+}
+
+function getOrCreateBookingMirrorSheet() {
+  return getOrCreateSheet(BOOKING_MIRROR_SHEET_NAME, BOOKING_MIRROR_SHEET_HEADERS);
+}
+
+function getOrCreateSheet(sheetName, headerLabels) {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   if (!spreadsheet) {
     throw new Error('spreadsheet_not_available');
   }
 
-  var deliverySheet = spreadsheet.getSheetByName(DELIVERY_SHEET_NAME);
-  if (!deliverySheet) {
-    deliverySheet = spreadsheet.insertSheet(DELIVERY_SHEET_NAME);
+  var targetSheet = spreadsheet.getSheetByName(sheetName);
+  if (!targetSheet) {
+    targetSheet = spreadsheet.insertSheet(sheetName);
   }
 
-  ensureDeliverySheetHeaderRow(deliverySheet);
-  return deliverySheet;
+  ensureSheetHeaderRow(targetSheet, headerLabels);
+  return targetSheet;
 }
 
-function ensureDeliverySheetHeaderRow(deliverySheet) {
-  var headerRange = deliverySheet.getRange(
-    1,
-    1,
-    1,
-    DELIVERY_SHEET_HEADERS.length
-  );
+function ensureSheetHeaderRow(targetSheet, headerLabels) {
+  var headerRange = targetSheet.getRange(1, 1, 1, headerLabels.length);
   var currentHeaders = headerRange.getValues()[0];
-  var headersMatch = DELIVERY_SHEET_HEADERS.every(function (headerLabel, index) {
+  var headersMatch = headerLabels.every(function (headerLabel, index) {
     return String(currentHeaders[index] || '') === headerLabel;
   });
 
   if (!headersMatch) {
-    headerRange.setValues([DELIVERY_SHEET_HEADERS]);
+    headerRange.setValues([headerLabels]);
     headerRange.setFontWeight('bold');
-    deliverySheet.setFrozenRows(1);
+    targetSheet.setFrozenRows(1);
   }
 
   // Sheet cells are plain text, so an attendee name starting with "=" can never
   // be evaluated as a formula. This mirrors the CSV export's injection guard.
-  var availableDataRowCount = deliverySheet.getMaxRows() - 1;
+  var availableDataRowCount = targetSheet.getMaxRows() - 1;
   if (availableDataRowCount > 0) {
-    deliverySheet
-      .getRange(2, 1, availableDataRowCount, DELIVERY_SHEET_HEADERS.length)
+    targetSheet
+      .getRange(2, 1, availableDataRowCount, headerLabels.length)
       .setNumberFormat('@');
   }
+}
+
+function readSheetRowsByHeader(targetSheet, headerLabels) {
+  var lastRow = targetSheet.getLastRow();
+  if (lastRow < 2) {
+    return [];
+  }
+
+  var sheetValues = targetSheet
+    .getRange(2, 1, lastRow - 1, headerLabels.length)
+    .getValues();
+
+  return sheetValues.map(function (sheetRowValues) {
+    var rowObject = {};
+    headerLabels.forEach(function (headerLabel, columnIndex) {
+      rowObject[headerLabel] = sheetRowValues[columnIndex];
+    });
+    return rowObject;
+  });
 }
 
 function findDeliveryRow(deliverySheet, deliveryKey) {

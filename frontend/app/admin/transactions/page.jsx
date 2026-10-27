@@ -15,6 +15,7 @@ import {
 } from '@/lib/eventConfig';
 import TransactionStageTimeline from '@/components/TransactionStageTimeline';
 import TransactionDetailPanel from '@/components/TransactionDetailPanel';
+import { buildCollectedAmountTotals } from '@/lib/adminTransactionTotals';
 import {
   formatAdminAmount,
   formatAdminAmountWithCurrency,
@@ -128,6 +129,14 @@ export default function AdminTransactionsPage() {
       transactionRow.payment_status === 'failed' ||
       transactionRow.payment_status === 'expired'
   ).length;
+  const collectedAmountTotals = buildCollectedAmountTotals(transactionRows, {
+    localCurrencyCode: currency,
+    cryptoCurrencyCode: cryptoCurrency,
+    cryptoPaymentMethod: PAYMENT_METHOD_USDT_BEP20,
+  });
+  const nonZeroCollectedAmountTotals = collectedAmountTotals.filter(
+    ({ totalAmount }) => totalAmount > 0
+  );
 
   return (
     <>
@@ -198,6 +207,16 @@ export default function AdminTransactionsPage() {
           <span className={`tx-summary-chip ${failedTransactionCount > 0 ? 'failed' : ''}`}>
             {failedTransactionCount} failed / expired
           </span>
+          {nonZeroCollectedAmountTotals.map(({ currencyCode, totalAmount }) => (
+            <span key={currencyCode} className="tx-summary-chip collected">
+              {formatAdminAmountWithCurrency(totalAmount, currencyCode)} collected
+            </span>
+          ))}
+          {nonZeroCollectedAmountTotals.length === 0 && (
+            <span className="tx-summary-chip collected">
+              {formatAdminAmountWithCurrency(0, currency)} collected
+            </span>
+          )}
         </div>
 
         {listError && <p className="error-banner">{listError}</p>}

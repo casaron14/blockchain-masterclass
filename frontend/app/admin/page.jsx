@@ -6,6 +6,8 @@ import {
   adminCreateBooking,
   adminDownloadBookingsCsv,
   adminFetchBookingList,
+  adminRedeliverTicketEmail,
+  adminSyncBookingsToGoogleSheet,
 } from '@/lib/api';
 import { useAdmin } from '@/context/AdminContext';
 import LoadingButton from '@/components/LoadingButton';
@@ -141,6 +143,11 @@ export default function AdminDashboardPage() {
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const [isExportingBookings, setIsExportingBookings] = useState(false);
   const [exportError, setExportError] = useState(null);
+  const [isSyncingBookingsToGoogleSheet, setIsSyncingBookingsToGoogleSheet] =
+    useState(false);
+  const [googleSheetSyncFeedback, setGoogleSheetSyncFeedback] = useState(null);
+  const [resendingTicketBookingId, setResendingTicketBookingId] = useState(null);
+  const [ticketResendFeedback, setTicketResendFeedback] = useState(null);
 
   const refreshBookingList = useCallback(() => {
     setListRefreshKey((currentKey) => currentKey + 1);
@@ -159,6 +166,62 @@ export default function AdminDashboardPage() {
       setExportError(error.message || 'The booking export could not be downloaded.');
     } finally {
       setIsExportingBookings(false);
+    }
+  }
+
+  // The button syncs every booking, not only the rows currently filtered on
+  // screen: the Sheet is a recovery mirror, so a filtered sync would leave
+  // bookings missing without the operator noticing.
+  async function syncBookingsToGoogleSheet() {
+    setGoogleSheetSyncFeedback(null);
+    setIsSyncingBookingsToGoogleSheet(true);
+
+    try {
+      const syncResponse = await adminSyncBookingsToGoogleSheet(adminToken);
+      setGoogleSheetSyncFeedback({
+        tone:
+          syncResponse.failedBookingCount > 0 ||
+          syncResponse.totalBookingCount === 0
+            ? 'info'
+            : 'success',
+        message:
+          syncResponse.message ||
+          `Synced ${syncResponse.syncedBookingCount ?? 0} booking(s).`,
+      });
+    } catch (error) {
+      setGoogleSheetSyncFeedback({
+        tone: 'error',
+        message:
+          error.message ||
+          'The bookings could not be synced to Google Sheets.',
+      });
+    } finally {
+      setIsSyncingBookingsToGoogleSheet(false);
+    }
+  }
+
+  // The API resolves the recipient from the booking row and refuses a second
+  // send, so this handler never accepts an address from the browser.
+  async function resendTicketEmailForBooking(bookingRow) {
+    setTicketResendFeedback(null);
+    setResendingTicketBookingId(bookingRow.id);
+
+    try {
+      await adminRedeliverTicketEmail(bookingRow.id, adminToken);
+      setTicketResendFeedback({
+        tone: 'success',
+        message: `Ticket email sent to ${bookingRow.email} for ${bookingRow.ref}.`,
+      });
+      refreshBookingList();
+    } catch (error) {
+      setTicketResendFeedback({
+        tone: 'error',
+        message:
+          error.message ||
+          `The ticket email for ${bookingRow.ref} could not be sent.`,
+      });
+    } finally {
+      setResendingTicketBookingId(null);
     }
   }
 
@@ -247,6 +310,16 @@ export default function AdminDashboardPage() {
             type="button"
             className="btn btn-secondary"
             autoLoading={false}
+            loading={isSyncingBookingsToGoogleSheet}
+            loadingLabel="Syncing to Sheet…"
+            onClick={syncBookingsToGoogleSheet}
+          >
+            Sync to Google Sheet
+          </LoadingButton>
+          <LoadingButton
+            type="button"
+            className="btn btn-secondary"
+            autoLoading={false}
             onClick={() => router.push('/admin/settings')}
           >
             Settings
@@ -254,6 +327,16 @@ export default function AdminDashboardPage() {
         </div>
 
         {exportError && <p className="error-banner">{exportError}</p>}
+        {googleSheetSyncFeedback && (
+          <p className={`status-message ${googleSheetSyncFeedback.tone}`}>
+            {googleSheetSyncFeedback.message}
+          </p>
+        )}
+        {ticketResendFeedback && (
+          <p className={`status-message ${ticketResendFeedback.tone}`}>
+            {ticketResendFeedback.message}
+          </p>
+        )}
 
         {statusCounts && (
           <div className="tx-summary-row">
@@ -324,6 +407,7 @@ export default function AdminDashboardPage() {
                   <th>Contact</th>
                   <th>Status</th>
                   <th>Payment</th>
+                  <th>Ticket</th>
                   <th>Referral</th>
                   <th>Created</th>
                   <th></th>
@@ -353,35 +437,67 @@ export default function AdminDashboardPage() {
                         {bookingRow.payment_status ? formatAdminStatusLabel(bookingRow.payment_status) : 'None'}
                       </span>
                     </td>
+                    <td>
+                      {bookingRow.status === 'confirmed' ? (
+                        <span
+                          className={`status-chip ${
+                            bookingRow.ticket_sent_at ? 'confirmed' : 'pending'
+                          }`}
+                        >
+                          {bookingRow.ticket_sent_at ? 'Sent' : 'Not sent'}
+                        </span>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                     <td>{bookingRow.referrer_name || bookingRow.utm_source || '—'}</td>
                     <td>{formatCreatedDate(bookingRow.created_at)}</td>
                     <td>
-                      <LoadingButton
-                        type="button"
-                        className={
-                          bookingRow.offline_receipt_status === 'submitted'
-                            ? 'btn btn-primary'
-                            : 'btn btn-secondary'
-                        }
-                        autoLoading={false}
-                        onClick={() =>
-                          router.push(
+                      <div className="admin-row-actions">
+                        <LoadingButton
+                          type="button"
+                          className={
                             bookingRow.offline_receipt_status === 'submitted'
-                              ? `/admin/bookings/${bookingRow.id}#lipa-namba-receipt`
-                              : `/admin/bookings/${bookingRow.id}`
-                          )
-                        }
-                      >
-                        {bookingRow.offline_receipt_status === 'submitted'
-                          ? 'Review receipt'
-                          : 'Manage'}
-                      </LoadingButton>
+                              ? 'btn btn-primary'
+                              : 'btn btn-secondary'
+                          }
+                          autoLoading={false}
+                          onClick={() =>
+                            router.push(
+                              bookingRow.offline_receipt_status === 'submitted'
+                                ? `/admin/bookings/${bookingRow.id}#lipa-namba-receipt`
+                                : `/admin/bookings/${bookingRow.id}`
+                            )
+                          }
+                        >
+                          {bookingRow.offline_receipt_status === 'submitted'
+                            ? 'Review receipt'
+                            : 'Manage'}
+                        </LoadingButton>
+                        {bookingRow.status === 'confirmed' &&
+                          !bookingRow.ticket_sent_at && (
+                            <LoadingButton
+                              type="button"
+                              className="btn btn-secondary"
+                              autoLoading={false}
+                              loading={resendingTicketBookingId === bookingRow.id}
+                              loadingLabel="Sending…"
+                              disabled={
+                                resendingTicketBookingId !== null &&
+                                resendingTicketBookingId !== bookingRow.id
+                              }
+                              onClick={() => resendTicketEmailForBooking(bookingRow)}
+                            >
+                              Resend ticket
+                            </LoadingButton>
+                          )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {bookingRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="muted">
+                    <td colSpan={9} className="muted">
                       No bookings found.
                     </td>
                   </tr>

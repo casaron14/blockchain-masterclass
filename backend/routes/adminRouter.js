@@ -54,6 +54,13 @@ router.get(
 
 router.get('/bookings', adminController.fetchAdminBookingListEndpoint);
 
+// Explicitly a POST: the sync writes to the Sheet and must never be triggered
+// by a prefetched link or a browser reload.
+router.post(
+  '/google-sheet/sync-bookings',
+  adminController.syncAdminBookingsToGoogleSheetEndpoint
+);
+
 // Declared before /bookings/:id so the literal "export.csv" segment is not
 // parsed as a numeric booking id.
 router.get(

@@ -265,6 +265,13 @@ export function adminRedeliverTicketEmail(bookingId, adminToken) {
   });
 }
 
+export function adminSyncBookingsToGoogleSheet(adminToken) {
+  return request('/api/admin/google-sheet/sync-bookings', {
+    method: 'POST',
+    headers: buildAdminAuthorizationHeaders(adminToken),
+  });
+}
+
 export async function fetchAdminOfflinePaymentReceiptFile(bookingId, adminToken) {
   const response = await fetch(`${API_BASE_URL}/api/admin/bookings/${bookingId}/offline-receipt`, {
     headers: buildAdminAuthorizationHeaders(adminToken),

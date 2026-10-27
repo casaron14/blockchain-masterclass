@@ -214,6 +214,7 @@ Required for the current production setup:
 - Optional email settings: `MAIL_FROM_NAME` (defaults to
   `DienAcademy Events`), `EVENT_TIME_LABEL` (adds a time to the ticket image),
   `APPS_SCRIPT_REQUEST_TIMEOUT_MS` (default `15000`),
+  `GOOGLE_SHEET_SYNC_BATCH_SIZE` (default `200`, maximum `500`),
   `TICKET_EMAIL_HOURLY_LIMIT` / `TICKET_EMAIL_DAILY_LIMIT` (defaults `20` and
   `90` for Apps Script or `500` for Gmail SMTP; set `0` to disable a guard), and
   `TICKET_EMAIL_MAX_RETRIES_PER_RUN` (default `5`, the most ticket or receipt
@@ -256,6 +257,22 @@ The full walkthrough, Sheet columns, quota behaviour and troubleshooting are in
 PostgreSQL remains the source of truth. The script refuses every request when
 the shared secret is missing or wrong, and never sends the same delivery key
 twice.
+
+The admin bookings screen has two operator actions:
+
+- **Sync to Google Sheet** upserts every booking in PostgreSQL into the
+  `Bookings` tab, including bookings that never received an email. It works
+  independently of `EMAIL_DELIVERY_ENABLED` and does not consume the Gmail
+  quota. It needs the same two Apps Script variables; without them the endpoint
+  answers `503`.
+- **Resend ticket** appears on a confirmed booking whose `Ticket` column says
+  `Not sent`. The API resolves the attendee address from the database and
+  refuses a second send for a ticket that already succeeded, so the browser
+  never supplies a recipient.
+
+The admin transactions screen shows a **collected** total per currency next to
+the status counts. Only confirmed payments are included; TZS and USDT are never
+added together.
 
 ### Admin sign-in from environment variables
 
@@ -468,6 +485,14 @@ delivery is required.
    link in a private window and book. The booking must appear under that code.
 9. Download the referrer CSV and the bookings CSV; both must open in a
    spreadsheet with the expected headers.
+10. Open `/admin`, press **Sync to Google Sheet**, and confirm the `Bookings`
+    tab has the expected rows. Press it again and confirm the row count did not
+    grow.
+11. Open a confirmed booking with no ticket email, press **Resend ticket**, and
+    confirm the `Ticket` column changes to `Sent` and the `Ticket deliveries`
+    tab records the send.
+12. Open `/admin/transactions`; the **collected** chips must match the sum of
+    confirmed payments, separately for TZS and USDT.
 
 ## 7. Referral campaigns and CSV exports
 

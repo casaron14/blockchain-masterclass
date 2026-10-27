@@ -1,4 +1,4 @@
-# Google Apps Script email delivery
+# Google Apps Script email delivery and booking mirror
 
 This is the simplest setup for ticket emails: no Gmail app password and no SMTP
 server. The booking backend keeps using PostgreSQL, and posts each confirmed
@@ -55,6 +55,14 @@ admin dashboard and PostgreSQL remain the source of truth.
 The URL plus the shared secret is what the backend needs. Treat both as
 secrets: anybody with both can send mail from your account.
 
+### Updating an existing deployment
+
+After pasting a newer [`Code.gs`](./Code.gs) into the editor, open **Deploy →
+Manage deployments**, edit the active deployment, choose **Version: New version**,
+and deploy. Editing the code alone does not update the `/exec` URL. An old
+version answers `delivery_metadata_missing` to the booking sync because it only
+understands ticket and receipt email requests.
+
 ## 5. Configure the backend
 
 Add these server-side variables (locally in `.env.local`, in production in
@@ -66,6 +74,8 @@ APPS_SCRIPT_TICKET_WEBHOOK_URL=https://script.google.com/macros/s/REPLACE_WITH_D
 APPS_SCRIPT_SHARED_SECRET=the-same-value-as-the-SHARED_SECRET-script-property
 # Optional, defaults to 15000.
 APPS_SCRIPT_REQUEST_TIMEOUT_MS=15000
+# Optional, defaults to 200 bookings per sync request (maximum 500).
+GOOGLE_SHEET_SYNC_BATCH_SIZE=200
 ```
 
 `EMAIL_PROVIDER` must be set explicitly. A placeholder URL alone never switches
@@ -87,9 +97,16 @@ The script prints the delivery id and writes a copy of the PNG to
 afterwards, but its Sheet row remains as a log entry; delete that row by hand if
 you want a clean Sheet.
 
+Then open **Admin → Bookings** and press **Sync to Google Sheet**. Every booking
+in PostgreSQL, including pending and cancelled ones, is upserted into the
+`Bookings` tab by booking reference. Pressing the button twice must leave the
+same row count; the second press is an update, not a duplicate.
+
 ## What the Sheet contains
 
-The `Ticket deliveries` tab has one row per delivery attempt:
+### `Ticket deliveries`
+
+One row per delivery attempt:
 
 | Column | Meaning |
 | --- | --- |
@@ -114,6 +131,30 @@ for **15 minutes** and the script answers `delivery_in_progress` instead of
 sending again. After the lease expires, a retry is allowed. This is the same
 claim pattern the PostgreSQL ticket delivery uses.
 
+### `Bookings`
+
+The **Sync to Google Sheet** button in the admin bookings screen mirrors the
+whole PostgreSQL booking list into this tab. It is an upsert keyed by
+`Booking reference`, so repeated syncs update existing rows instead of adding
+duplicates. This tab is a recovery view: it includes bookings that never
+received an email because they were created before delivery was enabled, their
+payment is still pending, or their send failed.
+
+| Column | Meaning |
+| --- | --- |
+| `Booking reference` | The `EVT-<REF>` reference code; the upsert key |
+| `Attendee name`, `Email address`, `Phone number` | Contact details from the booking |
+| `Booking status`, `Payment status`, `Payment method` | Current PostgreSQL state |
+| `Amount`, `Currency` | Expected ticket amount; `TZS` for Lipa Namba/AzamPesa, `USDT` for USDT (BEP20) |
+| `Referral` | Referrer name, or the UTM source when there was no referrer |
+| `Ticket sent at` | When the ticket email succeeded; empty means **Not sent** |
+| `Booking created at` | When the booking was created |
+| `Last synced at` | When the sync button last wrote this row |
+
+The tab is written in one request per `GOOGLE_SHEET_SYNC_BATCH_SIZE` bookings.
+If one batch fails, the backend reports how many bookings synced and how many
+did not; pressing the button again retries every row.
+
 ## Limits and behaviour
 
 - **Free `@gmail.com`:** Apps Script allows about **100 recipients per day**.
@@ -126,9 +167,13 @@ claim pattern the PostgreSQL ticket delivery uses.
   cannot both send the same delivery key.
 - The data range is formatted as plain text, so an attendee name starting with
   `=` is stored literally and never evaluated as a spreadsheet formula.
-- The Sheet mirrors a booking when the ticket flow runs. A booking with an
-  invalid attendee email is rejected before the web app is called, so correct
-  the email in the admin and resend to get it into the Sheet.
+- The `Ticket deliveries` tab mirrors a booking when the ticket flow runs. A
+  booking with an invalid attendee email is rejected before the web app is
+  called, so correct the email in the admin and resend. The separate `Bookings`
+  tab is not affected by that rejection; the **Sync to Google Sheet** button
+  mirrors it directly from PostgreSQL.
+- The booking sync does not send email and does not use the Gmail quota. Only
+  the `Ticket deliveries` tab consumes recipients.
 - Apps Script normally answers in one to three seconds. The backend times out
   after `APPS_SCRIPT_REQUEST_TIMEOUT_MS` and records a retryable failure.
 - Mail is always sent from the Google account that deployed the script. The
@@ -147,6 +192,8 @@ claim pattern the PostgreSQL ticket delivery uses.
 | `spreadsheet_not_available` | The script is not bound to a Sheet | Create the script from **Extensions → Apps Script** inside the Sheet |
 | Backend says `APPS_SCRIPT_RESPONSE_NOT_JSON` | The deployment is not public, or the URL is wrong | Redeploy with **Who has access: Anyone**, copy the `/exec` URL again |
 | Backend says `APPS_SCRIPT_WEBHOOK_URL_INVALID` | The URL is not a `script.google.com/macros/s/.../exec` URL | Copy the deployment URL exactly |
+| Admin sync says the webhook is not configured | `APPS_SCRIPT_TICKET_WEBHOOK_URL` or `APPS_SCRIPT_SHARED_SECRET` is missing on the server | Add both, then redeploy the backend |
+| Admin sync says every batch failed | The deployment is not public, the secret rotated, or Apps Script is down | Open the `/exec` URL in a browser, then check the secret and deployment access |
 
 ## Rotating the secret
 

@@ -103,7 +103,7 @@ test('resolveAppsScriptEmailDeliveryConfiguration requires a URL and a shared se
         () => resolveAppsScriptEmailDeliveryConfiguration(),
         (error) =>
           error instanceof AppsScriptEmailDeliveryError &&
-          error.errorCode === 'APPS_SCRIPT_EMAIL_NOT_CONFIGURED'
+          error.errorCode === 'APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED'
       );
       assert.equal(isAppsScriptEmailDeliveryConfigured(), false);
     }
@@ -120,7 +120,7 @@ test('resolveAppsScriptEmailDeliveryConfiguration rejects the placeholder values
     () => {
       assert.throws(
         () => resolveAppsScriptEmailDeliveryConfiguration(),
-        (error) => error.errorCode === 'APPS_SCRIPT_EMAIL_NOT_CONFIGURED'
+        (error) => error.errorCode === 'APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED'
       );
     }
   );

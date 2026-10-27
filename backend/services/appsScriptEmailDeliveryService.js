@@ -10,63 +10,25 @@
 
 import { SUPPORT_EMAIL_ADDRESS } from './eventConfigService.js';
 
+import {
+  AppsScriptWebhookError,
+  isAppsScriptWebhookConfigured,
+  parseAppsScriptWebhookResponse,
+  postJsonRequestToAppsScriptWebApp,
+  resolveAppsScriptWebhookConfiguration,
+} from './appsScriptWebhookClientService.js';
+
 export const APPS_SCRIPT_EMAIL_PROVIDER = 'apps_script';
 
-const APPS_SCRIPT_DEPLOYMENT_URL_PATTERN =
-  /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/(exec|dev)$/;
-const DEFAULT_APPS_SCRIPT_REQUEST_TIMEOUT_MS = 15000;
 const MAXIMUM_ATTACHMENT_SIZE_BYTES = 8 * 1024 * 1024;
-const SAFE_REMOTE_ERROR_CODE_PATTERN = /^[a-z0-9_]{1,64}$/;
 
-export class AppsScriptEmailDeliveryError extends Error {
-  constructor(errorCode) {
-    super(`APPS_SCRIPT_EMAIL_DELIVERY_FAILED:${errorCode}`);
-    this.name = 'AppsScriptEmailDeliveryError';
-    this.code = 'APPS_SCRIPT_EMAIL_DELIVERY_FAILED';
-    this.errorCode = errorCode;
-  }
-}
-
-function resolveAppsScriptRequestTimeoutMs() {
-  const configuredTimeoutMs = Number(process.env.APPS_SCRIPT_REQUEST_TIMEOUT_MS);
-
-  if (!Number.isFinite(configuredTimeoutMs) || configuredTimeoutMs <= 0) {
-    return DEFAULT_APPS_SCRIPT_REQUEST_TIMEOUT_MS;
-  }
-
-  return Math.floor(configuredTimeoutMs);
-}
-
-export function resolveAppsScriptEmailDeliveryConfiguration() {
-  const webhookUrl = process.env.APPS_SCRIPT_TICKET_WEBHOOK_URL?.trim() || '';
-  const sharedSecret = process.env.APPS_SCRIPT_SHARED_SECRET?.trim() || '';
-  const isPlaceholderConfiguration =
-    /replace|your-|example\.com/i.test(webhookUrl) ||
-    /replace|your-/i.test(sharedSecret);
-
-  if (!webhookUrl || !sharedSecret || isPlaceholderConfiguration) {
-    throw new AppsScriptEmailDeliveryError('APPS_SCRIPT_EMAIL_NOT_CONFIGURED');
-  }
-
-  if (!APPS_SCRIPT_DEPLOYMENT_URL_PATTERN.test(webhookUrl)) {
-    throw new AppsScriptEmailDeliveryError('APPS_SCRIPT_WEBHOOK_URL_INVALID');
-  }
-
-  return {
-    webhookUrl,
-    sharedSecret,
-    requestTimeoutMs: resolveAppsScriptRequestTimeoutMs(),
-  };
-}
-
-export function isAppsScriptEmailDeliveryConfigured() {
-  try {
-    resolveAppsScriptEmailDeliveryConfiguration();
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Kept as named exports because the email transport and its tests talk about an
+// email delivery, even though the underlying webhook contract is shared with
+// the booking mirror sync.
+export const AppsScriptEmailDeliveryError = AppsScriptWebhookError;
+export const resolveAppsScriptEmailDeliveryConfiguration =
+  resolveAppsScriptWebhookConfiguration;
+export const isAppsScriptEmailDeliveryConfigured = isAppsScriptWebhookConfigured;
 
 function convertEmailAttachmentToAppsScriptPayload(attachment) {
   const attachmentContent = attachment?.content;
@@ -128,40 +90,26 @@ export function buildAppsScriptEmailDeliveryRequest(
   };
 }
 
-function normalizeRemoteErrorCode(remoteErrorCode) {
-  const normalizedErrorCode = String(remoteErrorCode ?? '').toLowerCase();
-
-  return SAFE_REMOTE_ERROR_CODE_PATTERN.test(normalizedErrorCode)
-    ? normalizedErrorCode
-    : 'APPS_SCRIPT_REMOTE_ERROR';
-}
-
-export function parseAppsScriptEmailDeliveryResponse(responseStatus, responseText) {
-  if (responseStatus < 200 || responseStatus >= 300) {
-    throw new AppsScriptEmailDeliveryError(`APPS_SCRIPT_HTTP_${responseStatus}`);
-  }
-
-  let responseBody;
-  try {
-    responseBody = JSON.parse(responseText);
-  } catch {
-    // A login page or an Apps Script HTML error page lands here. It is
-    // retryable because a deployment can be temporarily unavailable.
-    throw new AppsScriptEmailDeliveryError('APPS_SCRIPT_RESPONSE_NOT_JSON');
-  }
-
-  if (responseBody?.ok !== true) {
-    throw new AppsScriptEmailDeliveryError(normalizeRemoteErrorCode(responseBody?.error));
-  }
-
+function buildAppsScriptEmailDeliveryOutcome(responseBody) {
   return {
     provider: APPS_SCRIPT_EMAIL_PROVIDER,
-    providerMessageId: responseBody.deliveryId ? String(responseBody.deliveryId) : null,
+    providerMessageId: responseBody.deliveryId
+      ? String(responseBody.deliveryId)
+      : null,
     duplicate: responseBody.duplicate === true,
     remainingDailyQuota: Number.isFinite(responseBody.remainingDailyQuota)
       ? responseBody.remainingDailyQuota
       : null,
   };
+}
+
+export function parseAppsScriptEmailDeliveryResponse(
+  responseStatus,
+  responseText
+) {
+  return buildAppsScriptEmailDeliveryOutcome(
+    parseAppsScriptWebhookResponse(responseStatus, responseText)
+  );
 }
 
 export async function sendEmailThroughAppsScriptWebApp(
@@ -170,33 +118,16 @@ export async function sendEmailThroughAppsScriptWebApp(
   options = {}
 ) {
   const deliveryConfiguration =
-    options.deliveryConfiguration ?? resolveAppsScriptEmailDeliveryConfiguration();
+    options.deliveryConfiguration ?? resolveAppsScriptWebhookConfiguration();
   const requestBody = buildAppsScriptEmailDeliveryRequest(
     outboundEmailMessage,
     deliveryMetadata,
     deliveryConfiguration.sharedSecret
   );
-  const fetchImplementation = options.fetchImplementation ?? fetch;
+  const responseBody = await postJsonRequestToAppsScriptWebApp(requestBody, {
+    ...options,
+    configuration: deliveryConfiguration,
+  });
 
-  let response;
-  try {
-    response = await fetchImplementation(deliveryConfiguration.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      redirect: 'follow',
-      signal: AbortSignal.timeout(deliveryConfiguration.requestTimeoutMs),
-    });
-  } catch (requestError) {
-    if (
-      requestError?.name === 'TimeoutError' ||
-      requestError?.name === 'AbortError'
-    ) {
-      throw new AppsScriptEmailDeliveryError('APPS_SCRIPT_REQUEST_TIMED_OUT');
-    }
-
-    throw new AppsScriptEmailDeliveryError('APPS_SCRIPT_REQUEST_FAILED');
-  }
-
-  return parseAppsScriptEmailDeliveryResponse(response.status, await response.text());
+  return buildAppsScriptEmailDeliveryOutcome(responseBody);
 }

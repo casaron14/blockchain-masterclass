@@ -79,7 +79,7 @@ function createFakeDeliverySheet() {
 }
 
 function createAppsScriptTestEnvironment(options = {}) {
-  const deliverySheet = createFakeDeliverySheet();
+  const sheetsByName = new Map();
   const sentMessages = [];
   const scriptProperties = new Map(
     options.sharedSecret === null
@@ -90,14 +90,22 @@ function createAppsScriptTestEnvironment(options = {}) {
   let failOnSend = options.failOnSend === true;
   let generatedUuidCount = 0;
 
+  function getOrCreateFakeSheet(sheetName) {
+    if (!sheetsByName.has(sheetName)) {
+      sheetsByName.set(sheetName, createFakeDeliverySheet());
+    }
+
+    return sheetsByName.get(sheetName);
+  }
+
   const spreadsheetApplication = {
     getActiveSpreadsheet() {
       return {
         getSheetByName(sheetName) {
-          return sheetName === 'Ticket deliveries' ? deliverySheet : null;
+          return sheetsByName.get(sheetName) ?? null;
         },
-        insertSheet() {
-          return deliverySheet;
+        insertSheet(sheetName) {
+          return getOrCreateFakeSheet(sheetName);
         },
       };
     },
@@ -194,7 +202,12 @@ function createAppsScriptTestEnvironment(options = {}) {
   });
 
   return {
-    deliverySheet,
+    get deliverySheet() {
+      return sheetsByName.get('Ticket deliveries');
+    },
+    get bookingMirrorSheet() {
+      return sheetsByName.get('Bookings');
+    },
     sentMessages,
     setRemainingDailyQuota(nextQuota) {
       remainingDailyQuota = nextQuota;
@@ -277,6 +290,53 @@ function readDeliveryRowByKey(deliverySheet, deliveryKey) {
   );
 }
 
+function buildBookingSyncRequestBody(bookings) {
+  return {
+    sharedSecret: 'test-shared-secret',
+    requestType: 'sync_bookings',
+    syncedAt: '2026-11-07T18:00:00.000Z',
+    bookings,
+  };
+}
+
+function buildBookingMirrorRecord(overrides = {}) {
+  return {
+    bookingReference: 'EVT-TEST01',
+    attendeeName: 'Test Attendee',
+    emailAddress: 'attendee@example.com',
+    phoneNumber: '+255700000001',
+    bookingStatus: 'confirmed',
+    paymentStatus: 'confirmed',
+    paymentMethod: 'lipanamba',
+    paymentAmount: 10000,
+    paymentCurrency: 'TZS',
+    referrerName: 'neema',
+    ticketSentAt: '2026-11-07T18:00:00.000Z',
+    bookingCreatedAt: '2026-11-01T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function readBookingMirrorRowByReference(bookingMirrorSheet, bookingReference) {
+  const headers = bookingMirrorSheet.sheetRows[0];
+  const rowIndex = bookingMirrorSheet.sheetRows.findIndex(
+    (sheetRow, candidateIndex) =>
+      candidateIndex > 0 &&
+      sheetRow[headers.indexOf('Booking reference')] === bookingReference
+  );
+
+  if (rowIndex === -1) {
+    return null;
+  }
+
+  return Object.fromEntries(
+    headers.map((headerLabel, columnIndex) => [
+      headerLabel,
+      bookingMirrorSheet.sheetRows[rowIndex][columnIndex],
+    ])
+  );
+}
+
 test('doPost rejects a request with the wrong shared secret and sends nothing', () => {
   const appsScriptEnvironment = createAppsScriptTestEnvironment();
 
@@ -286,7 +346,7 @@ test('doPost rejects a request with the wrong shared secret and sends nothing', 
 
   assert.deepEqual(responsePayload, { ok: false, error: 'unauthorized' });
   assert.equal(appsScriptEnvironment.sentMessages.length, 0);
-  assert.equal(appsScriptEnvironment.deliverySheet.sheetRows.length, 0);
+  assert.equal(appsScriptEnvironment.deliverySheet, undefined);
 });
 
 test('doPost refuses every request when the SHARED_SECRET script property is missing', () => {
@@ -536,7 +596,7 @@ test('doPost rejects an invalid recipient address before touching the Sheet', ()
     error: 'invalid_recipient',
   });
   assert.equal(appsScriptEnvironment.sentMessages.length, 0);
-  assert.equal(appsScriptEnvironment.deliverySheet.sheetRows.length, 0);
+  assert.equal(appsScriptEnvironment.deliverySheet, undefined);
 });
 
 test('doPost rejects a malformed JSON body without exposing the error', () => {
@@ -545,6 +605,120 @@ test('doPost rejects a malformed JSON body without exposing the error', () => {
   const responsePayload = appsScriptEnvironment.invokeDoPost('{not-json');
 
   assert.deepEqual(responsePayload, { ok: false, error: 'invalid_request' });
+});
+
+test('doPost sync_bookings creates the Bookings tab and mirrors every booking', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  const responsePayload = appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([
+      buildBookingMirrorRecord(),
+      buildBookingMirrorRecord({
+        bookingReference: 'EVT-TEST02',
+        attendeeName: 'Second Attendee',
+        emailAddress: 'second@example.com',
+        bookingStatus: 'pending',
+        paymentStatus: 'pending',
+        ticketSentAt: '',
+      }),
+    ])
+  );
+
+  assert.deepEqual(responsePayload, {
+    ok: true,
+    requestType: 'sync_bookings',
+    syncedCount: 2,
+    createdCount: 2,
+    updatedCount: 0,
+  });
+  assert.equal(appsScriptEnvironment.sentMessages.length, 0);
+
+  const bookingMirrorSheet = appsScriptEnvironment.bookingMirrorSheet;
+  assert.ok(bookingMirrorSheet);
+  assert.equal(bookingMirrorSheet.sheetRows.length, 3);
+
+  const mirroredBooking = readBookingMirrorRowByReference(
+    bookingMirrorSheet,
+    'EVT-TEST01'
+  );
+  assert.equal(mirroredBooking['Attendee name'], 'Test Attendee');
+  assert.equal(mirroredBooking['Payment status'], 'confirmed');
+  assert.equal(mirroredBooking['Payment method'], 'lipanamba');
+  assert.equal(mirroredBooking.Amount, 10000);
+  assert.equal(mirroredBooking.Currency, 'TZS');
+  assert.equal(mirroredBooking.Referral, 'neema');
+  assert.equal(mirroredBooking['Last synced at'], '2026-11-07T18:00:00.000Z');
+
+  const pendingBooking = readBookingMirrorRowByReference(
+    bookingMirrorSheet,
+    'EVT-TEST02'
+  );
+  assert.equal(pendingBooking['Booking status'], 'pending');
+  assert.equal(pendingBooking['Ticket sent at'], '');
+});
+
+test('doPost sync_bookings updates an existing booking instead of duplicating it', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([buildBookingMirrorRecord()])
+  );
+
+  const secondSyncPayload = appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([
+      buildBookingMirrorRecord({
+        bookingStatus: 'confirmed',
+        ticketSentAt: '2026-11-08T09:30:00.000Z',
+      }),
+    ])
+  );
+
+  assert.deepEqual(secondSyncPayload, {
+    ok: true,
+    requestType: 'sync_bookings',
+    syncedCount: 1,
+    createdCount: 0,
+    updatedCount: 1,
+  });
+
+  const bookingMirrorSheet = appsScriptEnvironment.bookingMirrorSheet;
+  assert.equal(bookingMirrorSheet.sheetRows.length, 2);
+  assert.equal(
+    readBookingMirrorRowByReference(bookingMirrorSheet, 'EVT-TEST01')['Ticket sent at'],
+    '2026-11-08T09:30:00.000Z'
+  );
+});
+
+test('doPost sync_bookings rejects the wrong secret and leaves the Bookings tab untouched', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  const responsePayload = appsScriptEnvironment.invokeDoPost({
+    ...buildBookingSyncRequestBody([buildBookingMirrorRecord()]),
+    sharedSecret: 'wrong-secret',
+  });
+
+  assert.deepEqual(responsePayload, { ok: false, error: 'unauthorized' });
+  assert.equal(appsScriptEnvironment.bookingMirrorSheet, undefined);
+});
+
+test('doPost sync_bookings writes attendee text as plain text so a name cannot become a formula', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+  const formulaLikeAttendeeName = '=HYPERLINK("https://example.test","click")';
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([
+      buildBookingMirrorRecord({ attendeeName: formulaLikeAttendeeName }),
+    ])
+  );
+
+  const bookingMirrorSheet = appsScriptEnvironment.bookingMirrorSheet;
+  assert.ok(bookingMirrorSheet.readNumberFormatCallCount() > 0);
+  assert.equal(
+    readBookingMirrorRowByReference(bookingMirrorSheet, 'EVT-TEST01')[
+      'Attendee name'
+    ],
+    formulaLikeAttendeeName
+  );
 });
 
 test('sendTestEmailToScriptOwner sends one authorization check email', () => {
