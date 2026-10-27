@@ -15,9 +15,13 @@ export const APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED_ERROR_CODE =
   'APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED';
 export const APPS_SCRIPT_WEBHOOK_URL_INVALID_ERROR_CODE =
   'APPS_SCRIPT_WEBHOOK_URL_INVALID';
+export const APPS_SCRIPT_DEV_URL_NOT_ALLOWED_ERROR_CODE =
+  'APPS_SCRIPT_DEV_URL_NOT_ALLOWED';
 
-const APPS_SCRIPT_DEPLOYMENT_URL_PATTERN =
-  /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/(exec|dev)$/;
+const APPS_SCRIPT_EXEC_DEPLOYMENT_URL_PATTERN =
+  /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
+const APPS_SCRIPT_DEV_DEPLOYMENT_URL_PATTERN =
+  /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/dev$/;
 const DEFAULT_APPS_SCRIPT_REQUEST_TIMEOUT_MS = 15000;
 const SAFE_REMOTE_ERROR_CODE_PATTERN = /^[a-z0-9_]{1,64}$/;
 const PLACEHOLDER_WEBHOOK_URL_PATTERN = /replace|your-|example\.com/i;
@@ -53,7 +57,13 @@ export function resolveAppsScriptWebhookConfiguration() {
     throw new AppsScriptWebhookError(APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED_ERROR_CODE);
   }
 
-  if (!APPS_SCRIPT_DEPLOYMENT_URL_PATTERN.test(webhookUrl)) {
+  if (APPS_SCRIPT_DEV_DEPLOYMENT_URL_PATTERN.test(webhookUrl)) {
+    throw new AppsScriptWebhookError(
+      APPS_SCRIPT_DEV_URL_NOT_ALLOWED_ERROR_CODE
+    );
+  }
+
+  if (!APPS_SCRIPT_EXEC_DEPLOYMENT_URL_PATTERN.test(webhookUrl)) {
     throw new AppsScriptWebhookError(APPS_SCRIPT_WEBHOOK_URL_INVALID_ERROR_CODE);
   }
 

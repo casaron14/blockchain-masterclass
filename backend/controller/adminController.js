@@ -27,6 +27,7 @@ import {
 
 import {
   AppsScriptWebhookError,
+  APPS_SCRIPT_DEV_URL_NOT_ALLOWED_ERROR_CODE,
   APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED_ERROR_CODE,
   APPS_SCRIPT_WEBHOOK_URL_INVALID_ERROR_CODE,
 } from '../services/appsScriptWebhookClientService.js';
@@ -192,6 +193,17 @@ async function syncAdminBookingsToGoogleSheetEndpoint(req, res) {
       message: buildGoogleSheetBookingSyncMessage(syncSummary),
     });
   } catch (error) {
+    if (
+      error instanceof AppsScriptWebhookError &&
+      error.errorCode === APPS_SCRIPT_DEV_URL_NOT_ALLOWED_ERROR_CODE
+    ) {
+      return res.status(503).json({
+        message:
+          'APPS_SCRIPT_TICKET_WEBHOOK_URL uses the /dev test URL, which requires a Google sign-in. Use the /exec URL from Deploy → Manage deployments.',
+        error: error.errorCode,
+      });
+    }
+
     if (
       error instanceof AppsScriptWebhookError &&
       (error.errorCode === APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED_ERROR_CODE ||

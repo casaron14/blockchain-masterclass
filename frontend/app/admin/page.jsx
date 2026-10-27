@@ -223,11 +223,18 @@ export default function AdminDashboardPage() {
       });
       refreshBookingList();
     } catch (error) {
+      const rawFailureReason = error.responseBody?.reason;
+      const failureReasonSuffix =
+        rawFailureReason && !String(error.message).includes(rawFailureReason)
+          ? ` (${rawFailureReason})`
+          : '';
+
       setTicketResendFeedback({
         tone: 'error',
         message:
-          error.message ||
-          `The ticket email for ${bookingRow.ref} could not be sent.`,
+          (error.message ||
+            `The ticket email for ${bookingRow.ref} could not be sent.`) +
+          failureReasonSuffix,
       });
     } finally {
       setResendingTicketBookingId(null);

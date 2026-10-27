@@ -85,6 +85,31 @@ test('syncAdminBookingsToGoogleSheetEndpoint answers 503 when the Apps Script we
   );
 });
 
+test('syncAdminBookingsToGoogleSheetEndpoint refuses the /dev test URL with an actionable message', async () => {
+  await withWebhookEnvironment(
+    {
+      APPS_SCRIPT_TICKET_WEBHOOK_URL:
+        'https://script.google.com/macros/s/AKfycb-test-deployment-id/dev',
+      APPS_SCRIPT_SHARED_SECRET: TEST_SHARED_SECRET,
+    },
+    async () => {
+      const mockResponse = createMockResponse();
+
+      await adminController.syncAdminBookingsToGoogleSheetEndpoint(
+        {},
+        mockResponse
+      );
+
+      assert.equal(mockResponse.capturedResponse.statusCode, 503);
+      assert.equal(
+        mockResponse.capturedResponse.body.error,
+        'APPS_SCRIPT_DEV_URL_NOT_ALLOWED'
+      );
+      assert.match(mockResponse.capturedResponse.body.message, /\/exec URL/);
+    }
+  );
+});
+
 test('syncAdminBookingsToGoogleSheetEndpoint explains when the deployed Apps Script is too old', async () => {
   await createAdminBookingRecord({
     full_name: 'Old Deployment Attendee',

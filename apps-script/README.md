@@ -59,9 +59,11 @@ secrets: anybody with both can send mail from your account.
 
 After pasting a newer [`Code.gs`](./Code.gs) into the editor, open **Deploy →
 Manage deployments**, edit the active deployment, choose **Version: New version**,
-and deploy. Editing the code alone does not update the `/exec` URL. An old
-version answers `delivery_metadata_missing` to the booking sync because it only
-understands ticket and receipt email requests.
+set **Execute as: Me** and **Who has access: Anyone**, and deploy. Editing the
+code alone does not update the `/exec` URL. Do not use the `/dev` test URL: it
+requires a Google sign-in, so the backend receives `401`. An old version answers
+`delivery_metadata_missing` to the booking sync because it only understands
+ticket and receipt email requests.
 
 ## 5. Configure the backend
 
@@ -191,6 +193,9 @@ did not; pressing the button again retries every row.
 | `script_busy` | Another delivery held the lock for 30 seconds | Retry; the backend records a retryable failure |
 | `spreadsheet_not_available` | The script is not bound to a Sheet | Create the script from **Extensions → Apps Script** inside the Sheet |
 | Backend says `APPS_SCRIPT_RESPONSE_NOT_JSON` | The deployment is not public, the URL is wrong, or you copied a `/dev` URL | Redeploy with **Who has access: Anyone** and copy the `/exec` URL again |
+| Backend says `APPS_SCRIPT_HTTP_401` | Google requires sign-in for the URL. You are probably using the `/dev` test URL, or access is **Anyone with a Google account** / **Only myself** | Use the `/exec` URL from **Manage deployments** and set **Who has access: Anyone** (anonymous) |
+| Backend says `APPS_SCRIPT_HTTP_403` | Google or a Workspace policy refused anonymous access | Set **Who has access: Anyone**; if the option is unavailable, the Workspace admin must allow anonymous web apps or use a personal Google account |
+| Backend says `APPS_SCRIPT_HTTP_404` | The `/exec` URL no longer matches a deployment | Open **Manage deployments**, copy the current `/exec` URL, and update the backend variable |
 | Backend says `APPS_SCRIPT_WEBHOOK_URL_INVALID` | The URL is not a `script.google.com/macros/s/.../exec` URL | Copy the deployment URL exactly |
 | Admin sync says the webhook is not configured | `APPS_SCRIPT_TICKET_WEBHOOK_URL` or `APPS_SCRIPT_SHARED_SECRET` is missing on the server | Add both, then redeploy the backend |
 | Admin sync says every batch failed | The deployment is not public, the secret rotated, or Apps Script is down | Open the `/exec` URL in a browser, then check the secret and deployment access |

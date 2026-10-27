@@ -230,6 +230,24 @@ export function buildGoogleSheetBookingSyncFailureMessage(
 ) {
   const primaryFailureReasonCode = failureReasonCodes[0] || '';
 
+  if (primaryFailureReasonCode === 'APPS_SCRIPT_HTTP_401') {
+    return (
+      'Google requires a sign-in for this Apps Script URL. Use the deployment URL that ends in /exec (not /dev), and set Who has access to Anyone (anonymous), not Anyone with a Google account. Then deploy a new version.'
+    );
+  }
+
+  if (primaryFailureReasonCode === 'APPS_SCRIPT_HTTP_403') {
+    return (
+      'Google refused access to the Apps Script deployment. Confirm Who has access is Anyone (anonymous) and that a Google Workspace policy is not blocking anonymous web apps.'
+    );
+  }
+
+  if (primaryFailureReasonCode === 'APPS_SCRIPT_HTTP_404') {
+    return (
+      'The Apps Script deployment URL was not found. Open Deploy → Manage deployments, copy the current /exec URL, and update APPS_SCRIPT_TICKET_WEBHOOK_URL.'
+    );
+  }
+
   if (primaryFailureReasonCode.startsWith('APPS_SCRIPT_HTTP_')) {
     const httpStatusCode = primaryFailureReasonCode.replace(
       'APPS_SCRIPT_HTTP_',

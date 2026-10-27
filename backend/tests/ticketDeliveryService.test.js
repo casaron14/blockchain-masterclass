@@ -6,6 +6,7 @@ import PNG from 'png-js';
 import pool from '../config/db.js';
 
 import {
+  buildTicketEmailDeliveryFailureMessage,
   renderTicketQrDataUrl,
   deliverTicketForConfirmedBooking,
   redeliverFailedTicketEmail,
@@ -339,6 +340,31 @@ test('deliverTicketForConfirmedBooking stops at the configured hourly Gmail limi
       process.env.TICKET_EMAIL_HOURLY_LIMIT = previousHourlyLimit;
     }
   }
+});
+
+test('buildTicketEmailDeliveryFailureMessage explains Apps Script sign-in and deployment failures', () => {
+  assert.match(
+    buildTicketEmailDeliveryFailureMessage(
+      'APPS_SCRIPT_WEBHOOK_FAILED:APPS_SCRIPT_HTTP_401'
+    ),
+    /requires a sign-in.*\/exec.*Anyone/i
+  );
+  assert.match(
+    buildTicketEmailDeliveryFailureMessage(
+      'APPS_SCRIPT_WEBHOOK_FAILED:APPS_SCRIPT_DEV_URL_NOT_ALLOWED'
+    ),
+    /\/dev test URL.*\/exec/i
+  );
+  assert.match(
+    buildTicketEmailDeliveryFailureMessage(
+      'APPS_SCRIPT_WEBHOOK_FAILED:APPS_SCRIPT_RESPONSE_NOT_JSON'
+    ),
+    /did not return JSON.*\/exec/i
+  );
+  assert.match(
+    buildTicketEmailDeliveryFailureMessage('SMTP refused connection'),
+    /Ticket email delivery failed: SMTP refused connection/
+  );
 });
 
 test('redeliverFailedTicketEmail flips a failed delivery to sent', async () => {

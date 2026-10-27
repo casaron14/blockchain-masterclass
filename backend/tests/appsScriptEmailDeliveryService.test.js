@@ -141,6 +141,22 @@ test('resolveAppsScriptEmailDeliveryConfiguration rejects a webhook URL that is 
   );
 });
 
+test('resolveAppsScriptEmailDeliveryConfiguration rejects a /dev test URL because a server cannot sign in', () => {
+  withEnvironmentVariables(
+    {
+      APPS_SCRIPT_TICKET_WEBHOOK_URL:
+        'https://script.google.com/macros/s/AKfycb-test-deployment-id/dev',
+      APPS_SCRIPT_SHARED_SECRET: TEST_SHARED_SECRET,
+    },
+    () => {
+      assert.throws(
+        () => resolveAppsScriptEmailDeliveryConfiguration(),
+        (error) => error.errorCode === 'APPS_SCRIPT_DEV_URL_NOT_ALLOWED'
+      );
+    }
+  );
+});
+
 test('resolveAppsScriptEmailDeliveryConfiguration accepts a real deployment URL', () => {
   withEnvironmentVariables(
     {

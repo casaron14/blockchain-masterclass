@@ -317,7 +317,11 @@ test('buildGoogleSheetBookingSyncFailureMessage explains the deployment and secr
     /Check the Apps Script deployment/
   );
   assert.match(
+    buildGoogleSheetBookingSyncFailureMessage(['APPS_SCRIPT_HTTP_401']),
+    /requires a sign-in.*\/exec.*Anyone/
+  );
+  assert.match(
     buildGoogleSheetBookingSyncFailureMessage(['APPS_SCRIPT_HTTP_404']),
-    /HTTP 404.*deployment URL/
+    /deployment URL was not found/i
   );
 });

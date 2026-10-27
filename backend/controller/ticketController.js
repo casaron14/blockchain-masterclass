@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 import {
+  buildTicketEmailDeliveryFailureMessage,
   redeliverFailedTicketEmail,
   TICKET_EMAIL_ALREADY_SENT_REASON,
   TICKET_EMAIL_DELIVERY_DISABLED_REASON,
@@ -34,9 +35,9 @@ async function redeliverTicketEmailEndpoint(req, res) {
         [TICKET_EMAIL_DELIVERY_DISABLED_REASON]:
           'Email delivery is disabled; the attendee downloads the ticket from the booking lookup',
         [TICKET_EMAIL_ALREADY_SENT_REASON]:
-          'This ticket has already been emailed to the attendee',
+          'This ticket has already been emailed to the attendee. Refresh the list; if it did not arrive, check the spam folder',
         [TICKET_EMAIL_SEND_IN_PROGRESS_REASON]:
-          'A ticket email is already being sent for this booking',
+          'A previous ticket email attempt is still marked as in progress. Wait up to 15 minutes and retry; if the email did not arrive, check the ticket delivery log',
         [TICKET_EMAIL_INVALID_RECIPIENT_REASON]:
           'This booking has no valid attendee email address',
         [TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON]:
@@ -56,7 +57,7 @@ async function redeliverTicketEmailEndpoint(req, res) {
 
     if (!deliveryResult.delivered) {
       return res.status(502).json({
-        message: 'Ticket email delivery failed',
+        message: buildTicketEmailDeliveryFailureMessage(deliveryResult.reason),
         bookingId: deliveryResult.bookingId,
         reason: deliveryResult.reason,
       });

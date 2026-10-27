@@ -650,6 +650,50 @@ export async function deliverTicketForConfirmedBooking(
   }
 }
 
+// The delivery ledger stores the raw provider error so an operator can diagnose
+// it. The API adds this short explanation for the failures that have a known
+// fix, without ever including the Apps Script shared secret.
+export function buildTicketEmailDeliveryFailureMessage(failureReason) {
+  const failureReasonText = String(failureReason ?? '');
+
+  if (failureReasonText.includes('APPS_SCRIPT_DEV_URL_NOT_ALLOWED')) {
+    return 'The Apps Script URL is the /dev test URL, which requires a Google sign-in. Use the /exec URL from Deploy → Manage deployments.';
+  }
+
+  if (failureReasonText.includes('APPS_SCRIPT_WEBHOOK_NOT_CONFIGURED')) {
+    return 'Apps Script email delivery is not configured. Set APPS_SCRIPT_TICKET_WEBHOOK_URL and APPS_SCRIPT_SHARED_SECRET on the server.';
+  }
+
+  if (
+    failureReasonText.includes('APPS_SCRIPT_HTTP_401') ||
+    failureReasonText.includes('APPS_SCRIPT_HTTP_403')
+  ) {
+    return 'Google requires a sign-in for the Apps Script deployment. Use the /exec URL and set Who has access to Anyone (anonymous), then retry.';
+  }
+
+  if (failureReasonText.includes('APPS_SCRIPT_HTTP_404')) {
+    return 'The Apps Script deployment URL was not found. Copy the current /exec URL from Deploy → Manage deployments and update APPS_SCRIPT_TICKET_WEBHOOK_URL.';
+  }
+
+  if (failureReasonText.includes('APPS_SCRIPT_RESPONSE_NOT_JSON')) {
+    return 'Apps Script did not return JSON. Use the /exec deployment URL and set Who has access to Anyone (anonymous).';
+  }
+
+  if (failureReasonText.includes('APPS_SCRIPT_REQUEST_TIMED_OUT')) {
+    return 'Apps Script did not answer in time. Retry; if it keeps happening, raise APPS_SCRIPT_REQUEST_TIMEOUT_MS.';
+  }
+
+  if (failureReasonText.includes('APPS_SCRIPT_ATTACHMENT_TOO_LARGE')) {
+    return 'The ticket attachment is larger than the Apps Script limit. Reduce the attachment size and retry.';
+  }
+
+  if (failureReasonText) {
+    return `Ticket email delivery failed: ${failureReasonText}`;
+  }
+
+  return 'Ticket email delivery failed';
+}
+
 export async function redeliverFailedTicketEmail(
   bookingId,
   sendTicketEmail = sendTicketEmailToAttendee
