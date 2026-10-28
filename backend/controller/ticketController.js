@@ -2,8 +2,7 @@ import fs from 'node:fs';
 
 import {
   buildTicketEmailDeliveryFailureMessage,
-  redeliverFailedTicketEmail,
-  TICKET_EMAIL_ALREADY_SENT_REASON,
+  resendTicketEmailToAttendeeFromAdmin,
   TICKET_EMAIL_DELIVERY_DISABLED_REASON,
   TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON,
   TICKET_EMAIL_DAILY_LIMIT_REACHED_REASON,
@@ -20,11 +19,11 @@ function ticketNotFoundResponse() {
   return { message: 'Ticket not found' };
 }
 
-async function redeliverTicketEmailEndpoint(req, res) {
+async function resendTicketEmailToAttendeeEndpoint(req, res) {
   const bookingId = parseInt(req.params.bookingId, 10);
 
   try {
-    const deliveryResult = await redeliverFailedTicketEmail(bookingId);
+    const deliveryResult = await resendTicketEmailToAttendeeFromAdmin(bookingId);
 
     if (!deliveryResult) {
       return res.status(404).json(ticketNotFoundResponse());
@@ -34,8 +33,6 @@ async function redeliverTicketEmailEndpoint(req, res) {
       const skipMessageByReason = {
         [TICKET_EMAIL_DELIVERY_DISABLED_REASON]:
           'Email delivery is disabled; the attendee downloads the ticket from the booking lookup',
-        [TICKET_EMAIL_ALREADY_SENT_REASON]:
-          'This ticket has already been emailed to the attendee. Refresh the list; if it did not arrive, check the spam folder',
         [TICKET_EMAIL_SEND_IN_PROGRESS_REASON]:
           'A previous ticket email attempt is still marked as in progress. Wait up to 15 minutes and retry; if the email did not arrive, check the ticket delivery log',
         [TICKET_EMAIL_INVALID_RECIPIENT_REASON]:
@@ -69,7 +66,7 @@ async function redeliverTicketEmailEndpoint(req, res) {
       deliveryId: deliveryResult.deliveryId,
     });
   } catch (error) {
-    console.error('Error redelivering ticket email', error);
+    console.error('Error resending ticket email', error);
     return res.status(500).json({ message: 'Server error' });
   }
 }
@@ -166,7 +163,7 @@ async function downloadPaymentReceiptEndpoint(req, res) {
 }
 
 export default {
-  redeliverTicketEmailEndpoint,
+  resendTicketEmailToAttendeeEndpoint,
   downloadTicketPdfEndpoint,
   downloadPaymentReceiptEndpoint,
 };

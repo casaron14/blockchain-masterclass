@@ -275,6 +275,54 @@ test('fetchAdminBookingList returns bookings joined with their payment status', 
   assert.equal(matchedRow.payment_status, 'pending');
 });
 
+test('fetchAdminBookingList returns the last successful ticket send time', async () => {
+  const createdBooking = await createAdminBookingRecord({
+    full_name: 'Ticket Timestamp User',
+    email: 'ticket-timestamp@example.com',
+    phone_number: '+255712345706',
+  });
+  const recordedSendTime = new Date('2026-10-28T10:15:00.000Z');
+  await pool.query(
+    `INSERT INTO ticket_deliveries (booking_id, status, attempt_count, sent_at)
+     VALUES ($1, 'sent', 2, $2)`,
+    [createdBooking.id, recordedSendTime]
+  );
+
+  const bookingList = await fetchAdminBookingList({});
+  const matchedRow = bookingList.find((row) => row.id === createdBooking.id);
+
+  assert.ok(matchedRow);
+  assert.equal(matchedRow.ticket_delivery_status, 'sent');
+  assert.equal(matchedRow.ticket_delivery_attempt_count, 2);
+  assert.equal(
+    new Date(matchedRow.ticket_last_sent_at).getTime(),
+    recordedSendTime.getTime()
+  );
+});
+
+test('fetchAdminBookingDetail returns the ticket delivery record', async () => {
+  const createdBooking = await createAdminBookingRecord({
+    full_name: 'Ticket Detail User',
+    email: 'ticket-detail@example.com',
+    phone_number: '+255712345707',
+  });
+  const recordedSendTime = new Date('2026-10-28T11:45:00.000Z');
+  await pool.query(
+    `INSERT INTO ticket_deliveries (booking_id, status, attempt_count, sent_at)
+     VALUES ($1, 'sent', 1, $2)`,
+    [createdBooking.id, recordedSendTime]
+  );
+
+  const bookingDetail = await fetchAdminBookingDetail(createdBooking.id);
+
+  assert.ok(bookingDetail.ticketDelivery);
+  assert.equal(bookingDetail.ticketDelivery.status, 'sent');
+  assert.equal(
+    new Date(bookingDetail.ticketDelivery.sent_at).getTime(),
+    recordedSendTime.getTime()
+  );
+});
+
 test('fetchAdminBookingDetail returns order deposit details for crypto bookings', async () => {
   const createdBooking = await createAdminBookingRecord({
     full_name: 'Detail User',

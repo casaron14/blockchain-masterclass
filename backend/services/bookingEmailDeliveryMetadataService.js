@@ -19,7 +19,11 @@ const SUPPORTED_EMAIL_DELIVERY_KINDS = new Set([
   EMAIL_DELIVERY_KIND_RECEIPT,
 ]);
 
-export function buildBookingEmailDeliveryMetadata(bookingRecord, emailDeliveryKind) {
+export function buildBookingEmailDeliveryMetadata(
+  bookingRecord,
+  emailDeliveryKind,
+  metadataOptions = {}
+) {
   if (!SUPPORTED_EMAIL_DELIVERY_KINDS.has(emailDeliveryKind)) {
     throw new Error(`EMAIL_DELIVERY_KIND_UNSUPPORTED:${emailDeliveryKind}`);
   }
@@ -30,8 +34,16 @@ export function buildBookingEmailDeliveryMetadata(bookingRecord, emailDeliveryKi
     throw new Error('EMAIL_DELIVERY_BOOKING_REFERENCE_MISSING');
   }
 
+  // The default key is stable so a repeated webhook is idempotent. An admin
+  // resend supplies a suffix, which makes the Apps Script log treat it as a new
+  // delivery instead of returning the original send as a duplicate.
+  const deliveryKeySuffix = String(metadataOptions.deliveryKeySuffix ?? '').trim();
+  const deliveryKey = deliveryKeySuffix
+    ? `${emailDeliveryKind}:${bookingReferenceCode}:${deliveryKeySuffix}`
+    : `${emailDeliveryKind}:${bookingReferenceCode}`;
+
   return {
-    deliveryKey: `${emailDeliveryKind}:${bookingReferenceCode}`,
+    deliveryKey,
     emailKind: emailDeliveryKind,
     booking: {
       referenceCode: bookingReferenceCode,

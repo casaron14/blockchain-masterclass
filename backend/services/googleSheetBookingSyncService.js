@@ -79,7 +79,9 @@ export function buildBookingMirrorRecordForSheet(bookingRow) {
     paymentAmount,
     paymentCurrency: resolveCurrencyCodeForPaymentMethod(bookingRow.payment_method),
     referrerName: String(bookingRow.referrer_name || bookingRow.utm_source || ''),
-    ticketSentAt: toIsoTimestampString(bookingRow.ticket_sent_at),
+    ticketSentAt: toIsoTimestampString(
+      bookingRow.ticket_last_sent_at || bookingRow.ticket_sent_at
+    ),
     bookingCreatedAt: toIsoTimestampString(bookingRow.created_at),
   };
 }

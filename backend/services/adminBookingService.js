@@ -16,7 +16,10 @@ import {
   updatePaymentRecordStatus,
 } from './paymentService.js';
 
-import { deliverTicketForConfirmedBooking } from './ticketDeliveryService.js';
+import {
+  deliverTicketForConfirmedBooking,
+  fetchTicketDeliveryRecordByBookingId,
+} from './ticketDeliveryService.js';
 
 import {
   approveOfflinePaymentReceiptForConfirmedPayment,
@@ -145,11 +148,16 @@ export async function fetchAdminBookingList({ statusFilter, searchQuery } = {}) 
     `SELECT b.*, p.status AS payment_status, p.payment_method, p.amount_expected,
             p.confirmed_at AS payment_confirmed_at,
             opr.status AS offline_receipt_status,
-            r.referrer_name, r.referrer_phone
+            r.referrer_name, r.referrer_phone,
+            td.status AS ticket_delivery_status,
+            td.sent_at AS ticket_last_sent_at,
+            td.attempt_count AS ticket_delivery_attempt_count,
+            td.last_error AS ticket_delivery_last_error
        FROM bookings b
        LEFT JOIN payments p ON p.booking_id = b.id
        LEFT JOIN offline_payment_receipts opr ON opr.payment_id = p.id
        LEFT JOIN referrers r ON r.referrer_code = b.utm_source
+       LEFT JOIN ticket_deliveries td ON td.booking_id = b.id
        ${whereClause}
        ORDER BY b.created_at DESC`,
     queryParameters
@@ -183,6 +191,7 @@ export async function fetchAdminBookingDetail(bookingId) {
     payment?.payment_method === PAYMENT_METHOD_LIPANAMBA
       ? await fetchOfflinePaymentReceiptByBookingId(bookingRecord.id)
       : null;
+  const ticketDelivery = await fetchTicketDeliveryRecordByBookingId(bookingRecord.id);
 
   return {
     booking: bookingRecord,
@@ -190,6 +199,7 @@ export async function fetchAdminBookingDetail(bookingId) {
     order: orderAndDeposit?.order ?? null,
     depositAddress: orderAndDeposit?.depositAddress ?? null,
     offlineReceipt,
+    ticketDelivery,
   };
 }
 

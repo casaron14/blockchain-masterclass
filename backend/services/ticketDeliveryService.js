@@ -254,7 +254,8 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
     : await sendOutboundEmailThroughConfiguredProvider(outboundEmailMessage, {
         deliveryMetadata: buildBookingEmailDeliveryMetadata(
           bookingRecord,
-          EMAIL_DELIVERY_KIND_TICKET
+          EMAIL_DELIVERY_KIND_TICKET,
+          { deliveryKeySuffix: options.emailDeliveryKeySuffix ?? '' }
         ),
       });
 
@@ -301,6 +302,45 @@ export async function claimTicketEmailSendForBooking(bookingRecord) {
         )
       RETURNING ticket_delivery.*`,
     [bookingRecord.id, TICKET_EMAIL_SEND_CLAIM_LEASE_MINUTES]
+  );
+
+  return claimResult.rows[0] ?? null;
+}
+
+// An admin resend is allowed after a successful delivery, so this claim cannot
+// require ticket_sent_at to be NULL. It still takes the same short lease, which
+// is what stops two resend clicks (or a resend racing an automatic send) from
+// producing two emails at once.
+export async function claimTicketEmailResendForBooking(bookingRecord) {
+  const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
+
+  await pool.query(
+    `INSERT INTO ticket_deliveries (booking_id, qr_payload)
+     VALUES ($1, $2)
+     ON CONFLICT (booking_id) DO NOTHING`,
+    [bookingRecord.id, ticketQrCodeUrl]
+  );
+
+  const claimResult = await pool.query(
+    `UPDATE ticket_deliveries AS ticket_delivery
+        SET send_claimed_at = now(),
+            attempt_count = ticket_delivery.attempt_count + 1,
+            qr_payload = $2,
+            last_error = NULL,
+            updated_at = now()
+      WHERE ticket_delivery.booking_id = $1
+        AND (
+          ticket_delivery.send_claimed_at IS NULL
+          OR ticket_delivery.send_claimed_at < now() - ($3 * INTERVAL '1 minute')
+        )
+        AND EXISTS (
+          SELECT 1
+            FROM bookings AS booking_record
+           WHERE booking_record.id = ticket_delivery.booking_id
+             AND booking_record.status = 'confirmed'
+        )
+      RETURNING ticket_delivery.*`,
+    [bookingRecord.id, ticketQrCodeUrl, TICKET_EMAIL_SEND_CLAIM_LEASE_MINUTES]
   );
 
   return claimResult.rows[0] ?? null;
@@ -397,8 +437,10 @@ export function resolveTicketEmailDailyLimit() {
 }
 
 // Gmail's free tier is about 20 messages per hour and 500 recipients per day.
-// The count reads the ticket delivery ledger, which has one row per booking, so
-// one booking counts as one recipient. Set a limit to 0 to disable that guard.
+// The count reads the ticket delivery ledger. That ledger has one row per
+// booking, so the local guard counts each booking once even if an admin resends
+// it; Apps Script still enforces its own per-message quota and returns the real
+// Gmail error if the account is exhausted. Set a limit to 0 to disable the guard.
 export async function checkTicketEmailSendQuota() {
   const hourlyLimit = resolveTicketEmailHourlyLimit();
   const dailyLimit = resolveTicketEmailDailyLimit();
@@ -497,7 +539,14 @@ async function deliverTicketEmailForConfirmedBooking(
   sendTicketEmail,
   deliveryOptions
 ) {
-  if (bookingRecord.ticket_sent_at) {
+  // Automatic confirmation is idempotent: once a ticket has been accepted by
+  // the mail server, a repeated webhook must not email the attendee again.
+  // An admin resend deliberately bypasses this guard but still uses the claim
+  // below, so two resend clicks cannot send at the same time.
+  if (
+    bookingRecord.ticket_sent_at &&
+    !deliveryOptions.allowResendAfterSuccessfulDelivery
+  ) {
     return {
       delivered: false,
       skipped: true,
@@ -544,16 +593,20 @@ async function deliverTicketEmailForConfirmedBooking(
     };
   }
 
-  const deliveryRecord = await claimTicketEmailSendForBooking(bookingRecord);
+  const deliveryRecord = deliveryOptions.allowResendAfterSuccessfulDelivery
+    ? await claimTicketEmailResendForBooking(bookingRecord)
+    : await claimTicketEmailSendForBooking(bookingRecord);
   if (!deliveryRecord) {
     const refreshedBookingRecord = await fetchBookingRecordById(bookingRecord.id);
 
     return {
       delivered: false,
       skipped: true,
-      reason: refreshedBookingRecord?.ticket_sent_at
-        ? TICKET_EMAIL_ALREADY_SENT_REASON
-        : TICKET_EMAIL_SEND_IN_PROGRESS_REASON,
+      reason: deliveryOptions.allowResendAfterSuccessfulDelivery
+        ? TICKET_EMAIL_SEND_IN_PROGRESS_REASON
+        : refreshedBookingRecord?.ticket_sent_at
+          ? TICKET_EMAIL_ALREADY_SENT_REASON
+          : TICKET_EMAIL_SEND_IN_PROGRESS_REASON,
       bookingId: bookingRecord.id,
     };
   }
@@ -569,6 +622,12 @@ async function deliverTicketEmailForConfirmedBooking(
     const sendResult = await sendTicketEmail(bookingRecord, {
       receiptPdfArtifact: builtReceiptPdf,
       paymentSummary: deliveryOptions.paymentSummary ?? null,
+      // Apps Script treats a delivery key as an idempotency key. A resend must
+      // use a new key or the web app would report the first delivery as a
+      // duplicate instead of sending the email again.
+      emailDeliveryKeySuffix: deliveryOptions.allowResendAfterSuccessfulDelivery
+        ? `resend-${deliveryRecord.attempt_count}`
+        : '',
     });
     await markTicketEmailDeliveredForBooking(bookingRecord, deliveryRecord);
 
@@ -657,6 +716,50 @@ export async function deliverTicketForConfirmedBooking(
       delivered: false,
       bookingId,
       reason: error.message || 'Unknown ticket delivery error',
+    };
+  }
+}
+
+// Admin resend is intentionally different from the automatic confirmation
+// delivery: it may run again after a successful send, but it still validates
+// the booking, the recipient, the sending quota and the delivery lease.
+export async function resendTicketEmailToAttendeeFromAdmin(
+  bookingId,
+  sendTicketEmail = sendTicketEmailToAttendee
+) {
+  try {
+    const bookingRecord = await fetchBookingRecordById(bookingId);
+    if (!bookingRecord) {
+      return null;
+    }
+
+    if (bookingRecord.status !== 'confirmed') {
+      return { skipped: true, bookingId: bookingRecord.id };
+    }
+
+    if (!isTicketEmailDeliveryEnabled()) {
+      return {
+        delivered: false,
+        skipped: true,
+        reason: TICKET_EMAIL_DELIVERY_DISABLED_REASON,
+        bookingId: bookingRecord.id,
+      };
+    }
+
+    return await deliverTicketEmailForConfirmedBooking(
+      bookingRecord,
+      sendTicketEmail,
+      { allowResendAfterSuccessfulDelivery: true }
+    );
+  } catch (error) {
+    logError('ticket_email_admin_resend_failed', {
+      bookingId,
+      reason: error.message || 'Unknown ticket resend error',
+    });
+    return {
+      delivered: false,
+      bookingId,
+      reason: error.message || 'Unknown ticket resend error',
     };
   }
 }
@@ -770,6 +873,16 @@ export async function redeliverFailedTicketEmail(
       reason: error.message || 'Unknown ticket redelivery error',
     };
   }
+}
+
+export async function fetchTicketDeliveryRecordByBookingId(bookingId) {
+  const result = await pool.query(
+    `SELECT status, attempt_count, sent_at, last_error
+       FROM ticket_deliveries
+      WHERE booking_id = $1`,
+    [bookingId]
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function fetchFailedTicketDeliveryRecordsBelowMaxAttempts(maxAttempts) {

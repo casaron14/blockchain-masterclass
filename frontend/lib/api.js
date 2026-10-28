@@ -258,7 +258,7 @@ export function adminConfirmBooking(bookingId, adminToken) {
   });
 }
 
-export function adminRedeliverTicketEmail(bookingId, adminToken) {
+export function adminResendTicketConfirmationEmail(bookingId, adminToken) {
   return request(`/api/tickets/redeliver/${bookingId}`, {
     method: 'POST',
     headers: buildAdminAuthorizationHeaders(adminToken),

@@ -6,7 +6,7 @@ import {
   adminCreateBooking,
   adminDownloadBookingsCsv,
   adminFetchBookingList,
-  adminRedeliverTicketEmail,
+  adminResendTicketConfirmationEmail,
   adminSyncBookingsToGoogleSheet,
 } from '@/lib/api';
 import { useAdmin } from '@/context/AdminContext';
@@ -209,17 +209,18 @@ export default function AdminDashboardPage() {
     }
   }
 
-  // The API resolves the recipient from the booking row and refuses a second
-  // send, so this handler never accepts an address from the browser.
+  // An admin can resend at any time after confirmation. The API resolves the
+  // recipient from the booking row and takes a delivery lease, so this handler
+  // never accepts an address from the browser and cannot double-send.
   async function resendTicketEmailForBooking(bookingRow) {
     setTicketResendFeedback(null);
     setResendingTicketBookingId(bookingRow.id);
 
     try {
-      await adminRedeliverTicketEmail(bookingRow.id, adminToken);
+      await adminResendTicketConfirmationEmail(bookingRow.id, adminToken);
       setTicketResendFeedback({
         tone: 'success',
-        message: `Ticket email sent to ${bookingRow.email} for ${bookingRow.ref}.`,
+        message: `Ticket email resent to ${bookingRow.email} for ${bookingRow.ref}.`,
       });
       refreshBookingList();
     } catch (error) {
@@ -455,13 +456,39 @@ export default function AdminDashboardPage() {
                     </td>
                     <td>
                       {bookingRow.status === 'confirmed' ? (
-                        <span
-                          className={`status-chip ${
-                            bookingRow.ticket_sent_at ? 'confirmed' : 'pending'
-                          }`}
-                        >
-                          {bookingRow.ticket_sent_at ? 'Sent' : 'Not sent'}
-                        </span>
+                        <>
+                          <span
+                            className={`status-chip ${
+                              bookingRow.ticket_sent_at ? 'confirmed' : 'pending'
+                            }`}
+                          >
+                            {bookingRow.ticket_sent_at ? 'Sent' : 'Not sent'}
+                          </span>
+                          {bookingRow.ticket_sent_at && (
+                            <>
+                              <br />
+                              <span className="muted">
+                                Last sent{' '}
+                                {formatAdminTimestamp(
+                                  bookingRow.ticket_last_sent_at ||
+                                    bookingRow.ticket_sent_at
+                                )}
+                              </span>
+                            </>
+                          )}
+                          {bookingRow.ticket_delivery_status === 'failed' &&
+                            bookingRow.ticket_sent_at && (
+                              <>
+                                <br />
+                                <span
+                                  className="status-chip failed"
+                                  title={bookingRow.ticket_delivery_last_error || ''}
+                                >
+                                  Last resend failed
+                                </span>
+                              </>
+                            )}
+                        </>
                       ) : (
                         <span className="muted">—</span>
                       )}
@@ -490,23 +517,22 @@ export default function AdminDashboardPage() {
                             ? 'Review receipt'
                             : 'Manage'}
                         </LoadingButton>
-                        {bookingRow.status === 'confirmed' &&
-                          !bookingRow.ticket_sent_at && (
-                            <LoadingButton
-                              type="button"
-                              className="btn btn-secondary"
-                              autoLoading={false}
-                              loading={resendingTicketBookingId === bookingRow.id}
-                              loadingLabel="Sending…"
-                              disabled={
-                                resendingTicketBookingId !== null &&
-                                resendingTicketBookingId !== bookingRow.id
-                              }
-                              onClick={() => resendTicketEmailForBooking(bookingRow)}
-                            >
-                              Resend ticket
-                            </LoadingButton>
-                          )}
+                        {bookingRow.status === 'confirmed' && (
+                          <LoadingButton
+                            type="button"
+                            className="btn btn-secondary"
+                            autoLoading={false}
+                            loading={resendingTicketBookingId === bookingRow.id}
+                            loadingLabel="Sending…"
+                            disabled={
+                              resendingTicketBookingId !== null &&
+                              resendingTicketBookingId !== bookingRow.id
+                            }
+                            onClick={() => resendTicketEmailForBooking(bookingRow)}
+                          >
+                            Resend ticket
+                          </LoadingButton>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -92,7 +92,13 @@ what remains.
     increments `attempt_count`. Never throws on a send failure — it records it for
     retry. The sender is injectable for deterministic tests; default is real Nodemailer.
   - `redeliverFailedTicketEmail(bookingId, ...)` — retries a previously failed delivery
-    (flips `failed` → `sent`).
+    (flips `failed` → `sent`); automatic confirmation retries still refuse to email a
+    booking that already has `ticket_sent_at`.
+  - `resendTicketEmailToAttendeeFromAdmin(bookingId, ...)` — operator-triggered resend.
+    It is allowed after a successful delivery, still takes the `ticket_deliveries`
+    send lease, and passes a unique `deliveryKeySuffix` so Apps Script logs and sends
+    the resend instead of treating it as a duplicate. `ticket_deliveries.sent_at`
+    always holds the last successful send time.
 - Wired into both confirmation flows so a ticket is generated right after a seat is
   confirmed and paid:
   - `processAzamPayWebhook` (AzamPesa success) calls `deliverTicketForConfirmedBooking`.
@@ -100,8 +106,10 @@ what remains.
     and `verify-usdt`) calls the same.
   - Both accept an optional injectable delivery function so tests stay hermetic.
 - `controller/ticketController.js` + `api/ticketRouter.js`, mounted in `server.js`:
-  - `POST /api/tickets/redeliver/:bookingId` — re-sends the ticket email for a
-    confirmed booking (404 if unknown, 502 if the send fails, redelivery recorded).
+  - `POST /api/tickets/redeliver/:bookingId` — resends the ticket email for a
+    confirmed booking (404 if unknown, 409 if a send is already in progress,
+    502 if the send fails). The admin UI keeps this action available after a
+    successful send and shows the last successful send time.
 - Config added to `.env` / `.env.example`: `MAIL_HOST`, `MAIL_PORT`, `MAIL_USER`,
   `MAIL_PASS`, `MAIL_FROM`, `EVENT_TITLE`, `EVENT_DATE`, `EVENT_LOCATION`.
 
@@ -524,7 +532,7 @@ time of writing. The table below describes what each file covers.
 | `tests/sweepVerificationService.test.js` | Sweep-record evidence for an ambiguous payment (finality-aware), ambiguous-payment worklist |
 | `tests/paymentReceiptService.test.js` | Receipt row written inside the confirmation transaction, delivery + failure + retry states |
 | `tests/paymentReceiptPdfService.test.js` | Receipt PDF rendering |
-| `tests/ticketDeliveryService.test.js` | QR payload/render, delivery success + failure, redelivery, confirmed-only guard, max attempts |
+| `tests/ticketDeliveryService.test.js` | QR payload/render, delivery success + failure, failed-delivery retry, admin resend after success, resend race lease, unique Apps Script resend keys, confirmed-only guard, max attempts |
 | `tests/ticketDeliveryRetryJob.test.js` | Retry job for both ticket and receipt deliveries |
 | `tests/ticketPdfService.test.js` | Ticket PDF rendering |
 | `tests/reconciliationService.test.js` | Ledger-vs-on-chain balance check, admin summary report, persisted `reconciliation_runs` |
@@ -594,6 +602,9 @@ Tickets (`POST /api/tickets/redeliver/:bookingId`):
   (`connect ECONNREFUSED`), and a `ticket_deliveries` row is recorded as `failed`
   with the QR payload and error stored for later retry.
 - Unknown booking → `404`.
+- A confirmed booking can be resent after a successful delivery. The response
+  includes the delivery id, the row keeps `sent_at` at the last successful send,
+  and the admin list/detail shows that timestamp.
 - End-to-end: a `processAzamPayWebhook` success (matching `reference_id`) confirms
   the booking + payment and **auto-creates** the `ticket_deliveries` row (status
   `failed` only because no SMTP host is available; `attempt_count`/`last_error`

@@ -99,9 +99,10 @@ CREATE TABLE IF NOT EXISTS bookings (
   email           TEXT NOT NULL,
   status          booking_status NOT NULL DEFAULT 'pending',
 
-  -- set only after the ticket email has been accepted by the mail server.
+  -- set only after the first ticket email has been accepted by the mail server.
   -- A NULL value means no ticket has been delivered yet, so a confirmation
-  -- retry or a repeated webhook may still attempt delivery.
+  -- retry or a repeated webhook may still attempt delivery. Admin resends do
+  -- not change this value; ticket_deliveries.sent_at tracks the latest send.
   ticket_sent_at  TIMESTAMPTZ,
 
   -- which invite link / marketing channel this attendee arrived through
@@ -350,6 +351,11 @@ CREATE TABLE IF NOT EXISTS azampesa (
 
 -- ---------------------------------------------------------------------
 -- ticket_deliveries - outgoing ticket email delivery state (retry support)
+--
+-- One row per booking. sent_at is updated after every successful send, so it
+-- is the last time the ticket reached the attendee. bookings.ticket_sent_at is
+-- the first successful send and the guard that keeps automatic confirmations
+-- idempotent; admin resends deliberately bypass that guard.
 -- ---------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS ticket_deliveries (

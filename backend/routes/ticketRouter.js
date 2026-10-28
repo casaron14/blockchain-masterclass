@@ -7,13 +7,15 @@ import { validatePositiveIntegerRouteParam } from "../middleware/requestValidato
 const router = express.Router();
 
 // Re-sending someone's ticket is an operator action, not a public one: without
-// this guard anybody who guessed a booking id could trigger mail.
+// this guard anybody who guessed a booking id could trigger mail. The handler
+// allows resending after a successful delivery; the delivery lease still
+// prevents two simultaneous sends.
 router.post(
   "/redeliver/:bookingId",
   createGeneralRequestRateLimiter(),
   requireAdminAccess,
   validatePositiveIntegerRouteParam("bookingId"),
-  ticketController.redeliverTicketEmailEndpoint
+  ticketController.resendTicketEmailToAttendeeEndpoint
 );
 
 router.get(

@@ -117,7 +117,7 @@ One row per delivery attempt:
 
 | Column | Meaning |
 | --- | --- |
-| `Delivery key` | `ticket:<REF>` or `receipt:<REF>`; the duplicate-protection key |
+| `Delivery key` | `ticket:<REF>` or `receipt:<REF>`; the duplicate-protection key. An admin resend uses `ticket:<REF>:resend-<attempt>` so it is a new delivery, not a duplicate |
 | `Email kind` | `ticket` or `receipt` |
 | `Booking reference` | The `EVT-<REF>` reference code |
 | `Attendee name`, `Email address`, `Phone number` | Contact details from the booking |
@@ -137,6 +137,11 @@ accepted the message but before it could write `sent`, the row stays `sending`
 for **15 minutes** and the script answers `delivery_in_progress` instead of
 sending again. After the lease expires, a retry is allowed. This is the same
 claim pattern the PostgreSQL ticket delivery uses.
+
+An admin **Resend ticket** action deliberately uses a new delivery key
+(`ticket:<REF>:resend-<attempt>`), because the earlier key is already final.
+The `Ticket deliveries` tab therefore keeps one row per send, including each
+resend, while the `Bookings` tab still has one mirror row per booking.
 
 ### `Bookings`
 

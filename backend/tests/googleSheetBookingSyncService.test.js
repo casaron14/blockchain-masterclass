@@ -78,6 +78,17 @@ test('buildBookingMirrorRecordForSheet maps the booking and payment fields', () 
   });
 });
 
+test('buildBookingMirrorRecordForSheet prefers the last send time after an admin resend', () => {
+  const mirrorRecord = buildBookingMirrorRecordForSheet(
+    buildBookingRow({
+      ticket_sent_at: new Date('2026-11-07T18:00:00.000Z'),
+      ticket_last_sent_at: new Date('2026-11-08T09:30:00.000Z'),
+    })
+  );
+
+  assert.equal(mirrorRecord.ticketSentAt, '2026-11-08T09:30:00.000Z');
+});
+
 test('buildBookingMirrorRecordForSheet labels a USDT payment with the crypto currency', () => {
   const mirrorRecord = buildBookingMirrorRecordForSheet(
     buildBookingRow({

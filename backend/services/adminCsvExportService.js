@@ -97,6 +97,10 @@ const BOOKING_EXPORT_COLUMNS = Object.freeze([
     headerLabel: 'Payment confirmed at',
     readValue: (booking) => booking.payment_confirmed_at,
   },
+  {
+    headerLabel: 'Ticket last sent at',
+    readValue: (booking) => booking.ticket_last_sent_at || booking.ticket_sent_at,
+  },
 ]);
 
 export function buildBookingsCsvDocument(bookingRecords) {

@@ -7,6 +7,7 @@ import {
   buildTicketEmailDeliveryFailureMessage,
   deliverTicketForConfirmedBooking,
   redeliverFailedTicketEmail,
+  resendTicketEmailToAttendeeFromAdmin,
   sendTicketEmailToAttendee,
   TICKET_EMAIL_ALREADY_SENT_REASON,
   TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON,
@@ -14,6 +15,8 @@ import {
 } from '../services/ticketDeliveryService.js';
 
 import { buildTicketQrCodeUrl } from '../services/ticketQrCodeService.js';
+
+import { buildBookingEmailDeliveryMetadata } from '../services/bookingEmailDeliveryMetadataService.js';
 
 import {
   createBookingRecordWithActiveSeatHold,
@@ -238,6 +241,110 @@ test('deliverTicketForConfirmedBooking never sends a second ticket for the same 
   assert.deepEqual(sentBookingIds, [confirmedBooking.id]);
 });
 
+test('resendTicketEmailToAttendeeFromAdmin sends again after a successful delivery and records the last send', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  const sentBookingIds = [];
+  const stubSender = async (bookingRecord) => {
+    sentBookingIds.push(bookingRecord.id);
+    return { ok: true };
+  };
+
+  const firstResult = await deliverTicketForConfirmedBooking(
+    confirmedBooking.id,
+    stubSender
+  );
+  const firstDeliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
+  const firstBookingRecord = await fetchBookingRecordById(confirmedBooking.id);
+
+  const resendResult = await resendTicketEmailToAttendeeFromAdmin(
+    confirmedBooking.id,
+    stubSender
+  );
+
+  assert.equal(firstResult.delivered, true);
+  assert.equal(resendResult.delivered, true);
+  assert.equal(resendResult.deliveryWasDuplicate, false);
+  assert.deepEqual(sentBookingIds, [confirmedBooking.id, confirmedBooking.id]);
+
+  const resentDeliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
+  assert.equal(resentDeliveryRecord.status, 'sent');
+  assert.equal(resentDeliveryRecord.attempt_count, 2);
+  assert.ok(
+    new Date(resentDeliveryRecord.sent_at).getTime() >=
+      new Date(firstDeliveryRecord.sent_at).getTime()
+  );
+
+  const bookingAfterResend = await fetchBookingRecordById(confirmedBooking.id);
+  assert.equal(
+    new Date(bookingAfterResend.ticket_sent_at).getTime(),
+    new Date(firstBookingRecord.ticket_sent_at).getTime()
+  );
+});
+
+test('resendTicketEmailToAttendeeFromAdmin sends only once when two resends race', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  await deliverTicketForConfirmedBooking(confirmedBooking.id, async () => ({ ok: true }));
+
+  let sendCount = 0;
+  let releaseFirstResend;
+  const firstResendMayFinish = new Promise((resolve) => {
+    releaseFirstResend = resolve;
+  });
+
+  const slowFirstResend = async () => {
+    sendCount += 1;
+    await firstResendMayFinish;
+    return { ok: true };
+  };
+
+  const firstResend = resendTicketEmailToAttendeeFromAdmin(
+    confirmedBooking.id,
+    slowFirstResend
+  );
+
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const secondResend = await resendTicketEmailToAttendeeFromAdmin(
+    confirmedBooking.id,
+    async () => {
+      sendCount += 1;
+      return { ok: true };
+    }
+  );
+
+  releaseFirstResend();
+  const firstResendResult = await firstResend;
+
+  assert.equal(firstResendResult.delivered, true);
+  assert.equal(secondResend.delivered, false);
+  assert.equal(secondResend.skipped, true);
+  assert.equal(sendCount, 1);
+
+  const deliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
+  assert.equal(deliveryRecord.status, 'sent');
+  assert.equal(deliveryRecord.attempt_count, 2);
+});
+
+test('resendTicketEmailToAttendeeFromAdmin skips a booking that is not confirmed', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Unconfirmed Resend User',
+    email: 'unconfirmed-resend@example.com',
+    phone_number: '+255712345696',
+  });
+
+  let sendTicketEmailWasCalled = false;
+  const result = await resendTicketEmailToAttendeeFromAdmin(
+    bookingRecord.id,
+    async () => {
+      sendTicketEmailWasCalled = true;
+      return { ok: true };
+    }
+  );
+
+  assert.equal(result.skipped, true);
+  assert.equal(sendTicketEmailWasCalled, false);
+});
+
 test('deliverTicketForConfirmedBooking stops at the configured hourly Gmail limit', async () => {
   const previousHourlyLimit = process.env.TICKET_EMAIL_HOURLY_LIMIT;
   process.env.TICKET_EMAIL_HOURLY_LIMIT = '1';
@@ -279,6 +386,23 @@ test('deliverTicketForConfirmedBooking stops at the configured hourly Gmail limi
       process.env.TICKET_EMAIL_HOURLY_LIMIT = previousHourlyLimit;
     }
   }
+});
+
+test('buildBookingEmailDeliveryMetadata gives each admin resend its own Apps Script delivery key', () => {
+  const bookingRecord = { ref: 'EVT-TEST01' };
+
+  const firstDeliveryMetadata = buildBookingEmailDeliveryMetadata(
+    bookingRecord,
+    'ticket'
+  );
+  const resendDeliveryMetadata = buildBookingEmailDeliveryMetadata(
+    bookingRecord,
+    'ticket',
+    { deliveryKeySuffix: 'resend-2' }
+  );
+
+  assert.equal(firstDeliveryMetadata.deliveryKey, 'ticket:EVT-TEST01');
+  assert.equal(resendDeliveryMetadata.deliveryKey, 'ticket:EVT-TEST01:resend-2');
 });
 
 test('buildTicketEmailDeliveryFailureMessage explains Apps Script sign-in and deployment failures', () => {
@@ -452,6 +576,60 @@ test('sendTicketEmailToAttendee posts the PDF and booking mirror to the Apps Scr
     assert.equal(ticketAttachment.mimeType, 'application/pdf');
     const decodedTicketPdfBuffer = Buffer.from(ticketAttachment.base64Content, 'base64');
     assert.equal(decodedTicketPdfBuffer.subarray(0, 5).toString(), '%PDF-');
+  } finally {
+    globalThis.fetch = previousFetch;
+
+    for (const [variableName, previousValue] of Object.entries(previousEnvironment)) {
+      if (previousValue === undefined) {
+        delete process.env[variableName];
+      } else {
+        process.env[variableName] = previousValue;
+      }
+    }
+  }
+});
+
+test('resendTicketEmailToAttendeeFromAdmin uses a new Apps Script delivery key for the resend', async () => {
+  const confirmedBooking = await createConfirmedBooking();
+  const previousFetch = globalThis.fetch;
+  const previousEnvironment = {
+    EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+    APPS_SCRIPT_TICKET_WEBHOOK_URL: process.env.APPS_SCRIPT_TICKET_WEBHOOK_URL,
+    APPS_SCRIPT_SHARED_SECRET: process.env.APPS_SCRIPT_SHARED_SECRET,
+    MAIL_FROM_NAME: process.env.MAIL_FROM_NAME,
+  };
+  const recordedDeliveryKeys = [];
+
+  globalThis.fetch = async (requestUrl, requestOptions) => {
+    const postedRequestBody = JSON.parse(requestOptions.body);
+    recordedDeliveryKeys.push(postedRequestBody.emailRequest.deliveryKey);
+    return {
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          ok: true,
+          deliveryId: `apps-script-delivery-${recordedDeliveryKeys.length}`,
+          remainingDailyQuota: 80,
+        }),
+    };
+  };
+
+  try {
+    process.env.EMAIL_PROVIDER = 'apps_script';
+    process.env.APPS_SCRIPT_TICKET_WEBHOOK_URL =
+      'https://script.google.com/macros/s/AKfycb-test-deployment/exec';
+    process.env.APPS_SCRIPT_SHARED_SECRET = 'test-shared-secret';
+    process.env.MAIL_FROM_NAME = 'DienAcademy Events';
+
+    const firstDelivery = await deliverTicketForConfirmedBooking(confirmedBooking.id);
+    const resendDelivery = await resendTicketEmailToAttendeeFromAdmin(confirmedBooking.id);
+
+    assert.equal(firstDelivery.delivered, true);
+    assert.equal(resendDelivery.delivered, true);
+    assert.deepEqual(recordedDeliveryKeys, [
+      `ticket:${confirmedBooking.ref}`,
+      `ticket:${confirmedBooking.ref}:resend-2`,
+    ]);
   } finally {
     globalThis.fetch = previousFetch;
 

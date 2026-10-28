@@ -414,6 +414,13 @@ With that flag:
 - the admin confirmation message points the operator to the booking lookup
   instead of claiming the ticket was emailed.
 
+When email is enabled, a confirmed booking keeps the **Resend ticket** action
+after the first successful send. Each resend is a new Apps Script delivery key,
+so the Sheet records it as a separate attempt, while `ticket_deliveries.sent_at`
+and the admin booking list show the last successful send time. Resends still
+count against the Gmail/Apps Script daily sending limit; the backend lease
+prevents two simultaneous sends for the same booking.
+
 The flag is unset by default, which keeps email enabled for existing
 deployments. A confirmed booking always shows a download button in the lookup
 and on the success page, with or without email.
