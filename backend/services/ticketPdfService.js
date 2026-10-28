@@ -2,19 +2,30 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 
 import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
-import { INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64 } from '../assets/inkryptusLogoOnBlackPngAsset.js';
+import {
+  EVENT_BRAND_NAME,
+  EVENT_LOCATION,
+  EVENT_MOTTO,
+  EVENT_TICKET_DATE_LABEL,
+  EVENT_TITLE,
+  EVENT_VENUE_NAME,
+  EVENT_WEBSITE_ADDRESS,
+  SUPPORT_PHONE_NUMBER,
+} from './eventConfigService.js';
+import { INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64 } from '../../shared/inkryptusLogoOnBlackPngAsset.js';
 
-// The ticket is a print-ready pass. Its copy is fixed to the details printed
-// on the event pass, while attendee and referral data stay dynamic per booking.
-const TICKET_EVENT_TITLE = 'Blockchain Masterclass';
+// The ticket is a print-ready pass. Its copy comes from the shared event
+// configuration so the downloaded PDF, the emailed PDF, and the event page
+// cannot drift.
+const TICKET_EVENT_TITLE = EVENT_TITLE;
 const TICKET_EVENT_TITLE_LINES = TICKET_EVENT_TITLE.toUpperCase().split(' ');
-const TICKET_BRAND_NAME = 'Inkryptus';
-const TICKET_EVENT_DATE = '07/10/2026';
-const TICKET_EVENT_TAGLINE = 'Jenga mustakabali kwa Blockchain';
-const TICKET_VENUE_NAME = 'Village Hall Mafao House';
-const TICKET_VENUE_CITY = 'Arusha, Tanzania';
-const TICKET_WEBSITE_ADDRESS = 'inkryptus.com';
-const TICKET_CONTACT_PHONE_NUMBER = '+255 621 745 217';
+const TICKET_BRAND_NAME = EVENT_BRAND_NAME;
+const TICKET_EVENT_DATE = EVENT_TICKET_DATE_LABEL;
+const TICKET_EVENT_TAGLINE = EVENT_MOTTO;
+const TICKET_VENUE_NAME = EVENT_VENUE_NAME;
+const TICKET_VENUE_CITY = EVENT_LOCATION;
+const TICKET_WEBSITE_ADDRESS = EVENT_WEBSITE_ADDRESS;
+const TICKET_CONTACT_PHONE_NUMBER = SUPPORT_PHONE_NUMBER;
 
 const TICKET_PAGE_WIDTH = 841.89;
 const TICKET_PAGE_HEIGHT = 595.28;

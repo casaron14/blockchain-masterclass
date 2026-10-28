@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64 } from '../assets/inkryptusLogoOnBlackPngAsset.js';
+import { INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64 } from '../../shared/inkryptusLogoOnBlackPngAsset.js';
 
 const BACKEND_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND_LOGO_ASSET_PATH = path.join(

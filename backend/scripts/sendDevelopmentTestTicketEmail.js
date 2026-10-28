@@ -4,9 +4,10 @@
 //   npm run test:ticket-email -- --to=you@gmail.com
 //
 // It creates a throwaway booking, confirms the seat, sends the same ticket
-// email a real confirmation sends, writes a copy of the PNG for visual review,
-// then deletes the booking. It refuses to run in production. This is a script,
-// not a route, so there is no endpoint to remember to remove before deploy.
+// email a real confirmation sends, writes a copy of the PDF ticket for visual
+// review, then deletes the booking. It refuses to run in production. This is a
+// script, not a route, so there is no endpoint to remember to remove before
+// deploy.
 
 import '../config/environment.js';
 
@@ -68,21 +69,16 @@ async function runDevelopmentTicketEmailSmokeTest() {
       );
     }
 
-    const { renderTicketPngBufferForBooking } = await import(
-      '../../frontend/lib/ticketImageRenderer.mjs'
+    const { generateTicketPdfBuffer } = await import(
+      '../services/ticketPdfService.js'
     );
     const previewDirectoryPath = path.join(backendRootDirectory, 'out/tickets');
     const previewFilePath = path.join(
       previewDirectoryPath,
-      `dev-test-ticket-${bookingRecord.ref}.png`
+      `dev-test-ticket-${bookingRecord.ref}.pdf`
     );
     await fs.mkdir(previewDirectoryPath, { recursive: true });
-    await fs.writeFile(
-      previewFilePath,
-      await renderTicketPngBufferForBooking(bookingRecord, {
-        eventTimeLabel: process.env.EVENT_TIME_LABEL?.trim() || '',
-      })
-    );
+    await fs.writeFile(previewFilePath, await generateTicketPdfBuffer(bookingRecord));
 
     console.log(
       JSON.stringify(

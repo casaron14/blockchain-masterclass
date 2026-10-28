@@ -79,13 +79,13 @@ what remains.
   settings (`SETTLEMENT_FINALITY_MODE`, `SETTLEMENT_MIN_CONFIRMATIONS`).
 
 ### Phase 3 — Ticketing and reliability
-- `services/ticketDeliveryService.js` — ticket generation and email delivery:
-  - `buildTicketQrPayload` / `renderTicketQrDataUrl` build a JSON QR payload
-    (ticket id, booking ref, attendee name, event details) and render a PNG data URL
-    via the `qrcode` package.
-  - `sendTicketEmailToAttendee` composes an HTML ticket email (attendee, ticket id,
-    event details, inline QR) and sends via Nodemailer (SMTP configured from env;
-    defaults target a local MailHog on port 1025).
+- `services/ticketDeliveryService.js` — ticket email delivery:
+  - `services/ticketPdfService.js` renders the print-ready PDF ticket (attendee,
+    ticket id, event details, referral QR) from the shared event configuration.
+  - `buildTicketQrCodeUrl` builds the attendee's Inkryptus referral link used by
+    the QR code on that PDF.
+  - `sendTicketEmailToAttendee` attaches the same PDF ticket to the HTML email
+    and sends it through the configured provider (Apps Script or Gmail SMTP).
   - `deliverTicketForConfirmedBooking(bookingId, sendTicketEmail?)` — only delivers
     for `confirmed` bookings; upserts a `ticket_deliveries` row and, on success, marks
     it `sent` (records `sent_at`), or on failure marks it `failed` with the error and

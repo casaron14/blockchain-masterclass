@@ -1,5 +1,4 @@
 import pool from '../config/db.js';
-import QRCode from 'qrcode';
 
 import { fetchBookingRecordById } from './bookingService.js';
 
@@ -14,11 +13,16 @@ import {
   buildBookingEmailDeliveryMetadata,
 } from './bookingEmailDeliveryMetadataService.js';
 import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
+import { generateTicketPdfBuffer } from './ticketPdfService.js';
 import {
+  EVENT_BRAND_NAME,
   EVENT_DATE_LABEL,
   EVENT_LOCATION,
   EVENT_TITLE,
-  PLATFORM_BRAND_NAME,
+  EVENT_VENUE_NAME,
+  EVENT_WEBSITE_ADDRESS,
+  SUPPORT_PHONE_NUMBER,
+  TICKET_TYPE_LABEL,
 } from './eventConfigService.js';
 import {
   InvalidAttendeeEmailAddressError,
@@ -61,12 +65,10 @@ export function getEventDetails() {
   return {
     eventTitle: EVENT_TITLE,
     eventDate: EVENT_DATE_LABEL,
-    eventLocation: EVENT_LOCATION,
+    eventLocation: `${EVENT_VENUE_NAME}, ${EVENT_LOCATION}`,
+    eventTimeLabel: process.env.EVENT_TIME_LABEL?.trim() || '',
+    ticketTypeLabel: TICKET_TYPE_LABEL,
   };
-}
-
-export async function renderTicketQrDataUrl(bookingRecord) {
-  return QRCode.toDataURL(buildTicketQrCodeUrl(bookingRecord));
 }
 
 function escapeHtmlTextForTicketEmail(htmlTextValue) {
@@ -92,8 +94,18 @@ export function buildTicketEmailHtml(bookingRecord) {
   const eventTitle = escapeHtmlTextForTicketEmail(eventDetails.eventTitle);
   const eventDate = escapeHtmlTextForTicketEmail(eventDetails.eventDate);
   const eventLocation = escapeHtmlTextForTicketEmail(eventDetails.eventLocation);
+  const eventTimeLabel = escapeHtmlTextForTicketEmail(eventDetails.eventTimeLabel);
+  const ticketTypeLabel = escapeHtmlTextForTicketEmail(eventDetails.ticketTypeLabel);
   const ticketCode = escapeHtmlTextForTicketEmail(`EVT-${bookingRecord.ref}`);
-  const brandName = escapeHtmlTextForTicketEmail(PLATFORM_BRAND_NAME);
+  const brandName = escapeHtmlTextForTicketEmail(EVENT_BRAND_NAME);
+  const websiteAddress = escapeHtmlTextForTicketEmail(EVENT_WEBSITE_ADDRESS);
+  const contactPhoneNumber = escapeHtmlTextForTicketEmail(SUPPORT_PHONE_NUMBER);
+  const eventTimeTableRow = eventTimeLabel
+    ? `<tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;">TIME</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#FFFFFF;">${eventTimeLabel}</td>
+                </tr>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -102,50 +114,56 @@ export function buildTicketEmailHtml(bookingRecord) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Your ticket for ${eventTitle}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#E9E2D5;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E9E2D5;">
+<body style="margin:0;padding:0;background-color:#E5E5E5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#E5E5E5;">
     <tr>
       <td align="center" style="padding:28px 12px;">
-        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:560px;background-color:#F2EDE3;border:1px solid #CAC6BD;">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:560px;max-width:560px;background-color:#000000;border:1px solid #2A2A2A;">
           <tr>
-            <td style="background-color:#14120E;padding:26px 30px;border-bottom:3px solid #A34A25;">
-              <div style="font-family:'Courier New',Courier,monospace;font-size:12px;letter-spacing:3px;color:#C9703F;">${brandName.toUpperCase()}</div>
-              <div style="font-family:Georgia,'Times New Roman',serif;font-size:27px;line-height:1.2;color:#F2EDE3;margin-top:14px;">Your ticket is ready</div>
+            <td style="background-color:#000000;padding:30px 34px 24px 34px;border-bottom:1px solid #444444;">
+              <div style="font-family:'Courier New',Courier,monospace;font-size:13px;letter-spacing:4px;color:#FFFFFF;">${brandName.toUpperCase()}</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:28px;line-height:1.2;color:#FFFFFF;margin-top:16px;">Your ticket is ready</div>
             </td>
           </tr>
           <tr>
-            <td style="padding:28px 30px 0 30px;">
-              <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#14120E;">Hi ${attendeeName},</p>
-              <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#615A4D;">Your booking is confirmed. Your ticket is attached to this email as a PNG image. Show it on your phone at the entrance.</p>
+            <td style="padding:28px 34px 0 34px;">
+              <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#FFFFFF;">Hi ${attendeeName},</p>
+              <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#C9C9C9;">Your booking is confirmed. Your ticket is attached to this email as a PDF. Show it on your phone at the entrance.</p>
             </td>
           </tr>
           <tr>
-            <td style="padding:24px 30px 0 30px;">
+            <td style="padding:24px 34px 0 34px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;width:38%;">EVENT</td>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#14120E;">${eventTitle}</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;width:38%;">EVENT</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#FFFFFF;">${eventTitle}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;">DATE</td>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#14120E;">${eventDate}</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;">DATE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#FFFFFF;">${eventDate}</td>
+                </tr>
+                ${eventTimeTableRow}
+                <tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;">VENUE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#FFFFFF;">${eventLocation}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;">VENUE</td>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#14120E;">${eventLocation}</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;">TICKET TYPE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#FFFFFF;">${ticketTypeLabel}</td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#615A4D;">TICKET CODE</td>
-                  <td style="padding:10px 0;border-bottom:1px solid #CAC6BD;font-family:'Courier New',Courier,monospace;font-size:13px;color:#14120E;">${ticketCode}</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;">TICKET CODE</td>
+                  <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:13px;color:#FFFFFF;">${ticketCode}</td>
                 </tr>
               </table>
             </td>
           </tr>
           <tr>
-            <td style="padding:26px 30px 30px 30px;">
-              <div style="border-top:1px dashed #A34A25;padding-top:16px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#615A4D;">
+            <td style="padding:26px 34px 30px 34px;">
+              <div style="border-top:1px solid #444444;padding-top:16px;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#8A8A8A;">
                 Keep this email. If you cannot open the attachment, download the PDF from the booking lookup using reference ${escapeHtmlTextForTicketEmail(bookingRecord.ref)}.
               </div>
+              <div style="font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1.5px;color:#8A8A8A;margin-top:16px;">${websiteAddress.toUpperCase()} · ${contactPhoneNumber}</div>
             </td>
           </tr>
         </table>
@@ -165,27 +183,31 @@ export function buildTicketEmailText(bookingRecord) {
     '',
     `Your booking for ${eventDetails.eventTitle} is confirmed.`,
     `Date: ${eventDetails.eventDate}`,
+    ...(eventDetails.eventTimeLabel ? [`Time: ${eventDetails.eventTimeLabel}`] : []),
     `Venue: ${eventDetails.eventLocation}`,
+    `Ticket type: ${eventDetails.ticketTypeLabel}`,
     `Ticket code: ${ticketCode}`,
     '',
-    `Your ticket is attached as ticket-${bookingRecord.ref}.png. Show it on your phone at the entrance.`,
+    `Your ticket is attached as ticket-${bookingRecord.ref}.pdf. Show it on your phone at the entrance.`,
     '',
     `You can also download the PDF from the booking lookup using reference ${bookingRecord.ref}.`,
     '',
-    PLATFORM_BRAND_NAME,
+    EVENT_BRAND_NAME,
+    EVENT_WEBSITE_ADDRESS,
+    SUPPORT_PHONE_NUMBER,
   ].join('\n');
 }
 
 export function buildTicketEmailAttachments(
-  ticketPngBuffer,
+  ticketPdfBuffer,
   bookingRecord,
   receiptPdfArtifact = null
 ) {
   const attachments = [
     {
-      filename: `ticket-${bookingRecord.ref}.png`,
-      content: ticketPngBuffer,
-      contentType: 'image/png',
+      filename: `ticket-${bookingRecord.ref}.pdf`,
+      content: ticketPdfBuffer,
+      contentType: 'application/pdf',
     },
   ];
 
@@ -200,29 +222,14 @@ export function buildTicketEmailAttachments(
   return attachments;
 }
 
-// next/og is a Next.js package. Load it only when a ticket is actually being
-// rendered so the Express process can still start when email is disabled.
-async function generateTicketPngArtifactForBooking(bookingRecord) {
-  const { renderTicketPngBufferForBooking, renderBookingCodeQrDataUrl } =
-    await import('../../frontend/lib/ticketImageRenderer.mjs');
-
-  const qrDataUrl = await renderBookingCodeQrDataUrl(bookingRecord);
-  const ticketPngBuffer = await renderTicketPngBufferForBooking(bookingRecord, {
-    qrDataUrl,
-    eventTimeLabel: process.env.EVENT_TIME_LABEL?.trim() || '',
-  });
-
-  return { qrDataUrl, ticketPngBuffer };
-}
-
 export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
   const attendeeEmailAddress =
     validateAttendeeEmailAddressForTicketDelivery(bookingRecord);
 
-  const { qrDataUrl, ticketPngBuffer } =
-    options.ticketPngBuffer && options.qrDataUrl
-      ? { qrDataUrl: options.qrDataUrl, ticketPngBuffer: options.ticketPngBuffer }
-      : await generateTicketPngArtifactForBooking(bookingRecord);
+  // The emailed ticket is the same PDF the attendee can download from the
+  // booking lookup: one generator, one design, one QR payload.
+  const ticketPdfBuffer =
+    options.ticketPdfBuffer ?? (await generateTicketPdfBuffer(bookingRecord));
 
   const senderIdentity = resolveOutboundEmailSenderIdentity();
   const outboundEmailMessage = {
@@ -232,7 +239,7 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
     text: buildTicketEmailText(bookingRecord),
     html: buildTicketEmailHtml(bookingRecord),
     attachments: buildTicketEmailAttachments(
-      ticketPngBuffer,
+      ticketPdfBuffer,
       bookingRecord,
       options.receiptPdfArtifact ?? null
     ),
@@ -252,9 +259,8 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
       });
 
   return {
-    qrDataUrl,
-    ticketPngBuffer,
-    ticketAttachmentFileName: `ticket-${bookingRecord.ref}.png`,
+    ticketPdfBuffer,
+    ticketAttachmentFileName: `ticket-${bookingRecord.ref}.pdf`,
     providerMessageId: sendOutcome.providerMessageId,
     deliveryWasDuplicate: sendOutcome.duplicate === true,
   };

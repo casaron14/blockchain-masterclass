@@ -72,9 +72,6 @@ const nextConfig = {
       './node_modules/pdfkit/js/data/**/*',
       './node_modules/pdfkit/js/standard-fonts/**/*',
       './node_modules/bcrypt/**/*',
-      // next/og renders the ticket PNG with Satori + resvg, which load WASM
-      // and font data from the compiled package at runtime.
-      './node_modules/next/dist/compiled/@vercel/og/**/*',
     ],
   },
   serverExternalPackages: SERVER_DEPENDENCIES_LOADED_AT_RUNTIME,

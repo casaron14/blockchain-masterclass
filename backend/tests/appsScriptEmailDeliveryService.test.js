@@ -59,9 +59,9 @@ function buildTicketOutboundEmailMessage() {
     html: '<p>Your ticket is attached.</p>',
     attachments: [
       {
-        filename: 'ticket-EVT-TEST01.png',
-        content: Buffer.from('fake-png-bytes'),
-        contentType: 'image/png',
+        filename: 'ticket-EVT-TEST01.pdf',
+        content: Buffer.from('%PDF-1.4 fake ticket'),
+        contentType: 'application/pdf',
       },
     ],
   };
@@ -193,9 +193,9 @@ test('buildAppsScriptEmailDeliveryRequest converts attachments to base64 and kee
   assert.equal(deliveryRequest.emailRequest.replyToEmailAddress, 'support@dienacademy.com');
   assert.deepEqual(deliveryRequest.emailRequest.attachments, [
     {
-      fileName: 'ticket-EVT-TEST01.png',
-      mimeType: 'image/png',
-      base64Content: Buffer.from('fake-png-bytes').toString('base64'),
+      fileName: 'ticket-EVT-TEST01.pdf',
+      mimeType: 'application/pdf',
+      base64Content: Buffer.from('%PDF-1.4 fake ticket').toString('base64'),
     },
   ]);
   assert.equal(deliveryRequest.emailRequest.booking.attendeeName, 'Test Attendee');
@@ -220,9 +220,9 @@ test('buildAppsScriptEmailDeliveryRequest refuses an attachment that is too larg
     ...buildTicketOutboundEmailMessage(),
     attachments: [
       {
-        filename: 'ticket.png',
+        filename: 'ticket.pdf',
         content: Buffer.alloc(9 * 1024 * 1024),
-        contentType: 'image/png',
+        contentType: 'application/pdf',
       },
     ],
   };

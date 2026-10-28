@@ -13,7 +13,13 @@ export const EVENT_CONFIGURATIONS = [
     tagline: 'Book your seat for the Blockchain Masterclass event.',
     event: {
       date: '7th November 2026',
+      // DD/MM/YYYY form printed on the event pass. Keep it in sync with `date`.
+      ticketDateLabel: '07/11/2026',
       location: 'Arusha, Tanzania',
+      venueName: 'Village Hall Mafao House',
+      motto: 'Jenga mustakabali kwa Blockchain',
+      brandName: 'Inkryptus',
+      websiteAddress: 'inkryptus.com',
     },
     durationDays: 1,
     price: {
@@ -76,7 +82,12 @@ const primaryEventConfiguration = fetchPrimaryEventConfiguration();
 export const EVENT_TITLE = primaryEventConfiguration.name;
 export const EVENT_TAGLINE = primaryEventConfiguration.tagline;
 export const EVENT_DATE_LABEL = primaryEventConfiguration.event.date;
+export const EVENT_TICKET_DATE_LABEL = primaryEventConfiguration.event.ticketDateLabel;
 export const EVENT_LOCATION = primaryEventConfiguration.event.location;
+export const EVENT_VENUE_NAME = primaryEventConfiguration.event.venueName;
+export const EVENT_MOTTO = primaryEventConfiguration.event.motto;
+export const EVENT_BRAND_NAME = primaryEventConfiguration.event.brandName;
+export const EVENT_WEBSITE_ADDRESS = primaryEventConfiguration.event.websiteAddress;
 export const EVENT_DURATION_DAYS = primaryEventConfiguration.durationDays;
 export const EVENT_SEAT_HOLD_MINUTES = primaryEventConfiguration.seatHoldMinutes;
 

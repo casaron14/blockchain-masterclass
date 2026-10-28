@@ -266,9 +266,9 @@ function buildWebhookRequestBody(emailRequestOverrides = {}, topLevelOverrides =
       replyToEmailAddress: 'support@dienacademy.com',
       attachments: [
         {
-          fileName: 'ticket-EVT-TEST01.png',
-          mimeType: 'image/png',
-          base64Content: Buffer.from('fake-png-bytes').toString('base64'),
+          fileName: 'ticket-EVT-TEST01.pdf',
+          mimeType: 'application/pdf',
+          base64Content: Buffer.from('%PDF-1.4 fake ticket').toString('base64'),
         },
       ],
       booking: {
@@ -404,11 +404,11 @@ test('doPost sends one ticket email and mirrors it into the Sheet', () => {
   assert.equal(sentMessage.name, 'DienAcademy Events');
   assert.equal(sentMessage.replyTo, 'support@dienacademy.com');
   assert.equal(sentMessage.attachments.length, 1);
-  assert.equal(sentMessage.attachments[0].fileName, 'ticket-EVT-TEST01.png');
-  assert.equal(sentMessage.attachments[0].mimeType, 'image/png');
+  assert.equal(sentMessage.attachments[0].fileName, 'ticket-EVT-TEST01.pdf');
+  assert.equal(sentMessage.attachments[0].mimeType, 'application/pdf');
   assert.deepEqual(
     Buffer.from(sentMessage.attachments[0].decodedBytes).toString(),
-    'fake-png-bytes'
+    '%PDF-1.4 fake ticket'
   );
 
   const deliveryRow = readDeliveryRowByKey(

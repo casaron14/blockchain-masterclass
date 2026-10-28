@@ -1,13 +1,10 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fsSync from 'fs';
-import jsQR from 'jsqr';
-import PNG from 'png-js';
 import pool from '../config/db.js';
 
 import {
   buildTicketEmailDeliveryFailureMessage,
-  renderTicketQrDataUrl,
   deliverTicketForConfirmedBooking,
   redeliverFailedTicketEmail,
   sendTicketEmailToAttendee,
@@ -48,24 +45,6 @@ async function createConfirmedBooking() {
   });
   const confirmedBooking = await confirmBookingSeatWithinCapacity(bookingRecord.id);
   return confirmedBooking;
-}
-
-function decodeQrTextFromPngDataUrl(qrPngDataUrl) {
-  const qrPngBuffer = Buffer.from(qrPngDataUrl.split(',')[1], 'base64');
-
-  return new Promise((resolve) => {
-    const qrPngImage = new PNG(qrPngBuffer);
-
-    qrPngImage.decode((rgbaPixels) => {
-      const rgbaPixelData = new Uint8ClampedArray(
-        rgbaPixels.buffer,
-        rgbaPixels.byteOffset,
-        rgbaPixels.length
-      );
-      const decodedQrCode = jsQR(rgbaPixelData, qrPngImage.width, qrPngImage.height);
-      resolve(decodedQrCode?.data ?? null);
-    });
-  });
 }
 
 async function createPendingPaymentReceiptForBooking(bookingId) {
@@ -149,46 +128,6 @@ test('buildTicketQrCodeUrl still returns a valid Inkryptus link without a referr
     buildTicketQrCodeUrl(directBooking),
     'https://link.inkryptus.com/?referral='
   );
-});
-
-test('renderTicketQrDataUrl returns a valid PNG data URL', async () => {
-  const confirmedBooking = await createConfirmedBooking();
-  const qrDataUrl = await renderTicketQrDataUrl(confirmedBooking);
-  assert.match(qrDataUrl, /^data:image\/png;base64,/);
-});
-
-test('renderTicketQrDataUrl encodes the referral URL in the QR image', async () => {
-  const referredBooking = await createBookingRecordWithActiveSeatHold({
-    full_name: 'Referred Qr User',
-    email: 'referred-qr@example.com',
-    phone_number: '+255712345700',
-    utm_source: 'neema',
-  });
-
-  const qrDataUrl = await renderTicketQrDataUrl(referredBooking);
-  const decodedQrText = await decodeQrTextFromPngDataUrl(qrDataUrl);
-
-  assert.equal(decodedQrText, 'https://link.inkryptus.com/?referral=neema');
-});
-
-test('renderTicketQrDataUrl encodes a different QR image for each referral value', async () => {
-  const firstReferredBooking = await createBookingRecordWithActiveSeatHold({
-    full_name: 'First Referred User',
-    email: 'first-referred@example.com',
-    phone_number: '+255712345698',
-    utm_source: 'neema',
-  });
-  const secondReferredBooking = await createBookingRecordWithActiveSeatHold({
-    full_name: 'Second Referred User',
-    email: 'second-referred@example.com',
-    phone_number: '+255712345699',
-    utm_source: 'amina',
-  });
-
-  const firstQrDataUrl = await renderTicketQrDataUrl(firstReferredBooking);
-  const secondQrDataUrl = await renderTicketQrDataUrl(secondReferredBooking);
-
-  assert.notEqual(firstQrDataUrl, secondQrDataUrl);
 });
 
 test('deliverTicketForConfirmedBooking records a sent delivery on success', async () => {
@@ -402,7 +341,7 @@ test('redeliverFailedTicketEmail flips a failed delivery to sent', async () => {
   assert.ok(refreshedBooking.ticket_sent_at);
 });
 
-test('sendTicketEmailToAttendee attaches the ticket PNG and any receipt PDF to the email', async () => {
+test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to the email', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const sentMessages = [];
   const recordingTransport = {
@@ -428,12 +367,10 @@ test('sendTicketEmailToAttendee attaches the ticket PNG and any receipt PDF to t
   assert.equal(sentMessages[0].attachments.length, 2);
 
   const ticketAttachment = sentMessages[0].attachments[0];
-  assert.equal(ticketAttachment.filename, `ticket-${confirmedBooking.ref}.png`);
-  assert.equal(ticketAttachment.contentType, 'image/png');
+  assert.equal(ticketAttachment.filename, `ticket-${confirmedBooking.ref}.pdf`);
+  assert.equal(ticketAttachment.contentType, 'application/pdf');
   assert.ok(Buffer.isBuffer(ticketAttachment.content));
-  assert.equal(ticketAttachment.content.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  assert.equal(ticketAttachment.content.readUInt32BE(16), 1200);
-  assert.equal(ticketAttachment.content.readUInt32BE(20), 630);
+  assert.equal(ticketAttachment.content.subarray(0, 5).toString(), '%PDF-');
 
   const receiptAttachment = sentMessages[0].attachments[1];
   assert.equal(
@@ -444,7 +381,7 @@ test('sendTicketEmailToAttendee attaches the ticket PNG and any receipt PDF to t
   assert.equal(receiptAttachment.content.subarray(0, 5).toString(), '%PDF-');
 });
 
-test('sendTicketEmailToAttendee attaches only the ticket PNG when no receipt exists', async () => {
+test('sendTicketEmailToAttendee attaches only the ticket PDF when no receipt exists', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const sentMessages = [];
   const recordingTransport = {
@@ -457,11 +394,11 @@ test('sendTicketEmailToAttendee attaches only the ticket PNG when no receipt exi
   await sendTicketEmailToAttendee(confirmedBooking, { transport: recordingTransport });
 
   assert.equal(sentMessages[0].attachments.length, 1);
-  assert.equal(sentMessages[0].attachments[0].filename, `ticket-${confirmedBooking.ref}.png`);
-  assert.equal(sentMessages[0].attachments[0].contentType, 'image/png');
+  assert.equal(sentMessages[0].attachments[0].filename, `ticket-${confirmedBooking.ref}.pdf`);
+  assert.equal(sentMessages[0].attachments[0].contentType, 'application/pdf');
 });
 
-test('sendTicketEmailToAttendee posts the PNG and booking mirror to the Apps Script web app', async () => {
+test('sendTicketEmailToAttendee posts the PDF and booking mirror to the Apps Script web app', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const previousFetch = globalThis.fetch;
   const previousEnvironment = {
@@ -511,10 +448,10 @@ test('sendTicketEmailToAttendee posts the PNG and booking mirror to the Apps Scr
     assert.equal(postedRequestBody.emailRequest.attachments.length, 1);
 
     const ticketAttachment = postedRequestBody.emailRequest.attachments[0];
-    assert.equal(ticketAttachment.fileName, `ticket-${confirmedBooking.ref}.png`);
-    assert.equal(ticketAttachment.mimeType, 'image/png');
-    const decodedTicketPngBuffer = Buffer.from(ticketAttachment.base64Content, 'base64');
-    assert.equal(decodedTicketPngBuffer.subarray(1, 4).toString(), 'PNG');
+    assert.equal(ticketAttachment.fileName, `ticket-${confirmedBooking.ref}.pdf`);
+    assert.equal(ticketAttachment.mimeType, 'application/pdf');
+    const decodedTicketPdfBuffer = Buffer.from(ticketAttachment.base64Content, 'base64');
+    assert.equal(decodedTicketPdfBuffer.subarray(0, 5).toString(), '%PDF-');
   } finally {
     globalThis.fetch = previousFetch;
 

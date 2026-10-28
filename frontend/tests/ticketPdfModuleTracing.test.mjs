@@ -66,14 +66,14 @@ test('pdfkit stays outside the webpack bundle so it resolves its own font module
   );
 });
 
-test('the API function trace includes the next/og WASM and font assets', () => {
+test('the API function trace no longer needs the next/og renderer', () => {
   const apiTracingIncludeGlobs =
     nextConfig.outputFileTracingIncludes[API_FUNCTION_TRACING_KEY];
 
   assert.ok(
-    apiTracingIncludeGlobs.some((tracingIncludeGlob) =>
+    !apiTracingIncludeGlobs.some((tracingIncludeGlob) =>
       tracingIncludeGlob.includes('node_modules/next/dist/compiled/@vercel/og'),
     ),
-    'next/og must be traced so the ticket PNG can render in a deployed function',
+    'ticket email now uses the PDF generator, so next/og should not be traced',
   );
 });

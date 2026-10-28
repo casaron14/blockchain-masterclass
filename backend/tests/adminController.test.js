@@ -114,5 +114,5 @@ test('exportAdminBookingListAsCsvEndpoint returns a CSV attachment with the book
     response.capturedResponse.sentPayload,
     /Booking reference,Attendee name,Email address,Phone number/
   );
-  assert.match(response.capturedResponse.sentPayload, /Referral code,Referred by/);
+  assert.match(response.capturedResponse.sentPayload, /Referral source,Referred by/);
 });

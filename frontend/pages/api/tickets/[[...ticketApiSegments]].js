@@ -8,7 +8,7 @@ export const config = {
     bodyParser: false,
     externalResolver: true,
   },
-  // A redelivery renders the PNG and waits for the email provider.
+  // A redelivery renders the PDF and waits for the email provider.
   maxDuration: 60,
 };
 

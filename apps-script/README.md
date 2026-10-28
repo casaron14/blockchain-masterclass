@@ -5,7 +5,7 @@ server. The booking backend keeps using PostgreSQL, and posts each confirmed
 booking to a Google Apps Script web app. The script:
 
 1. checks a shared secret,
-2. sends the ticket email (PNG attached) with `GmailApp`,
+2. sends the ticket email (PDF attached) with `GmailApp`,
 3. writes one row per delivery into the bound Google Sheet.
 
 The Sheet is a **delivery log and booking mirror**, not the database. The
@@ -98,7 +98,7 @@ cd backend
 DEV_TEST_TICKET_RECIPIENT_EMAIL='you@gmail.com' npm run test:ticket-email
 ```
 
-The script prints the delivery id and writes a copy of the PNG to
+The script prints the delivery id and writes a copy of the PDF to
 `backend/out/tickets/`. The same delivery must also appear in the Sheet with
 `Delivery status = sent`. The throwaway booking is deleted from PostgreSQL
 afterwards, but its Sheet row remains as a log entry; delete that row by hand if
