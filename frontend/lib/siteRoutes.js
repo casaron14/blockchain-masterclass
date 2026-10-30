@@ -19,6 +19,10 @@ export function buildPaymentPageUrlForPaymentId(paymentId) {
   return `/pay/${encodeURIComponent(paymentId)}`;
 }
 
+export function buildPaymentConfirmationPageUrlForPaymentId(paymentId) {
+  return `/pay/${encodeURIComponent(paymentId)}/confirm`;
+}
+
 export function buildSuccessPageUrlForReferenceCode(bookingReferenceCode) {
   return `/success/${encodeURIComponent(bookingReferenceCode)}`;
 }

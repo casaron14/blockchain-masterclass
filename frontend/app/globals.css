@@ -2169,6 +2169,15 @@ code {
   line-height: 1.6;
 }
 
+.payment-next-step {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.6rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line-strong);
+}
+
 .deposit-panel {
   display: grid;
   gap: 1.25rem;

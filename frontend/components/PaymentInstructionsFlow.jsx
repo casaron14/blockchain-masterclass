@@ -2,40 +2,21 @@
 
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import lipaNambaPaymentQr from '@/assets/Lipanamba.webp';
-import {
-  fetchPaymentOverviewById,
-  fetchBookingRecordById,
-  initiateUsdtPayment,
-  uploadLipaNambaPaymentReceipt,
-} from '@/lib/api';
-import { fetchStoredBookingRecord } from '@/lib/bookingStorage';
+import { initiateUsdtPayment } from '@/lib/api';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import { SUPPORTED_PAYMENT_METHODS } from '@/lib/eventConfig';
 import { formatLocalPrice } from '@/lib/eventFormat';
-import { formatPaymentHoldCountdown } from '@/lib/paymentHoldCountdown';
+import { usePaymentOverviewPolling } from '@/lib/usePaymentOverviewPolling';
+import { buildPaymentConfirmationPageUrlForPaymentId } from '@/lib/siteRoutes';
 import LoadingButton from '@/components/LoadingButton';
+import PaymentHoldCountdown from '@/components/PaymentHoldCountdown';
 import HairlineLoadingIndicator from '@/components/HairlineLoadingIndicator';
 import PaymentLoadingSkeleton from '@/components/PaymentLoadingSkeleton';
 
-// Serverless hosts (Vercel) refuse a request body above 4.5 MB before it ever
-// reaches the API, so the client must never offer to upload more than the
-// backend will accept.
-const MAX_RECEIPT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
-const SUPPORTED_RECEIPT_MIME_TYPES = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-];
-
-function readStoredBookingRecord(eventSlug) {
-  if (typeof window !== 'undefined') {
-    return fetchStoredBookingRecord(eventSlug);
-  }
-  return null;
-}
+const TERMINAL_PAYMENT_STATUSES = ['confirmed', 'failed', 'expired'];
 
 function CopyAddressIcon() {
   return (
@@ -74,7 +55,7 @@ function AddressCopiedIcon() {
   );
 }
 
-export default function PaymentFlow({ paymentId }) {
+export default function PaymentInstructionsFlow({ paymentId }) {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
   const {
@@ -87,28 +68,21 @@ export default function PaymentFlow({ paymentId }) {
     lipaNambaNumber,
     lipaNambaAccountName,
   } = eventConfig;
+  const router = useRouter();
 
-  const [paymentRecord, setPaymentRecord] = useState(null);
-  const [bookingExpiresAtMs, setBookingExpiresAtMs] = useState(null);
-  const [remainingMilliseconds, setRemainingMilliseconds] = useState(null);
-  const [loadError, setLoadError] = useState(null);
+  const { paymentOverview, bookingRecord, loadError } = usePaymentOverviewPolling({
+    paymentId,
+    eventSlug: slug,
+  });
+  const paymentRecord = paymentOverview?.payment ?? null;
 
   const [usdtInstructions, setUsdtInstructions] = useState(null);
   const [depositQrDataUrl, setDepositQrDataUrl] = useState(null);
   const [isAddressCopied, setIsAddressCopied] = useState(false);
   const [isLipaNambaNumberCopied, setIsLipaNambaNumberCopied] = useState(false);
-
-  const [offlinePaymentReceipt, setOfflinePaymentReceipt] = useState(null);
-  const [bookingReferenceCode, setBookingReferenceCode] = useState('');
-  const [attendeeFullName, setAttendeeFullName] = useState('');
-  const [isOfflineSeatHoldActive, setIsOfflineSeatHoldActive] = useState(null);
-  const [selectedReceiptFile, setSelectedReceiptFile] = useState(null);
-  const [receiptUploadError, setReceiptUploadError] = useState(null);
-  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
-  const receiptFileInputRef = useRef(null);
-
   const [statusMessage, setStatusMessage] = useState(null);
   const [statusTone, setStatusTone] = useState('info');
+  const hasRequestedUsdtInstructionsRef = useRef(false);
 
   const paymentLabelParams = {
     currency,
@@ -118,48 +92,14 @@ export default function PaymentFlow({ paymentId }) {
     amount: cryptoAmount,
   };
 
-  useEffect(() => {
-    const storedBookingRecord = readStoredBookingRecord(slug);
-    if (storedBookingRecord?.ref) {
-      setBookingReferenceCode(storedBookingRecord.ref);
-    }
-    if (storedBookingRecord?.full_name) {
-      setAttendeeFullName(storedBookingRecord.full_name);
-    }
-  }, [slug]);
-
-  useEffect(() => {
-    fetchPaymentOverviewById(paymentId)
-      .then(async (paymentOverview) => {
-        const payment = paymentOverview.payment;
-        setPaymentRecord(payment);
-        setOfflinePaymentReceipt(paymentOverview.offlineReceipt ?? null);
-
-        let bookingRecord = null;
-        if (payment.booking_id) {
-          bookingRecord = await fetchBookingRecordById(payment.booking_id).catch(() => null);
-        }
-        if (!bookingRecord) {
-          bookingRecord = readStoredBookingRecord(slug);
-        }
-        if (bookingRecord?.ref) {
-          setBookingReferenceCode(bookingRecord.ref);
-        }
-        if (bookingRecord?.full_name) {
-          setAttendeeFullName(bookingRecord.full_name);
-        }
-        if (!bookingRecord?.expires_at) {
-          return;
-        }
-        const bookingExpiresAt = Date.parse(bookingRecord.expires_at);
-        if (!Number.isNaN(bookingExpiresAt)) {
-          setBookingExpiresAtMs(bookingExpiresAt);
-        }
-      })
-      .catch((error) => {
-        setLoadError(error.message || t('payment.genericError'));
-      });
-  }, [paymentId, t, slug]);
+  const attendeeFullName = bookingRecord?.full_name ?? '';
+  const bookingReferenceCode = bookingRecord?.ref ?? '';
+  const parsedBookingExpiresAtMs = bookingRecord?.expires_at
+    ? Date.parse(bookingRecord.expires_at)
+    : null;
+  const bookingExpiresAtMs = Number.isNaN(parsedBookingExpiresAtMs)
+    ? null
+    : parsedBookingExpiresAtMs;
 
   // A confirmed payment does not need a hold countdown; the ticket is already
   // being delivered, so the timer must not overwrite the confirmation notice
@@ -167,32 +107,15 @@ export default function PaymentFlow({ paymentId }) {
   const paymentStatusValue = paymentRecord?.status;
 
   useEffect(() => {
-    if (!bookingExpiresAtMs || paymentStatusValue === 'confirmed') {
-      return undefined;
-    }
-
-    function updateRemainingTime() {
-      const remainingMs = bookingExpiresAtMs - Date.now();
-      setRemainingMilliseconds(remainingMs);
-      if (remainingMs <= 0) {
-        setStatusTone('error');
-        setStatusMessage(t('payment.statusExpired'));
-      }
-    }
-
-    updateRemainingTime();
-    const countdownTimer = setInterval(updateRemainingTime, 1000);
-
-    return () => clearInterval(countdownTimer);
-  }, [bookingExpiresAtMs, paymentStatusValue, t]);
-
-  useEffect(() => {
     if (!paymentRecord || paymentRecord.payment_method !== SUPPORTED_PAYMENT_METHODS.usdt_bep20) {
       return undefined;
     }
-    if (usdtInstructions) {
+    // The status poll replaces the payment record every few seconds; the
+    // deposit request must still be sent only once per visit.
+    if (hasRequestedUsdtInstructionsRef.current) {
       return undefined;
     }
+    hasRequestedUsdtInstructionsRef.current = true;
 
     let isCancelled = false;
 
@@ -233,83 +156,6 @@ export default function PaymentFlow({ paymentId }) {
     };
   }, [paymentRecord, paymentId, t, usdtInstructions]);
 
-  const isPaymentStatusTerminal = ['confirmed', 'failed', 'expired'].includes(
-    paymentRecord?.status
-  );
-  const isOfflinePaymentAwaitingReview =
-    paymentRecord?.payment_method === SUPPORTED_PAYMENT_METHODS.lipanamba &&
-    offlinePaymentReceipt?.status === 'submitted' &&
-    !isPaymentStatusTerminal;
-
-  function handleReceiptFileSelection(event) {
-    const receiptFile = event.target.files?.[0] ?? null;
-    setReceiptUploadError(null);
-
-    if (!receiptFile) {
-      setSelectedReceiptFile(null);
-      return;
-    }
-
-    if (receiptFile.size > MAX_RECEIPT_FILE_SIZE_BYTES) {
-      setSelectedReceiptFile(null);
-      setReceiptUploadError(t('payment.lipanambaReceiptTooLarge'));
-      return;
-    }
-
-    if (
-      receiptFile.type &&
-      !SUPPORTED_RECEIPT_MIME_TYPES.includes(receiptFile.type)
-    ) {
-      setSelectedReceiptFile(null);
-      setReceiptUploadError(t('payment.lipanambaReceiptInvalidType'));
-      return;
-    }
-
-    setSelectedReceiptFile(receiptFile);
-  }
-
-  async function handleUploadReceipt(event) {
-    event.preventDefault();
-
-    if (!selectedReceiptFile) {
-      setReceiptUploadError(t('payment.lipanambaReceiptMissing'));
-      return;
-    }
-
-    setReceiptUploadError(null);
-    setStatusMessage(null);
-    setIsUploadingReceipt(true);
-
-    try {
-      const uploadResult = await uploadLipaNambaPaymentReceipt(
-        paymentId,
-        selectedReceiptFile,
-        bookingReferenceCode
-      );
-      setOfflinePaymentReceipt(uploadResult.offlineReceipt);
-      setIsOfflineSeatHoldActive(uploadResult.isSeatHoldActive !== false);
-      if (uploadResult.bookingExpiresAt) {
-        const refreshedBookingExpiresAt = Date.parse(uploadResult.bookingExpiresAt);
-        if (!Number.isNaN(refreshedBookingExpiresAt)) {
-          setBookingExpiresAtMs(refreshedBookingExpiresAt);
-        }
-      }
-      setPaymentRecord((currentPaymentRecord) =>
-        currentPaymentRecord
-          ? { ...currentPaymentRecord, status: 'pending', confirmed_at: null }
-          : currentPaymentRecord
-      );
-      setSelectedReceiptFile(null);
-      if (receiptFileInputRef.current) {
-        receiptFileInputRef.current.value = '';
-      }
-    } catch (error) {
-      setReceiptUploadError(error.message || t('payment.genericError'));
-    } finally {
-      setIsUploadingReceipt(false);
-    }
-  }
-
   async function handleCopyDepositAddress() {
     const depositAddressToCopy = usdtInstructions?.receivingWallet;
     if (!depositAddressToCopy) {
@@ -340,14 +186,11 @@ export default function PaymentFlow({ paymentId }) {
     }
   }
 
-  const isCountdownUrgent =
-    bookingExpiresAtMs !== null &&
-    remainingMilliseconds !== null &&
-    remainingMilliseconds <= 120000;
-  const canUploadOfflinePaymentReceipt =
-    paymentRecord?.status !== 'confirmed' &&
-    offlinePaymentReceipt?.status !== 'approved' &&
-    (offlinePaymentReceipt?.status !== 'submitted' || isPaymentStatusTerminal);
+  function handleContinueToPaymentConfirmation() {
+    router.push(buildPaymentConfirmationPageUrlForPaymentId(paymentId));
+  }
+
+  const isPaymentStatusTerminal = TERMINAL_PAYMENT_STATUSES.includes(paymentStatusValue);
 
   if (loadError) {
     return <p className="error-banner">{loadError}</p>;
@@ -358,19 +201,17 @@ export default function PaymentFlow({ paymentId }) {
   }
 
   const paymentMethod = paymentRecord.payment_method;
+  const canContinueToPaymentConfirmation =
+    !isPaymentStatusTerminal &&
+    (paymentMethod === SUPPORTED_PAYMENT_METHODS.lipanamba ||
+      paymentMethod === SUPPORTED_PAYMENT_METHODS.usdt_bep20);
 
   return (
     <section className="card">
-      {bookingExpiresAtMs !== null && paymentStatusValue !== 'confirmed' && (
-        <div className={`hold-countdown ${isCountdownUrgent ? 'warning' : ''}`}>
-          <span>{t('payment.timeRemaining')}</span>
-          <strong>
-            {remainingMilliseconds !== null
-              ? formatPaymentHoldCountdown(remainingMilliseconds)
-              : formatPaymentHoldCountdown(bookingExpiresAtMs - Date.now())}
-          </strong>
-        </div>
-      )}
+      <PaymentHoldCountdown
+        bookingExpiresAtMilliseconds={bookingExpiresAtMs}
+        isPaymentConfirmed={paymentStatusValue === 'confirmed'}
+      />
 
       <h2 className="card__title">{t('payment.title')}</h2>
 
@@ -514,61 +355,6 @@ export default function PaymentFlow({ paymentId }) {
               priority
             />
           </div>
-
-          {isOfflinePaymentAwaitingReview && (
-            <p className="status-message info">
-              {t('payment.lipanambaReceiptAwaitingReview')}
-            </p>
-          )}
-
-          {offlinePaymentReceipt?.status === 'rejected' && (
-            <p className="status-message error">
-              {t('payment.lipanambaReceiptRejected')}
-            </p>
-          )}
-
-          {isOfflinePaymentAwaitingReview &&
-            isOfflineSeatHoldActive === false && (
-              <p className="status-message error">
-                {t('payment.lipanambaSeatHoldUnavailable')}
-              </p>
-            )}
-
-          {canUploadOfflinePaymentReceipt && (
-            <form className="form" onSubmit={handleUploadReceipt} noValidate>
-              <label className="field">
-                <span>{t('payment.lipanambaReceiptLabel')}</span>
-                <input
-                  ref={receiptFileInputRef}
-                  type="file"
-                  accept="application/pdf,image/jpeg,image/png,image/webp"
-                  onChange={handleReceiptFileSelection}
-                />
-                <span className="muted">{t('payment.lipanambaReceiptHelp')}</span>
-              </label>
-
-              {selectedReceiptFile && (
-                <p className="muted">{selectedReceiptFile.name}</p>
-              )}
-
-              {receiptUploadError && (
-                <p className="field-error" role="alert">
-                  {receiptUploadError}
-                </p>
-              )}
-
-              <LoadingButton
-                type="submit"
-                className="btn btn-primary"
-                spinnerColor="#f2ede3"
-                autoLoading={false}
-                loading={isUploadingReceipt}
-                loadingLabel={t('loadingStates.uploadingReceipt')}
-              >
-                {t('payment.lipanambaUploadReceipt')}
-              </LoadingButton>
-            </form>
-          )}
         </div>
       )}
 
@@ -576,6 +362,20 @@ export default function PaymentFlow({ paymentId }) {
         <p className={`status-message ${statusTone}`} role="status">
           {statusMessage}
         </p>
+      )}
+
+      {canContinueToPaymentConfirmation && (
+        <div className="payment-next-step">
+          <LoadingButton
+            type="button"
+            className="btn btn-primary"
+            spinnerColor="#f2ede3"
+            autoLoading={false}
+            onClick={handleContinueToPaymentConfirmation}
+          >
+            {t('payment.confirmPaymentButton')}
+          </LoadingButton>
+        </div>
       )}
     </section>
   );

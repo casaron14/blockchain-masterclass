@@ -275,7 +275,7 @@ export const translations = {
       depositQrAlt: 'QR code with the deposit wallet address',
       lipanamba: 'Lipa Namba (Mobile Money)',
       lipanambaInstructions:
-        'Pay {currency} {price} to Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), then upload your payment receipt. Our team will review the receipt and email your ticket within one hour.',
+        'Pay {currency} {price} to Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), then tap Confirm payment to upload your receipt. Our team will review the receipt and email your ticket within one hour.',
       lipanambaNumberLabel: 'Lipa Namba number',
       lipanambaAccountLabel: 'Account name',
       lipanambaAmountLabel: 'Amount to pay',
@@ -295,6 +295,22 @@ export const translations = {
         'The receipt was received, but the event is currently full so the seat hold could not be extended. Please contact support before paying again.',
       lipanambaReceiptTooLarge: 'The receipt must be 4 MB or smaller.',
       lipanambaReceiptInvalidType: 'Upload a PDF, JPEG, PNG, or WebP receipt.',
+      confirmPaymentButton: 'Confirm payment',
+      confirmPageTitle: 'Confirm your payment',
+      confirmPageLede: 'Upload your payment receipt or wait while we confirm your payment.',
+      confirmReceiptPrompt:
+        'Paid {currency} {price}? Upload your payment receipt so we can confirm your seat.',
+      waitingForBlockchainConfirmation:
+        'Waiting for your {crypto} payment on {network}. This page updates automatically.',
+      blockchainTransferObserved:
+        'We have seen a transfer of {amount} {crypto} and are waiting for it to settle.',
+      confirmedTicketNote:
+        'Your seat is confirmed. Download your ticket now, or check your inbox.',
+      downloadTicket: 'Download your ticket',
+      downloadTicketFailed: 'The ticket could not be downloaded. Please try again.',
+      backToPaymentInstructions: 'Back to payment instructions',
+      bookAgain: 'Book again',
+      paymentFailed: 'This payment could not be completed. Please book again.',
       statusExpired: 'Your seat hold has expired. Please book again.',
       expired: 'Your seat hold has expired. Please book again.',
       genericError: 'Payment could not be completed. Please try again.',
@@ -615,7 +631,7 @@ export const translations = {
       depositQrAlt: 'QR code yenye anwani ya pochi ya malipo',
       lipanamba: 'Lipa Namba (Malipo kwa Simu)',
       lipanambaInstructions:
-        'Lipa {price} {currency} kwa Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), kisha upload risiti ya malipo. Timu yetu itakagua risiti na kutumia tikiti yako kwa barua pepe ndani ya saa moja.',
+        'Lipa {price} {currency} kwa Lipa Namba {lipaNambaNumber} ({lipaNambaAccountName}), kisha gusa Thibitisha malipo ili upload risiti. Timu yetu itakagua risiti na kutumia tikiti yako kwa barua pepe ndani ya saa moja.',
       lipanambaNumberLabel: 'Namba ya Lipa Namba',
       lipanambaAccountLabel: 'Jina la akaunti',
       lipanambaAmountLabel: 'Kiasi cha kulipa',
@@ -635,6 +651,22 @@ export const translations = {
         'Risiti imepokelewa, lakini tukio limejaa kwa sasa hivyo nafasi yako haikuweza kuhifadhiwa kwa ukaguzi. Tafadhali wasiliana na timu ya usaidizi kabla ya kulipa tena.',
       lipanambaReceiptTooLarge: 'Risiti isizidi 4 MB.',
       lipanambaReceiptInvalidType: 'Upload risiti ya PDF, JPEG, PNG, au WebP.',
+      confirmPaymentButton: 'Thibitisha malipo',
+      confirmPageTitle: 'Thibitisha malipo yako',
+      confirmPageLede: 'Upload risiti ya malipo au subiri tuthibitishe malipo yako.',
+      confirmReceiptPrompt:
+        'Umelipa {currency} {price}? Upload risiti ya malipo ili tuthibitishe nafasi yako.',
+      waitingForBlockchainConfirmation:
+        'Inasubiri malipo yako ya {crypto} kwenye {network}. Ukurasa huu unajisasisha.',
+      blockchainTransferObserved:
+        'Tumeona uhamisho wa {amount} {crypto} na tunasubiri uthibitisho wake.',
+      confirmedTicketNote:
+        'Nafasi yako imethibitishwa. Pakua tikiti yako sasa, au angalia inbox yako.',
+      downloadTicket: 'Pakua tikiti yako',
+      downloadTicketFailed: 'Tikiti haikuweza kupakuliwa. Tafadhali jaribu tena.',
+      backToPaymentInstructions: 'Rudi kwenye maelekezo ya malipo',
+      bookAgain: 'Book tena',
+      paymentFailed: 'Malipo haya hayakukamilika. Tafadhali book tena.',
       statusExpired: 'Nafasi yako imeisha. Tafadhali book tena.',
       expired: 'Nafasi yako imeisha. Tafadhali book tena.',
       genericError: 'Malipo hayakukamilika. Tafadhali jaribu tena.',

@@ -9,6 +9,7 @@ import {
   buildBookingPageUrl,
   buildEventHomeSectionUrlForSectionId,
   buildEventHomeUrl,
+  buildPaymentConfirmationPageUrlForPaymentId,
   buildPaymentPageUrlForPaymentId,
   buildSuccessPageUrlForReferenceCode,
 } from '../lib/siteRoutes.js';
@@ -20,6 +21,7 @@ test('the public event URLs live on the apex domain and never repeat the event s
     buildEventHomeUrl(),
     buildBookingPageUrl(),
     buildPaymentPageUrlForPaymentId('payment-123'),
+    buildPaymentConfirmationPageUrlForPaymentId('payment-123'),
     buildSuccessPageUrlForReferenceCode('ABC123'),
     buildEventHomeSectionUrlForSectionId('programme'),
   ];
@@ -52,6 +54,13 @@ test('a payment page URL carries the payment id below the root', () => {
   assert.equal(buildPaymentPageUrlForPaymentId('9f2c1a7b'), '/pay/9f2c1a7b');
 });
 
+test('the payment confirmation step lives below its payment id', () => {
+  assert.equal(
+    buildPaymentConfirmationPageUrlForPaymentId('9f2c1a7b'),
+    '/pay/9f2c1a7b/confirm'
+  );
+});
+
 test('a success page URL carries the booking reference below the root', () => {
   assert.equal(buildSuccessPageUrlForReferenceCode('MASTER123'), '/success/MASTER123');
 });
@@ -62,6 +71,10 @@ test('an event section link targets a hash on the root page', () => {
 
 test('dynamic URL segments are encoded instead of injected verbatim', () => {
   assert.equal(buildPaymentPageUrlForPaymentId('id/with space'), '/pay/id%2Fwith%20space');
+  assert.equal(
+    buildPaymentConfirmationPageUrlForPaymentId('id/with space'),
+    '/pay/id%2Fwith%20space/confirm'
+  );
   assert.equal(
     buildSuccessPageUrlForReferenceCode('ref#fragment'),
     '/success/ref%23fragment'

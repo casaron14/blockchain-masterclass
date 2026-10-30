@@ -1,6 +1,6 @@
 'use client';
 
-import PaymentFlow from '@/components/PaymentFlow';
+import PaymentInstructionsFlow from '@/components/PaymentInstructionsFlow';
 import EventSummary from '@/components/EventSummary';
 import SeatAvailabilityBanner from '@/components/SeatAvailabilityBanner';
 import { useLanguage } from '@/context/LanguageContext';
@@ -23,7 +23,7 @@ export default function PaymentPageContent({ paymentId }) {
 
         <div className="payment-layout">
           <div className="payment-main">
-            <PaymentFlow paymentId={paymentId} />
+            <PaymentInstructionsFlow paymentId={paymentId} />
           </div>
 
           <aside className="booking-aside">
