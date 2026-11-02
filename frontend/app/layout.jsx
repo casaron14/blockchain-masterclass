@@ -24,7 +24,17 @@ const ledgerMonoFont = DM_Mono({
   variable: '--font-mono',
 });
 
+// WhatsApp and other social crawlers require absolute image URLs. Vercel
+// exposes its production hostname during the build; self-hosted deployments
+// set NEXT_PUBLIC_SITE_URL to their canonical public origin.
+const publicSiteUrlForSocialImages =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : 'http://localhost:3000');
+
 export const metadata = {
+  metadataBase: new URL(publicSiteUrlForSocialImages),
   title: {
     default: 'Blockchain Masterclass — DienAcademy',
     template: '%s | Blockchain Masterclass',
@@ -36,7 +46,18 @@ export const metadata = {
     title: 'Blockchain Masterclass — DienAcademy',
     description:
       'One day. Three sessions. A practical blockchain education in Arusha, Tanzania. 7 November 2026.',
+    url: './',
+    siteName: 'DienAcademy',
     type: 'website',
+    images: [
+      {
+        url: '/blockchain-masterclass-opengraph.jpg',
+        type: 'image/jpeg',
+        width: 1200,
+        height: 630,
+        alt: 'Blockchain Masterclass — DienAcademy',
+      },
+    ],
   },
 };
 
