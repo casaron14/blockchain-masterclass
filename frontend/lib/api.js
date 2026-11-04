@@ -3,6 +3,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 import { DEFAULT_EVENT_SLUG } from '@/lib/eventConfig';
 import { resolveOfflinePaymentReceiptFileExtension } from '@/lib/offlinePaymentReceiptPreview';
 import { resolveCsvDownloadFileName } from '@/lib/downloadFileName';
+import { notifyAdminSessionExpiryHandlerIfAuthenticationFailed } from '@/lib/adminSessionExpiry';
 
 async function readResponseJson(response) {
   try {
@@ -29,6 +30,10 @@ async function request(path, options = {}) {
   const responseBody = await readResponseJson(response);
 
   if (!response.ok) {
+    notifyAdminSessionExpiryHandlerIfAuthenticationFailed(
+      response.status,
+      responseBody
+    );
     const error = new Error(responseBody.message || `Request failed with status ${response.status}`);
     error.status = response.status;
     error.responseBody = responseBody;
@@ -279,6 +284,10 @@ export async function fetchAdminOfflinePaymentReceiptFile(bookingId, adminToken)
 
   if (!response.ok) {
     const errorBody = await readResponseJson(response);
+    notifyAdminSessionExpiryHandlerIfAuthenticationFailed(
+      response.status,
+      errorBody
+    );
     const error = new Error(
       errorBody.message || `Receipt request failed with status ${response.status}`
     );
@@ -373,6 +382,10 @@ async function downloadAuthorizedCsvFile(downloadPath, adminToken, fallbackFileN
 
   if (!response.ok) {
     const errorBody = await readResponseJson(response);
+    notifyAdminSessionExpiryHandlerIfAuthenticationFailed(
+      response.status,
+      errorBody
+    );
     const error = new Error(
       errorBody.message || `Download failed with status ${response.status}`
     );

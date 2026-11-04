@@ -2,6 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { adminLogin, adminLogout } from '@/lib/api';
+import {
+  clampAdminSessionTimerDelayMs,
+  isAdminTokenExpired,
+  registerAdminSessionExpiryHandler,
+  resolveAdminTokenRemainingLifetimeMs,
+} from '@/lib/adminSessionExpiry';
 
 const ADMIN_TOKEN_STORAGE_KEY = 'masterclass-admin-token';
 const ADMIN_USER_STORAGE_KEY = 'masterclass-admin-user';
@@ -15,6 +21,14 @@ const AdminContext = createContext({
   completeAdminSession: () => {},
   logoutAdminSession: () => {},
 });
+
+function removeStoredAdminSession() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(ADMIN_USER_STORAGE_KEY);
+}
 
 function readStoredAdminToken() {
   if (typeof window === 'undefined') {
@@ -45,10 +59,79 @@ export function AdminProvider({ children }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
-    setAdminToken(readStoredAdminToken());
-    setAdminUser(readStoredAdminUser());
+    const storedAdminToken = readStoredAdminToken();
+
+    // A token left in localStorage from a previous visit may already be past
+    // its `exp` claim. Restoring it would send one doomed request before the
+    // API rejected it, so the session is discarded while the page is loading.
+    if (storedAdminToken && isAdminTokenExpired(storedAdminToken)) {
+      removeStoredAdminSession();
+      setAdminToken(null);
+      setAdminUser(null);
+    } else {
+      setAdminToken(storedAdminToken);
+      setAdminUser(readStoredAdminUser());
+    }
+
     setIsSessionRestoring(false);
   }, []);
+
+  const clearAdminSessionLocally = useCallback(() => {
+    setAdminToken(null);
+    setAdminUser(null);
+    removeStoredAdminSession();
+  }, []);
+
+  // Sign the operator out the moment the token reaches its expiry instead of
+  // waiting for the next API call to fail. The timer is re-armed in chunks so a
+  // lifetime longer than setTimeout supports still ends in the right place.
+  useEffect(() => {
+    if (!adminToken) {
+      return undefined;
+    }
+
+    let activeExpiryTimerId = null;
+    let isExpiryTimerCancelled = false;
+
+    const scheduleNextAdminTokenExpiryCheck = () => {
+      const remainingLifetimeMs = resolveAdminTokenRemainingLifetimeMs(adminToken);
+      if (remainingLifetimeMs === null) {
+        return;
+      }
+      if (remainingLifetimeMs === 0) {
+        clearAdminSessionLocally();
+        return;
+      }
+
+      activeExpiryTimerId = window.setTimeout(() => {
+        if (isExpiryTimerCancelled) {
+          return;
+        }
+        if (isAdminTokenExpired(adminToken)) {
+          clearAdminSessionLocally();
+          return;
+        }
+        scheduleNextAdminTokenExpiryCheck();
+      }, clampAdminSessionTimerDelayMs(remainingLifetimeMs));
+    };
+
+    scheduleNextAdminTokenExpiryCheck();
+
+    return () => {
+      isExpiryTimerCancelled = true;
+      if (activeExpiryTimerId !== null) {
+        window.clearTimeout(activeExpiryTimerId);
+      }
+    };
+  }, [adminToken, clearAdminSessionLocally]);
+
+  // A request can still be rejected before the timer fires (clock drift, a
+  // revoked token, a sleeping tab). The API layer reports that rejection here
+  // so the same local cleanup runs.
+  useEffect(
+    () => registerAdminSessionExpiryHandler(clearAdminSessionLocally),
+    [clearAdminSessionLocally]
+  );
 
   const loginWithPassword = useCallback(async (username, password, turnstileToken) => {
     const loginResult = await adminLogin(username, password, turnstileToken);
@@ -69,16 +152,12 @@ export function AdminProvider({ children }) {
     try {
       await adminLogout();
     } catch {
-      // session token is already discarded below; remote logout is best-effort
+      // The local session is discarded below; remote logout is best-effort.
+      // It is expected to fail when the token has already expired.
     }
-    setAdminToken(null);
-    setAdminUser(null);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-      window.localStorage.removeItem(ADMIN_USER_STORAGE_KEY);
-    }
+    clearAdminSessionLocally();
     setIsLoggingOut(false);
-  }, []);
+  }, [clearAdminSessionLocally]);
 
   const contextValue = useMemo(
     () => ({
