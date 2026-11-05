@@ -4,6 +4,7 @@ import zlib from 'zlib';
 import pool from '../config/db.js';
 
 import { generateTicketPdfBuffer } from '../services/ticketPdfService.js';
+import { buildTicketQrCodeUrl } from '../services/ticketQrCodeService.js';
 import ticketController from '../controller/ticketController.js';
 
 import {
@@ -158,6 +159,26 @@ test('generateTicketPdfBuffer embeds the Inkryptus logo and the QR code images',
   const embeddedImageCount = (pdfBuffer.toString('latin1').match(/\/Subtype\s*\/Image/g) ?? []).length;
 
   assert.ok(embeddedImageCount >= 2, 'the ticket should embed both the wordmark and the QR code');
+});
+
+test('generateTicketPdfBuffer links the Inkryptus logo to the same referral URL as the QR code', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Referral Ticket User',
+    email: 'referral-ticket@example.com',
+    phone_number: '+255712345698',
+    utm_source: 'neema',
+  });
+  const confirmedBooking = await confirmBookingSeatWithinCapacity(bookingRecord.id);
+  const expectedReferralUrl = buildTicketQrCodeUrl(confirmedBooking);
+
+  const pdfBuffer = await generateTicketPdfBuffer(confirmedBooking);
+  const pdfTextContent = pdfBuffer.toString('latin1');
+
+  assert.match(pdfTextContent, /\/Subtype\s*\/Link/);
+  assert.ok(
+    pdfTextContent.includes(expectedReferralUrl),
+    'the logo annotation should point at the QR referral URL'
+  );
 });
 
 test('generateTicketPdfBuffer renders a payment block when a payment summary is given', async () => {

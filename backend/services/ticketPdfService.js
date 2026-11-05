@@ -94,7 +94,7 @@ export async function generateTicketPdfBuffer(bookingRecord, paymentSummary = nu
     document.on('error', reject);
 
     drawTicketBackground(document);
-    drawTicketHeader(document);
+    drawTicketHeader(document, ticketQrCodeUrl);
     drawTicketEventTitle(document);
     drawTicketDate(document);
     drawTicketTaglineAndVenue(document);
@@ -118,9 +118,10 @@ function drawTicketBackground(document) {
     .fill(TICKET_BLACK);
 }
 
-function drawTicketHeader(document) {
+function drawTicketHeader(document, ticketQrCodeUrl) {
   document.image(INKRYPTUS_LOGO_ON_BLACK_PNG_BUFFER, TICKET_PAGE_MARGIN, 37, {
     width: TICKET_LOGO_WIDTH,
+    link: ticketQrCodeUrl,
   });
 
   document
