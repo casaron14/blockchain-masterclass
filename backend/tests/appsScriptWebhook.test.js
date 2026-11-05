@@ -88,6 +88,7 @@ function createFakeDeliverySheet() {
 function createAppsScriptTestEnvironment(options = {}) {
   const sheetsByName = new Map();
   const sentMessages = [];
+  const eventEmailMenuItems = [];
   const scriptProperties = new Map(
     options.sharedSecret === null
       ? []
@@ -107,6 +108,26 @@ function createAppsScriptTestEnvironment(options = {}) {
   }
 
   const spreadsheetApplication = {
+    getUi() {
+      return {
+        ButtonSet: { OK: 'OK', YES_NO: 'YES_NO' },
+        Button: { YES: 'YES', NO: 'NO' },
+        createMenu(menuName) {
+          assert.equal(menuName, 'Event emails');
+
+          return {
+            addItem(menuLabel, functionName) {
+              eventEmailMenuItems.push({ menuLabel, functionName });
+              return this;
+            },
+            addToUi() {},
+          };
+        },
+        alert() {
+          return 'OK';
+        },
+      };
+    },
     getActiveSpreadsheet() {
       return {
         getSheetByName(sheetName) {
@@ -251,6 +272,13 @@ function createAppsScriptTestEnvironment(options = {}) {
       return sheetsByName.get('Reminder deliveries');
     },
     sentMessages,
+    eventEmailMenuItems,
+    invokeOnOpen() {
+      sandbox.onOpen();
+    },
+    invokeRemoveDuplicateRecipientsFromReminderCampaign() {
+      return sandbox.removeDuplicateRecipientsFromReminderCampaign();
+    },
     setRemainingDailyQuota(nextQuota) {
       remainingDailyQuota = nextQuota;
     },
@@ -1122,4 +1150,58 @@ test('sendTestTwoDaysToGoReminderEmailToScriptOwner sends the current reminder d
     'Blockchain Masterclass Event Playbook.pdf'
   );
   assert.equal(appsScriptEnvironment.reminderDeliverySheet, undefined);
+});
+
+test('onOpen exposes only test, deduplicate, and send reminder actions', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  appsScriptEnvironment.invokeOnOpen();
+
+  assert.deepEqual(
+    appsScriptEnvironment.eventEmailMenuItems.map(({ menuLabel }) => menuLabel),
+    [
+      'Send test reminder to me',
+      'Remove duplicate reminder recipients',
+      'Send 2-days-to-go emails',
+    ]
+  );
+  assert.deepEqual(
+    appsScriptEnvironment.eventEmailMenuItems.map(({ functionName }) => functionName),
+    [
+      'sendTestTwoDaysToGoReminderEmailToScriptOwner',
+      'removeDuplicateRecipientsFromReminderCampaign',
+      'confirmAndSendTwoDaysToGoReminderEmailsToConfirmedClients',
+    ]
+  );
+});
+
+test('removeDuplicateRecipientsFromReminderCampaign deduplicates recipients without deleting bookings', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+  const bookingRows = [
+    buildBookingMirrorRecord({
+      bookingReference: 'EVT-DEDUP-01',
+      emailAddress: 'same@example.com',
+      bookingStatus: 'confirmed',
+    }),
+    buildBookingMirrorRecord({
+      bookingReference: 'EVT-DEDUP-02',
+      emailAddress: ' SAME@example.com ',
+      bookingStatus: 'confirmed',
+    }),
+  ];
+
+  appsScriptEnvironment.invokeDoPost(buildBookingSyncRequestBody(bookingRows));
+  const bookingRowCountBeforeDeduplication =
+    appsScriptEnvironment.bookingMirrorSheet.sheetRows.length;
+
+  const recipientSummary =
+    appsScriptEnvironment.invokeRemoveDuplicateRecipientsFromReminderCampaign();
+
+  assert.equal(recipientSummary.confirmedBookingCount, 2);
+  assert.equal(recipientSummary.uniqueRecipientCount, 1);
+  assert.equal(recipientSummary.duplicateEmailCount, 1);
+  assert.equal(
+    appsScriptEnvironment.bookingMirrorSheet.sheetRows.length,
+    bookingRowCountBeforeDeduplication
+  );
 });

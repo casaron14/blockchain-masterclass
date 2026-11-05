@@ -26,7 +26,9 @@ admin dashboard and PostgreSQL remain the source of truth.
 3. In the Apps Script editor, add a second script file named
    `ReminderEmails.gs` and paste the contents of
    [`ReminderEmails.gs`](./ReminderEmails.gs). This file adds the reminder
-   campaign and the **Event emails** menu.
+   campaign and the **Event emails** menu, with actions to send a test email,
+   exclude duplicate email addresses from the reminder audience, and send
+   reminders. Duplicate removal does not delete booking rows.
 4. Open **Project Settings**, tick **Show "appsscript.json" manifest file in
    editor**, then open `appsscript.json` and paste the contents of
    [`appsscript.json`](./appsscript.json).

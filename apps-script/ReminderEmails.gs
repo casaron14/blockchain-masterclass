@@ -32,12 +32,12 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Event emails')
     .addItem(
-      'Count 2-days-to-go recipients',
-      'showTwoDaysToGoReminderRecipientCount'
-    )
-    .addItem(
       'Send test reminder to me',
       'sendTestTwoDaysToGoReminderEmailToScriptOwner'
+    )
+    .addItem(
+      'Remove duplicate reminder recipients',
+      'removeDuplicateRecipientsFromReminderCampaign'
     )
     .addItem(
       'Send 2-days-to-go emails',
@@ -149,21 +149,22 @@ function countTwoDaysToGoReminderRecipientsFromConfirmedBookings() {
   };
 }
 
-function showTwoDaysToGoReminderRecipientCount() {
+function removeDuplicateRecipientsFromReminderCampaign() {
   var recipientCountSummary =
     countTwoDaysToGoReminderRecipientsFromConfirmedBookings();
   var spreadsheetUi = SpreadsheetApp.getUi();
 
   spreadsheetUi.alert(
-    '2-days-to-go recipients',
+    'Reminder recipients deduplicated',
     'Confirmed bookings: ' +
       recipientCountSummary.confirmedBookingCount +
       '\nUnique recipients: ' +
       recipientCountSummary.uniqueRecipientCount +
-      '\nDuplicate emails removed: ' +
+      '\nDuplicate email recipients excluded: ' +
       recipientCountSummary.duplicateEmailCount +
-      '\nInvalid emails skipped: ' +
-      recipientCountSummary.invalidEmailCount,
+      '\nInvalid emails excluded: ' +
+      recipientCountSummary.invalidEmailCount +
+      '\nBooking rows were not changed.',
     spreadsheetUi.ButtonSet.OK
   );
 
