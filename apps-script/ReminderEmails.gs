@@ -21,9 +21,10 @@ var REMINDER_EVENT_DATE_LABEL = 'Saturday, 7th November 2026';
 var REMINDER_EVENT_VENUE = 'Village Hall Mafao House, Arusha, Tanzania';
 var REMINDER_SUPPORT_PHONE_NUMBER = '+255 621 745 217';
 var REMINDER_SUPPORT_EMAIL_ADDRESS = 'support@dienacademy.com';
-var REMINDER_SENDER_DISPLAY_NAME = 'DienAcademy Events';
+var REMINDER_SENDER_DISPLAY_NAME = 'Charity from DienAcademy';
 var REMINDER_BRAND_NAME = 'Inkryptus';
 var REMINDER_SEND_LEASE_MILLISECONDS = 15 * 60 * 1000;
+var REMINDER_EVENT_PLAYBOOK_FILE_ID = '1WSdPcQuWLyi9SJy48WdHj2Djecu7L0SJ';
 
 // Adds the reminder commands to the bound Sheet without changing the deployed
 // web app. The menu appears after the Sheet is reopened.
@@ -35,10 +36,40 @@ function onOpen() {
       'showTwoDaysToGoReminderRecipientCount'
     )
     .addItem(
+      'Send test reminder to me',
+      'sendTestTwoDaysToGoReminderEmailToScriptOwner'
+    )
+    .addItem(
       'Send 2-days-to-go emails',
       'confirmAndSendTwoDaysToGoReminderEmailsToConfirmedClients'
     )
     .addToUi();
+}
+
+function sendTestTwoDaysToGoReminderEmailToScriptOwner() {
+  var ownerEmailAddress = Session.getActiveUser().getEmail();
+  if (!ownerEmailAddress) {
+    throw new Error('No active user email address is available for the test send');
+  }
+
+  var reminderEmail = buildTwoDaysToGoReminderEmailForRecipient({
+    attendeeName: 'Test Attendee',
+  });
+  var eventPlaybookAttachment = getReminderEventPlaybookAttachment();
+
+  GmailApp.sendEmail(
+    ownerEmailAddress,
+    reminderEmail.subject,
+    reminderEmail.textBody,
+    {
+      htmlBody: reminderEmail.htmlBody,
+      name: REMINDER_SENDER_DISPLAY_NAME,
+      replyTo: REMINDER_SUPPORT_EMAIL_ADDRESS,
+      attachments: [eventPlaybookAttachment],
+    }
+  );
+
+  return ownerEmailAddress;
 }
 
 /**
@@ -190,6 +221,7 @@ function sendTwoDaysToGoReminderEmailsToConfirmedClients() {
     var deduplicationResult = deduplicateConfirmedBookingsByEmail(bookingRows);
     var reminderDeliveryRowsByEmailAddress =
       readReminderDeliveryRowsByEmailAddress(reminderDeliverySheet);
+    var eventPlaybookAttachment = null;
 
     var campaignSummary = {
       ok: true,
@@ -235,6 +267,10 @@ function sendTwoDaysToGoReminderEmailsToConfirmedClients() {
         return;
       }
 
+      if (!eventPlaybookAttachment) {
+        eventPlaybookAttachment = getReminderEventPlaybookAttachment();
+      }
+
       var reminderDeliveryId = Utilities.getUuid();
       upsertReminderDeliveryRow(
         reminderDeliverySheet,
@@ -267,6 +303,7 @@ function sendTwoDaysToGoReminderEmailsToConfirmedClients() {
             htmlBody: reminderEmail.htmlBody,
             name: REMINDER_SENDER_DISPLAY_NAME,
             replyTo: REMINDER_SUPPORT_EMAIL_ADDRESS,
+            attachments: [eventPlaybookAttachment],
           }
         );
 
@@ -315,6 +352,13 @@ function sendTwoDaysToGoReminderEmailsToConfirmedClients() {
   }
 }
 
+function getReminderEventPlaybookAttachment() {
+  var eventPlaybookFile = DriveApp.getFileById(
+    REMINDER_EVENT_PLAYBOOK_FILE_ID
+  );
+  return eventPlaybookFile.getBlob().setName(eventPlaybookFile.getName());
+}
+
 function buildTwoDaysToGoReminderEmailForRecipient(reminderRecipient) {
   var attendeeName = String(reminderRecipient.attendeeName || '').trim();
   var greetingName = attendeeName || 'there';
@@ -336,6 +380,7 @@ function buildTwoDaysToGoReminderEmailForRecipient(reminderRecipient) {
     'Hi ' + greetingName + ',',
     '',
     'The ' + REMINDER_EVENT_NAME + ' is just 2 days away.',
+    'We have attached the event playbook PDF to this email for you.',
     '',
     'Date: ' + REMINDER_EVENT_DATE_LABEL,
     'Venue: ' + REMINDER_EVENT_VENUE,
@@ -374,6 +419,7 @@ function buildTwoDaysToGoReminderEmailForRecipient(reminderRecipient) {
             <td style="padding:28px 34px 0 34px;">
               <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#FFFFFF;">Hi ${escapedGreetingName},</p>
               <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#C9C9C9;">The ${escapedEventName} is just 2 days away. We look forward to seeing you.</p>
+              <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#C9C9C9;">We have attached the event playbook PDF to this email for you.</p>
             </td>
           </tr>
           <tr>
@@ -534,4 +580,3 @@ function isReminderDeliveryLeaseActive(lastAttemptedAt) {
     REMINDER_SEND_LEASE_MILLISECONDS
   );
 }
-

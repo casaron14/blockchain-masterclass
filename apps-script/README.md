@@ -42,13 +42,23 @@ admin dashboard and PostgreSQL remain the source of truth.
 ## 3. Authorize and test sending
 
 1. In the editor, select `sendTestEmailToScriptOwner` and click **Run**.
-2. Approve the permission screen. The email arrives at the Google account that
-   owns the Sheet.
-3. If you do not receive it, run `diagnoseTicketEmailDelivery` and check
+2. Approve the requested Gmail, spreadsheet, and read-only Google Drive
+   permissions. Running this function from the editor grants the Drive
+   permission needed to attach the playbook.
+3. The test email arrives at the Google account that owns the Sheet. To preview
+   the current reminder design, select
+   `sendTestTwoDaysToGoReminderEmailToScriptOwner` and click **Run**. It sends
+   the real reminder subject and HTML to the active Google account, using
+   `Test Attendee` as the greeting and attaches the event playbook PDF; it does
+   not send to clients or write to the reminder delivery log. The account
+   running the script must have access to the linked PDF in Google Drive. If
+   Drive still reports access denied, open the PDF while signed in to that same
+   account and request or grant it access.
+4. If you do not receive it, run `diagnoseTicketEmailDelivery` and check
    **Executions**. It reports whether the secret, Sheet, Gmail quota (when
    readable), and a live Gmail send all work. A null quota is reported as
    unknown, not as a failure; the live send is the real test.
-4. Open the `/exec` URL in a private window. It should return
+5. Open the `/exec` URL in a private window. It should return
    `{"ok":true,"service":"ticket-email-and-sheet-sync"}`. A Google sign-in page
    means the deployment is not anonymous yet.
 

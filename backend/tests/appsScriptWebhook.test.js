@@ -144,11 +144,32 @@ function createAppsScriptTestEnvironment(options = {}) {
     },
   };
 
+  const driveFile = {
+    getName() {
+      return 'Blockchain Masterclass Event Playbook.pdf';
+    },
+    getBlob() {
+      return {
+        name: this.getName(),
+        setName(fileName) {
+          this.name = fileName;
+          return this;
+        },
+      };
+    },
+  };
+
   const sandbox = {
     console,
     SpreadsheetApp: spreadsheetApplication,
     GmailApp: gmailApplication,
     MailApp: mailApplication,
+    DriveApp: {
+      getFileById(fileId) {
+        assert.equal(fileId, '1WSdPcQuWLyi9SJy48WdHj2Djecu7L0SJ');
+        return driveFile;
+      },
+    },
     PropertiesService: {
       getScriptProperties() {
         return {
@@ -241,6 +262,9 @@ function createAppsScriptTestEnvironment(options = {}) {
     },
     invokeSendTwoDaysToGoReminderEmailsToConfirmedClients() {
       return sandbox.sendTwoDaysToGoReminderEmailsToConfirmedClients();
+    },
+    invokeSendTestTwoDaysToGoReminderEmailToScriptOwner() {
+      return sandbox.sendTestTwoDaysToGoReminderEmailToScriptOwner();
     },
     invokeDeduplicateConfirmedBookingsByEmail(bookingRows) {
       return sandbox.deduplicateConfirmedBookingsByEmail(bookingRows);
@@ -934,10 +958,20 @@ test('sendTwoDaysToGoReminderEmailsToConfirmedClients sends one reminder per uni
   );
   assert.match(sentReminder.body, /Hi Reminder Attendee,/);
   assert.match(sentReminder.body, /Saturday, 7th November 2026/);
+  assert.match(sentReminder.body, /attached the event playbook PDF/);
   assert.match(sentReminder.body, /Village Hall Mafao House, Arusha, Tanzania/);
   assert.match(
     sentReminder.htmlBody,
+    /attached the event playbook PDF/
+  );
+  assert.match(
+    sentReminder.htmlBody,
     /Village Hall Mafao House, Arusha, Tanzania/
+  );
+  assert.equal(sentReminder.attachments.length, 1);
+  assert.equal(
+    sentReminder.attachments[0].name,
+    'Blockchain Masterclass Event Playbook.pdf'
   );
 
   const reminderDeliveryRow = readReminderDeliveryRowByEmailAddress(
@@ -1062,4 +1096,30 @@ test('sendTwoDaysToGoReminderEmailsToConfirmedClients escapes attendee names in 
     appsScriptEnvironment.sentMessages[0].htmlBody,
     /<b>Formula<\/b>/
   );
+});
+
+test('sendTestTwoDaysToGoReminderEmailToScriptOwner sends the current reminder design only to the owner', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  const testRecipientEmailAddress =
+    appsScriptEnvironment.invokeSendTestTwoDaysToGoReminderEmailToScriptOwner();
+
+  assert.equal(testRecipientEmailAddress, 'owner@example.com');
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
+  assert.equal(appsScriptEnvironment.sentMessages[0].to, 'owner@example.com');
+  assert.equal(
+    appsScriptEnvironment.sentMessages[0].subject,
+    '2 days to go: Blockchain Masterclass (Saturday, 7th November 2026)'
+  );
+  assert.match(appsScriptEnvironment.sentMessages[0].htmlBody, /Test Attendee/);
+  assert.equal(
+    appsScriptEnvironment.sentMessages[0].name,
+    'Charity from DienAcademy'
+  );
+  assert.equal(appsScriptEnvironment.sentMessages[0].attachments.length, 1);
+  assert.equal(
+    appsScriptEnvironment.sentMessages[0].attachments[0].name,
+    'Blockchain Masterclass Event Playbook.pdf'
+  );
+  assert.equal(appsScriptEnvironment.reminderDeliverySheet, undefined);
 });
