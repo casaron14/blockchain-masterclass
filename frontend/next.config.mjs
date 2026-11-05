@@ -72,6 +72,7 @@ const nextConfig = {
       './node_modules/pdfkit/js/data/**/*',
       './node_modules/pdfkit/js/standard-fonts/**/*',
       './node_modules/bcrypt/**/*',
+      '../backend/assets/**/*',
     ],
   },
   serverExternalPackages: SERVER_DEPENDENCIES_LOADED_AT_RUNTIME,
