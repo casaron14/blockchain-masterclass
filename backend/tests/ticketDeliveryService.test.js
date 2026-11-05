@@ -33,6 +33,12 @@ import {
   fetchPaymentReceiptByBookingId,
 } from '../services/paymentReceiptService.js';
 
+const testConfirmationEmailAttachmentPdf = {
+  filename: 'Blockchain Masterclass Playbook.pdf',
+  content: Buffer.from('%PDF-1.4 fake playbook'),
+  contentType: 'application/pdf',
+};
+
 async function resetDatabaseState() {
   await pool.query('TRUNCATE bookings CASCADE');
   await pool.query('UPDATE seat_capacity SET confirmed_count = 0 WHERE id = 1');
@@ -437,6 +443,12 @@ test('buildTicketEmailDeliveryFailureMessage explains Apps Script sign-in and de
     /diagnoseTicketEmailDelivery.*Gmail permission.*redeploy the current Code\.gs/i
   );
   assert.match(
+    buildTicketEmailDeliveryFailureMessage(
+      'CONFIRMATION_EMAIL_ATTACHMENT_UNAVAILABLE:/app/backend/assets/Blockchain Masterclass Playbook.pdf:file_not_found'
+    ),
+    /playbook PDF is missing or unreadable.*backend\/assets.*CONFIRMATION_EMAIL_ATTACHMENT_FILE_PATH/i
+  );
+  assert.match(
     buildTicketEmailDeliveryFailureMessage('SMTP refused connection'),
     /Ticket email delivery failed: SMTP refused connection/
   );
@@ -465,7 +477,7 @@ test('redeliverFailedTicketEmail flips a failed delivery to sent', async () => {
   assert.ok(refreshedBooking.ticket_sent_at);
 });
 
-test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to the email', async () => {
+test('sendTicketEmailToAttendee attaches exactly the ticket PDF and playbook PDF to the email', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const sentMessages = [];
   const recordingTransport = {
@@ -474,20 +486,18 @@ test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to t
       return { accepted: [message.to] };
     },
   };
-  const receiptPdfBuffer = Buffer.from('%PDF-1.4 fake receipt');
 
   await sendTicketEmailToAttendee(confirmedBooking, {
     transport: recordingTransport,
-    receiptPdfArtifact: {
-      fileName: `blockchain-masterclass-receipt-${confirmedBooking.ref}.pdf`,
-      pdfBuffer: receiptPdfBuffer,
-    },
+    confirmationEmailAttachmentPdf: testConfirmationEmailAttachmentPdf,
   });
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].to, confirmedBooking.email);
   assert.match(sentMessages[0].html, /Your ticket is ready/);
   assert.match(sentMessages[0].html, new RegExp(`EVT-${confirmedBooking.ref}`));
+  assert.match(sentMessages[0].html, /Blockchain Masterclass Playbook/);
+  assert.match(sentMessages[0].text, /Blockchain Masterclass Playbook/);
   assert.equal(sentMessages[0].attachments.length, 2);
 
   const ticketAttachment = sentMessages[0].attachments[0];
@@ -496,16 +506,16 @@ test('sendTicketEmailToAttendee attaches the ticket PDF and any receipt PDF to t
   assert.ok(Buffer.isBuffer(ticketAttachment.content));
   assert.equal(ticketAttachment.content.subarray(0, 5).toString(), '%PDF-');
 
-  const receiptAttachment = sentMessages[0].attachments[1];
+  const playbookAttachment = sentMessages[0].attachments[1];
   assert.equal(
-    receiptAttachment.filename,
-    `blockchain-masterclass-receipt-${confirmedBooking.ref}.pdf`
+    playbookAttachment.filename,
+    testConfirmationEmailAttachmentPdf.filename
   );
-  assert.ok(Buffer.isBuffer(receiptAttachment.content));
-  assert.equal(receiptAttachment.content.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(playbookAttachment.contentType, 'application/pdf');
+  assert.ok(Buffer.isBuffer(playbookAttachment.content));
 });
 
-test('sendTicketEmailToAttendee attaches only the ticket PDF when no receipt exists', async () => {
+test('sendTicketEmailToAttendee attaches the ticket and playbook PDFs when no receipt exists', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const sentMessages = [];
   const recordingTransport = {
@@ -515,11 +525,19 @@ test('sendTicketEmailToAttendee attaches only the ticket PDF when no receipt exi
     },
   };
 
-  await sendTicketEmailToAttendee(confirmedBooking, { transport: recordingTransport });
+  await sendTicketEmailToAttendee(confirmedBooking, {
+    transport: recordingTransport,
+    confirmationEmailAttachmentPdf: testConfirmationEmailAttachmentPdf,
+  });
 
-  assert.equal(sentMessages[0].attachments.length, 1);
+  assert.equal(sentMessages[0].attachments.length, 2);
   assert.equal(sentMessages[0].attachments[0].filename, `ticket-${confirmedBooking.ref}.pdf`);
   assert.equal(sentMessages[0].attachments[0].contentType, 'application/pdf');
+  assert.equal(
+    sentMessages[0].attachments[1].filename,
+    testConfirmationEmailAttachmentPdf.filename
+  );
+  assert.equal(sentMessages[0].attachments[1].contentType, 'application/pdf');
 });
 
 test('sendTicketEmailToAttendee posts the PDF and booking mirror to the Apps Script web app', async () => {
@@ -555,9 +573,15 @@ test('sendTicketEmailToAttendee posts the PDF and booking mirror to the Apps Scr
     process.env.MAIL_FROM_NAME = 'DienAcademy Events';
     process.env.EVENT_TIME_LABEL = '6:00 PM';
 
-    const sendResult = await sendTicketEmailToAttendee(confirmedBooking);
+    const sendResult = await sendTicketEmailToAttendee(confirmedBooking, {
+      confirmationEmailAttachmentPdf: testConfirmationEmailAttachmentPdf,
+    });
 
     assert.equal(sendResult.providerMessageId, 'apps-script-delivery-id');
+    assert.equal(
+      sendResult.confirmationEmailAttachmentFileName,
+      testConfirmationEmailAttachmentPdf.filename
+    );
     assert.equal(recordedRequests.length, 1);
 
     const postedRequestBody = JSON.parse(recordedRequests[0].requestOptions.body);
@@ -569,13 +593,25 @@ test('sendTicketEmailToAttendee posts the PDF and booking mirror to the Apps Scr
     assert.equal(postedRequestBody.emailRequest.booking.attendeeName, 'Ticket User');
     assert.equal(postedRequestBody.emailRequest.event.timeLabel, '6:00 PM');
     assert.equal(postedRequestBody.emailRequest.ticket.currency, 'TZS');
-    assert.equal(postedRequestBody.emailRequest.attachments.length, 1);
+    assert.equal(postedRequestBody.emailRequest.attachments.length, 2);
 
     const ticketAttachment = postedRequestBody.emailRequest.attachments[0];
     assert.equal(ticketAttachment.fileName, `ticket-${confirmedBooking.ref}.pdf`);
     assert.equal(ticketAttachment.mimeType, 'application/pdf');
     const decodedTicketPdfBuffer = Buffer.from(ticketAttachment.base64Content, 'base64');
     assert.equal(decodedTicketPdfBuffer.subarray(0, 5).toString(), '%PDF-');
+
+    const playbookAttachment = postedRequestBody.emailRequest.attachments[1];
+    assert.equal(
+      playbookAttachment.fileName,
+      testConfirmationEmailAttachmentPdf.filename
+    );
+    assert.equal(playbookAttachment.mimeType, 'application/pdf');
+    const decodedPlaybookPdfBuffer = Buffer.from(
+      playbookAttachment.base64Content,
+      'base64'
+    );
+    assert.equal(decodedPlaybookPdfBuffer.subarray(0, 5).toString(), '%PDF-');
   } finally {
     globalThis.fetch = previousFetch;
 
@@ -621,8 +657,20 @@ test('resendTicketEmailToAttendeeFromAdmin uses a new Apps Script delivery key f
     process.env.APPS_SCRIPT_SHARED_SECRET = 'test-shared-secret';
     process.env.MAIL_FROM_NAME = 'DienAcademy Events';
 
-    const firstDelivery = await deliverTicketForConfirmedBooking(confirmedBooking.id);
-    const resendDelivery = await resendTicketEmailToAttendeeFromAdmin(confirmedBooking.id);
+    const sendTicketEmailWithTestPlaybook = (bookingRecord, options = {}) =>
+      sendTicketEmailToAttendee(bookingRecord, {
+        ...options,
+        confirmationEmailAttachmentPdf: testConfirmationEmailAttachmentPdf,
+      });
+
+    const firstDelivery = await deliverTicketForConfirmedBooking(
+      confirmedBooking.id,
+      sendTicketEmailWithTestPlaybook
+    );
+    const resendDelivery = await resendTicketEmailToAttendeeFromAdmin(
+      confirmedBooking.id,
+      sendTicketEmailWithTestPlaybook
+    );
 
     assert.equal(firstDelivery.delivered, true);
     assert.equal(resendDelivery.delivered, true);
@@ -648,12 +696,23 @@ test('deliverTicketForConfirmedBooking sends the receipt email after the ticket 
   const receiptRecord = await createPendingPaymentReceiptForBooking(
     confirmedBooking.id
   );
-  const stubTicketSender = async () => ({ ok: true });
+  const sentTicketMessages = [];
   const receiptDeliveries = [];
+  const recordingTicketSender = (bookingRecord, sendOptions = {}) =>
+    sendTicketEmailToAttendee(bookingRecord, {
+      ...sendOptions,
+      transport: {
+        async sendMail(message) {
+          sentTicketMessages.push(message);
+          return { accepted: [message.to] };
+        },
+      },
+      confirmationEmailAttachmentPdf: testConfirmationEmailAttachmentPdf,
+    });
 
   const deliveryResult = await deliverTicketForConfirmedBooking(
     confirmedBooking.id,
-    stubTicketSender,
+    recordingTicketSender,
     {
       receiptRecord,
       deliverReceiptEmail: async (bookingId, options) => {
@@ -665,6 +724,20 @@ test('deliverTicketForConfirmedBooking sends the receipt email after the ticket 
 
   assert.equal(deliveryResult.delivered, true);
   assert.equal(deliveryResult.receipt.delivered, true);
+  assert.equal(sentTicketMessages.length, 1);
+  assert.equal(
+    sentTicketMessages[0].attachments.length,
+    2,
+    'the ticket email contains only the ticket and the playbook'
+  );
+  assert.equal(
+    sentTicketMessages[0].attachments[0].filename,
+    `ticket-${confirmedBooking.ref}.pdf`
+  );
+  assert.equal(
+    sentTicketMessages[0].attachments[1].filename,
+    testConfirmationEmailAttachmentPdf.filename
+  );
   assert.equal(receiptDeliveries.length, 1);
   assert.equal(receiptDeliveries[0].bookingId, confirmedBooking.id);
   assert.ok(

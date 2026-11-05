@@ -892,8 +892,9 @@ confirmed payment without a seat, a receipt without a payment, or a paid order
 without a receipt.
 
 **The ticket and receipt emails are sent AFTER the commit.** The receipt row
-already exists and is `pending`; `deliverTicketForConfirmedBooking` then attaches
-the receipt PDF to the ticket email and sends the receipt on its own. A mail
+already exists and is `pending`; `deliverTicketForConfirmedBooking` sends the
+ticket email (ticket and playbook PDFs only) and then sends the receipt in its
+own email with the receipt PDF attached. A mail
 failure is recorded (`ticket_deliveries.status='failed'` /
 `payment_receipts.status='failed'` with `attempt_count` and `last_error`) and
 never rolls the payment back. `jobs/ticketDeliveryRetryJob.js` retries both up

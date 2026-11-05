@@ -15,6 +15,10 @@ import {
 import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
 import { generateTicketPdfBuffer } from './ticketPdfService.js';
 import {
+  CONFIRMATION_EMAIL_ATTACHMENT_FILE_NAME,
+  readConfirmationEmailAttachmentPdf,
+} from './confirmationEmailAttachmentService.js';
+import {
   EVENT_BRAND_NAME,
   EVENT_DATE_LABEL,
   EVENT_LOCATION,
@@ -128,7 +132,7 @@ export function buildTicketEmailHtml(bookingRecord) {
           <tr>
             <td style="padding:28px 34px 0 34px;">
               <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#FFFFFF;">Hi ${attendeeName},</p>
-              <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#C9C9C9;">Your booking is confirmed. Your ticket is attached to this email as a PDF. Show it on your phone at the entrance.</p>
+              <p style="margin:12px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.65;color:#C9C9C9;">Your booking is confirmed. Your ticket and the Blockchain Masterclass Playbook are attached to this email as PDFs. Show the ticket on your phone at the entrance.</p>
             </td>
           </tr>
           <tr>
@@ -189,8 +193,9 @@ export function buildTicketEmailText(bookingRecord) {
     `Ticket code: ${ticketCode}`,
     '',
     `Your ticket is attached as ticket-${bookingRecord.ref}.pdf. Show it on your phone at the entrance.`,
+    'The Blockchain Masterclass Playbook is also attached as a separate PDF.',
     '',
-    `You can also download the PDF from the booking lookup using reference ${bookingRecord.ref}.`,
+    `You can also download the ticket PDF from the booking lookup using reference ${bookingRecord.ref}.`,
     '',
     EVENT_BRAND_NAME,
     EVENT_WEBSITE_ADDRESS,
@@ -201,7 +206,7 @@ export function buildTicketEmailText(bookingRecord) {
 export function buildTicketEmailAttachments(
   ticketPdfBuffer,
   bookingRecord,
-  receiptPdfArtifact = null
+  confirmationEmailAttachmentPdf = null
 ) {
   const attachments = [
     {
@@ -211,12 +216,8 @@ export function buildTicketEmailAttachments(
     },
   ];
 
-  if (receiptPdfArtifact) {
-    attachments.push({
-      filename: receiptPdfArtifact.fileName,
-      content: receiptPdfArtifact.pdfBuffer,
-      contentType: 'application/pdf',
-    });
+  if (confirmationEmailAttachmentPdf) {
+    attachments.push(confirmationEmailAttachmentPdf);
   }
 
   return attachments;
@@ -231,6 +232,10 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
   const ticketPdfBuffer =
     options.ticketPdfBuffer ?? (await generateTicketPdfBuffer(bookingRecord));
 
+  const confirmationEmailAttachmentPdf =
+    options.confirmationEmailAttachmentPdf ??
+    (await readConfirmationEmailAttachmentPdf());
+
   const senderIdentity = resolveOutboundEmailSenderIdentity();
   const outboundEmailMessage = {
     from: senderIdentity,
@@ -241,7 +246,7 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
     attachments: buildTicketEmailAttachments(
       ticketPdfBuffer,
       bookingRecord,
-      options.receiptPdfArtifact ?? null
+      confirmationEmailAttachmentPdf
     ),
   };
 
@@ -262,6 +267,8 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
   return {
     ticketPdfBuffer,
     ticketAttachmentFileName: `ticket-${bookingRecord.ref}.pdf`,
+    confirmationEmailAttachmentFileName:
+      confirmationEmailAttachmentPdf.filename,
     providerMessageId: sendOutcome.providerMessageId,
     deliveryWasDuplicate: sendOutcome.duplicate === true,
   };
@@ -620,7 +627,6 @@ async function deliverTicketEmailForConfirmedBooking(
       : null;
 
     const sendResult = await sendTicketEmail(bookingRecord, {
-      receiptPdfArtifact: builtReceiptPdf,
       paymentSummary: deliveryOptions.paymentSummary ?? null,
       // Apps Script treats a delivery key as an idempotency key. A resend must
       // use a new key or the web app would report the first delivery as a
@@ -797,8 +803,12 @@ export function buildTicketEmailDeliveryFailureMessage(failureReason) {
     return 'Apps Script did not answer in time. Retry; if it keeps happening, raise APPS_SCRIPT_REQUEST_TIMEOUT_MS.';
   }
 
+  if (failureReasonText.includes('CONFIRMATION_EMAIL_ATTACHMENT_UNAVAILABLE')) {
+    return `The confirmation email playbook PDF is missing or unreadable. Place "${CONFIRMATION_EMAIL_ATTACHMENT_FILE_NAME}" in backend/assets or set CONFIRMATION_EMAIL_ATTACHMENT_FILE_PATH, then retry.`;
+  }
+
   if (failureReasonText.includes('APPS_SCRIPT_ATTACHMENT_TOO_LARGE')) {
-    return 'The ticket attachment is larger than the Apps Script limit. Reduce the attachment size and retry.';
+    return 'An email attachment is larger than the Apps Script limit. Reduce the ticket or playbook PDF size and retry.';
   }
 
   if (failureReasonText.includes('gmail_quota_check_failed')) {
