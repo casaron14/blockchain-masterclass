@@ -1,4 +1,4 @@
-// Exercises the real apps-script/Code.gs inside a fake Apps Script runtime.
+// Exercises the real Apps Script files inside a fake Apps Script runtime.
 // This is the closest we can get to "does the deployed web app behave" without
 // a Google account: GmailApp, SpreadsheetApp, PropertiesService, Utilities and
 // LockService are replaced with in-memory fakes, and doPost runs unchanged.
@@ -8,10 +8,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const APPS_SCRIPT_SOURCE_CODE = fs.readFileSync(
-  new URL('../../apps-script/Code.gs', import.meta.url),
-  'utf8'
-);
+const APPS_SCRIPT_SOURCE_CODE = [
+  'Code.gs',
+  'ReminderEmails.gs',
+]
+  .map((scriptFileName) =>
+    fs.readFileSync(
+      new URL(`../../apps-script/${scriptFileName}`, import.meta.url),
+      'utf8'
+    )
+  )
+  .join('\n');
 
 function createFakeDeliverySheet() {
   const sheetRows = [];
@@ -219,6 +226,9 @@ function createAppsScriptTestEnvironment(options = {}) {
     get bookingMirrorSheet() {
       return sheetsByName.get('Bookings');
     },
+    get reminderDeliverySheet() {
+      return sheetsByName.get('Reminder deliveries');
+    },
     sentMessages,
     setRemainingDailyQuota(nextQuota) {
       remainingDailyQuota = nextQuota;
@@ -228,6 +238,15 @@ function createAppsScriptTestEnvironment(options = {}) {
     },
     setFailOnQuotaCheck(nextFailOnQuotaCheck) {
       failOnQuotaCheck = nextFailOnQuotaCheck;
+    },
+    invokeSendTwoDaysToGoReminderEmailsToConfirmedClients() {
+      return sandbox.sendTwoDaysToGoReminderEmailsToConfirmedClients();
+    },
+    invokeDeduplicateConfirmedBookingsByEmail(bookingRows) {
+      return sandbox.deduplicateConfirmedBookingsByEmail(bookingRows);
+    },
+    invokeCountTwoDaysToGoReminderRecipientsFromConfirmedBookings() {
+      return sandbox.countTwoDaysToGoReminderRecipientsFromConfirmedBookings();
     },
     invokeDoPost(requestBody) {
       const response = sandbox.doPost({
@@ -354,6 +373,29 @@ function readBookingMirrorRowByReference(bookingMirrorSheet, bookingReference) {
     headers.map((headerLabel, columnIndex) => [
       headerLabel,
       bookingMirrorSheet.sheetRows[rowIndex][columnIndex],
+    ])
+  );
+}
+
+function readReminderDeliveryRowByEmailAddress(
+  reminderDeliverySheet,
+  recipientEmailAddress
+) {
+  const headers = reminderDeliverySheet.sheetRows[0];
+  const rowIndex = reminderDeliverySheet.sheetRows.findIndex(
+    (sheetRow, candidateIndex) =>
+      candidateIndex > 0 &&
+      sheetRow[headers.indexOf('Recipient email')] === recipientEmailAddress
+  );
+
+  if (rowIndex === -1) {
+    return null;
+  }
+
+  return Object.fromEntries(
+    headers.map((headerLabel, columnIndex) => [
+      headerLabel,
+      reminderDeliverySheet.sheetRows[rowIndex][columnIndex],
     ])
   );
 }
@@ -789,4 +831,235 @@ test('sendTestEmailToScriptOwner sends one authorization check email', () => {
   assert.equal(ownerEmailAddress, 'owner@example.com');
   assert.equal(appsScriptEnvironment.sentMessages.length, 1);
   assert.equal(appsScriptEnvironment.sentMessages[0].to, 'owner@example.com');
+});
+
+test('deduplicateConfirmedBookingsByEmail keeps one confirmed recipient per normalised email', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  const deduplicationResult =
+    appsScriptEnvironment.invokeDeduplicateConfirmedBookingsByEmail([
+      {
+        'Booking reference': 'EVT-DUPLICATE-01',
+        'Attendee name': 'First Attendee',
+        'Email address': '  Attendee@Example.com ',
+        'Booking status': 'confirmed',
+      },
+      {
+        'Booking reference': 'EVT-DUPLICATE-02',
+        'Attendee name': 'Second Attendee',
+        'Email address': 'attendee@example.com',
+        'Booking status': 'confirmed',
+      },
+      {
+        'Booking reference': 'EVT-PENDING-01',
+        'Attendee name': 'Pending Attendee',
+        'Email address': 'pending@example.com',
+        'Booking status': 'pending',
+      },
+      {
+        'Booking reference': 'EVT-INVALID-01',
+        'Attendee name': 'Invalid Attendee',
+        'Email address': 'not-an-email',
+        'Booking status': 'confirmed',
+      },
+    ]);
+
+  assert.equal(deduplicationResult.confirmedBookingCount, 3);
+  assert.equal(deduplicationResult.duplicateEmailCount, 1);
+  assert.equal(deduplicationResult.invalidEmailCount, 1);
+  assert.equal(deduplicationResult.recipients.length, 1);
+  assert.equal(
+    deduplicationResult.recipients[0].recipientEmailAddress,
+    'attendee@example.com'
+  );
+  assert.equal(
+    deduplicationResult.recipients[0].bookingReference,
+    'EVT-DUPLICATE-01'
+  );
+  assert.equal(
+    deduplicationResult.recipients[0].attendeeName,
+    'First Attendee'
+  );
+});
+
+test('sendTwoDaysToGoReminderEmailsToConfirmedClients sends one reminder per unique confirmed recipient', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([
+      buildBookingMirrorRecord({
+        bookingReference: 'EVT-REMINDER-01',
+        attendeeName: 'Reminder Attendee',
+        emailAddress: 'attendee@example.com',
+        bookingStatus: 'confirmed',
+      }),
+      buildBookingMirrorRecord({
+        bookingReference: 'EVT-REMINDER-02',
+        attendeeName: 'Duplicate Attendee',
+        emailAddress: ' ATTENDEE@Example.com ',
+        bookingStatus: 'confirmed',
+      }),
+      buildBookingMirrorRecord({
+        bookingReference: 'EVT-REMINDER-03',
+        attendeeName: 'Pending Attendee',
+        emailAddress: 'pending@example.com',
+        bookingStatus: 'pending',
+      }),
+      buildBookingMirrorRecord({
+        bookingReference: 'EVT-REMINDER-04',
+        attendeeName: 'Invalid Attendee',
+        emailAddress: 'not-an-email',
+        bookingStatus: 'confirmed',
+      }),
+    ])
+  );
+
+  const campaignSummary =
+    appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+
+  assert.equal(campaignSummary.ok, true);
+  assert.equal(campaignSummary.confirmedBookingCount, 3);
+  assert.equal(campaignSummary.uniqueRecipientCount, 1);
+  assert.equal(campaignSummary.duplicateEmailCount, 1);
+  assert.equal(campaignSummary.invalidEmailCount, 1);
+  assert.equal(campaignSummary.sentCount, 1);
+  assert.equal(campaignSummary.failedCount, 0);
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
+
+  const sentReminder = appsScriptEnvironment.sentMessages[0];
+  assert.equal(sentReminder.to, 'attendee@example.com');
+  assert.equal(
+    sentReminder.subject,
+    '2 days to go: Blockchain Masterclass (Saturday, 7th November 2026)'
+  );
+  assert.match(sentReminder.body, /Hi Reminder Attendee,/);
+  assert.match(sentReminder.body, /Saturday, 7th November 2026/);
+  assert.match(sentReminder.body, /Village Hall Mafao House, Arusha, Tanzania/);
+  assert.match(
+    sentReminder.htmlBody,
+    /Village Hall Mafao House, Arusha, Tanzania/
+  );
+
+  const reminderDeliveryRow = readReminderDeliveryRowByEmailAddress(
+    appsScriptEnvironment.reminderDeliverySheet,
+    'attendee@example.com'
+  );
+  assert.equal(reminderDeliveryRow['Reminder status'], 'sent');
+  assert.equal(reminderDeliveryRow['Booking reference'], 'EVT-REMINDER-01');
+  assert.equal(reminderDeliveryRow['Attempt count'], 1);
+  assert.equal(reminderDeliveryRow.Error, '');
+  assert.ok(reminderDeliveryRow['Sent at']);
+  assert.equal(
+    appsScriptEnvironment.reminderDeliverySheet.sheetRows.length,
+    2
+  );
+});
+
+test('sendTwoDaysToGoReminderEmailsToConfirmedClients never sends the same address twice', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([buildBookingMirrorRecord()])
+  );
+
+  const firstCampaignSummary =
+    appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+  const secondCampaignSummary =
+    appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+
+  assert.equal(firstCampaignSummary.sentCount, 1);
+  assert.equal(secondCampaignSummary.sentCount, 0);
+  assert.equal(secondCampaignSummary.skippedAlreadySentCount, 1);
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
+  assert.equal(
+    appsScriptEnvironment.reminderDeliverySheet.sheetRows.length,
+    2
+  );
+});
+
+test('sendTwoDaysToGoReminderEmailsToConfirmedClients retries a failed reminder and increments the attempt count', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment({
+    failOnSend: true,
+  });
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([buildBookingMirrorRecord()])
+  );
+
+  const failedCampaignSummary =
+    appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+
+  assert.equal(failedCampaignSummary.sentCount, 0);
+  assert.equal(failedCampaignSummary.failedCount, 1);
+  assert.equal(appsScriptEnvironment.sentMessages.length, 0);
+
+  const failedReminderRow = readReminderDeliveryRowByEmailAddress(
+    appsScriptEnvironment.reminderDeliverySheet,
+    'attendee@example.com'
+  );
+  assert.equal(failedReminderRow['Reminder status'], 'failed');
+  assert.equal(
+    failedReminderRow.Error,
+    'Gmail service refused the message'
+  );
+  assert.equal(failedReminderRow['Attempt count'], 1);
+
+  appsScriptEnvironment.setFailOnSend(false);
+  const recoveredCampaignSummary =
+    appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+
+  assert.equal(recoveredCampaignSummary.sentCount, 1);
+  assert.equal(recoveredCampaignSummary.failedCount, 0);
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
+
+  const recoveredReminderRow = readReminderDeliveryRowByEmailAddress(
+    appsScriptEnvironment.reminderDeliverySheet,
+    'attendee@example.com'
+  );
+  assert.equal(recoveredReminderRow['Reminder status'], 'sent');
+  assert.equal(recoveredReminderRow.Error, '');
+  assert.equal(recoveredReminderRow['Attempt count'], 2);
+});
+
+test('sendTwoDaysToGoReminderEmailsToConfirmedClients stops before sending when the daily quota is exhausted', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment({
+    remainingDailyQuota: 0,
+  });
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([buildBookingMirrorRecord()])
+  );
+
+  const campaignSummary =
+    appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+
+  assert.equal(campaignSummary.sentCount, 0);
+  assert.equal(campaignSummary.dailyQuotaExhausted, true);
+  assert.equal(appsScriptEnvironment.sentMessages.length, 0);
+  assert.equal(appsScriptEnvironment.reminderDeliverySheet.sheetRows.length, 1);
+});
+
+test('sendTwoDaysToGoReminderEmailsToConfirmedClients escapes attendee names in the HTML body', () => {
+  const appsScriptEnvironment = createAppsScriptTestEnvironment();
+
+  appsScriptEnvironment.invokeDoPost(
+    buildBookingSyncRequestBody([
+      buildBookingMirrorRecord({
+        attendeeName: '<b>Formula</b> & "Friend"',
+        emailAddress: 'escaped@example.com',
+      }),
+    ])
+  );
+
+  appsScriptEnvironment.invokeSendTwoDaysToGoReminderEmailsToConfirmedClients();
+
+  assert.equal(appsScriptEnvironment.sentMessages.length, 1);
+  assert.match(
+    appsScriptEnvironment.sentMessages[0].htmlBody,
+    /&lt;b&gt;Formula&lt;\/b&gt; &amp; &quot;Friend&quot;/
+  );
+  assert.doesNotMatch(
+    appsScriptEnvironment.sentMessages[0].htmlBody,
+    /<b>Formula<\/b>/
+  );
 });

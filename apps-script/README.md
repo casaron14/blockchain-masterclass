@@ -23,10 +23,14 @@ admin dashboard and PostgreSQL remain the source of truth.
 1. In the Sheet, open **Extensions → Apps Script**.
 2. Delete the placeholder `Code.gs` content and paste the contents of
    [`Code.gs`](./Code.gs).
-3. Open **Project Settings**, tick **Show "appsscript.json" manifest file in
+3. In the Apps Script editor, add a second script file named
+   `ReminderEmails.gs` and paste the contents of
+   [`ReminderEmails.gs`](./ReminderEmails.gs). This file adds the reminder
+   campaign and the **Event emails** menu.
+4. Open **Project Settings**, tick **Show "appsscript.json" manifest file in
    editor**, then open `appsscript.json` and paste the contents of
    [`appsscript.json`](./appsscript.json).
-4. In **Project Settings → Script Properties**, add one property:
+5. In **Project Settings → Script Properties**, add one property:
 
    | Property | Value |
    | --- | --- |
@@ -62,13 +66,14 @@ secrets: anybody with both can send mail from your account.
 
 ### Updating an existing deployment
 
-After pasting a newer [`Code.gs`](./Code.gs) into the editor, open **Deploy →
-Manage deployments**, edit the active deployment, choose **Version: New version**,
-set **Execute as: Me** and **Who has access: Anyone**, and deploy. Editing the
-code alone does not update the `/exec` URL. Do not use the `/dev` test URL: it
-requires a Google sign-in, so the backend receives `401`. An old version answers
-`delivery_metadata_missing` to the booking sync because it only understands
-ticket and receipt email requests.
+After updating either [`Code.gs`](./Code.gs) or
+[`ReminderEmails.gs`](./ReminderEmails.gs) in the editor, open **Deploy →
+Manage deployments**, edit the active deployment, choose **Version: New
+version**, set **Execute as: Me** and **Who has access: Anyone**, and deploy.
+Editing the code alone does not update the `/exec` URL. Do not use the `/dev`
+test URL: it requires a Google sign-in, so the backend receives `401`. An old
+version answers `delivery_metadata_missing` to the booking sync because it only
+understands ticket and receipt email requests.
 
 ## 5. Configure the backend
 

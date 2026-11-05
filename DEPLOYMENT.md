@@ -243,7 +243,8 @@ is explicitly re-enabled.
 ### Google Apps Script email delivery (simplest setup)
 
 1. Create a Google Sheet and open **Extensions → Apps Script**.
-2. Paste `apps-script/Code.gs`, then enable the manifest and paste
+2. Paste `apps-script/Code.gs` and add `apps-script/ReminderEmails.gs` as a
+   second script file, then enable the manifest and paste
    `apps-script/appsscript.json`.
 3. Add a `SHARED_SECRET` script property with a long random value.
 4. Run `sendTestEmailToScriptOwner` once to authorize `GmailApp`. If it fails,
