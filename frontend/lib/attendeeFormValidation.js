@@ -7,17 +7,27 @@ const ANGLE_BRACKET_PATTERN = /[<>]/g;
 export const FULL_NAME_MIN_LENGTH = 2;
 export const FULL_NAME_MAX_LENGTH = 120;
 
-function sanitizeFullNameInput(rawFullName) {
+function stripUnsafeCharactersFromFullName(rawFullName) {
   const withoutControlCharacters = String(rawFullName || '').replace(
     CONTROL_CHARACTER_PATTERN,
     ''
   );
   const withoutHtmlMarkupTags = withoutControlCharacters.replace(HTML_TAG_PATTERN, '');
-  const withoutRemainingAngleBrackets = withoutHtmlMarkupTags.replace(
-    ANGLE_BRACKET_PATTERN,
-    ''
-  );
-  return withoutRemainingAngleBrackets.replace(/\s+/g, ' ').trim();
+  return withoutHtmlMarkupTags.replace(ANGLE_BRACKET_PATTERN, '');
+}
+
+// Keeps a single trailing space so attendees can type the space between their
+// first and last names while the form stores every keystroke.
+export function sanitizeFullNameFieldValueWhileTyping(rawFullName) {
+  return stripUnsafeCharactersFromFullName(rawFullName).replace(/\s+/g, ' ');
+}
+
+export function normalizeFullNameForBooking(rawFullName) {
+  return sanitizeFullNameFieldValueWhileTyping(rawFullName).trim();
+}
+
+function sanitizeFullNameInput(rawFullName) {
+  return normalizeFullNameForBooking(rawFullName);
 }
 
 function sanitizeEmailInput(rawEmail) {
@@ -50,6 +60,13 @@ export function sanitizeAttendeeFieldValue(fieldName, rawValue) {
     return sanitizePhoneNumberInput(rawValue);
   }
   return rawValue;
+}
+
+export function sanitizeAttendeeFieldValueDuringInput(fieldName, rawValue) {
+  if (fieldName === 'full_name') {
+    return sanitizeFullNameFieldValueWhileTyping(rawValue);
+  }
+  return sanitizeAttendeeFieldValue(fieldName, rawValue);
 }
 
 export function buildSanitizedAttendeePayload(attendeeDetails) {

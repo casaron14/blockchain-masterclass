@@ -26,7 +26,9 @@ import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidge
 import { buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
 import {
   buildSanitizedAttendeePayload,
+  normalizeFullNameForBooking,
   sanitizeAttendeeFieldValue,
+  sanitizeAttendeeFieldValueDuringInput,
   validateBookingFormInput,
   validateSingleBookingFormField,
   FULL_NAME_MAX_LENGTH,
@@ -140,7 +142,10 @@ export default function BookingForm() {
   }
 
   function updateField(fieldName, fieldValue) {
-    const sanitizedFieldValue = sanitizeAttendeeFieldValue(fieldName, fieldValue);
+    const sanitizedFieldValue = sanitizeAttendeeFieldValueDuringInput(
+      fieldName,
+      fieldValue
+    );
     const nextAttendeeDetails = {
       ...attendeeDetails,
       [fieldName]: sanitizedFieldValue,
@@ -156,9 +161,22 @@ export default function BookingForm() {
   }
 
   function handleFieldBlur(fieldName, fieldValue) {
+    let normalizedFieldValue = fieldValue;
+    if (fieldName === 'full_name') {
+      normalizedFieldValue = normalizeFullNameForBooking(fieldValue);
+      if (normalizedFieldValue !== fieldValue) {
+        const nextAttendeeDetails = {
+          ...attendeeDetails,
+          full_name: normalizedFieldValue,
+        };
+        setAttendeeDetails(nextAttendeeDetails);
+        persistAttendeeDraft(nextAttendeeDetails, selectedPaymentMethod);
+      }
+    }
+
     const fieldErrors = validateSingleBookingFormField(
       fieldName,
-      fieldValue,
+      normalizedFieldValue,
       t
     );
     const nextValidationErrors = { ...validationErrors, ...fieldErrors };

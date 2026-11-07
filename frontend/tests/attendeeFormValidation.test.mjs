@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildSanitizedAttendeePayload,
+  normalizeFullNameForBooking,
   sanitizeAttendeeFieldValue,
+  sanitizeAttendeeFieldValueDuringInput,
   validateBookingFormInput,
   validateSingleBookingFormField,
 } from '../lib/attendeeFormValidation.js';
@@ -21,6 +23,28 @@ test('sanitizes the full name by stripping control characters and html markup', 
     sanitizeAttendeeFieldValue('full_name', '  Anna<br>\n <script>Mwangi  '),
     'Anna Mwangi'
   );
+});
+
+test('preserves the space between names while the attendee types', () => {
+  const attendeeTypedFullName = ['John', ' ', 'Doe'].reduce(
+    (typedSoFar, typedCharacter) =>
+      sanitizeAttendeeFieldValueDuringInput(
+        'full_name',
+        `${typedSoFar}${typedCharacter}`
+      ),
+    ''
+  );
+
+  assert.equal(attendeeTypedFullName, 'John Doe');
+  assert.equal(
+    sanitizeAttendeeFieldValueDuringInput('full_name', 'John '),
+    'John '
+  );
+});
+
+test('normalizes the full name only after the attendee finishes typing', () => {
+  assert.equal(normalizeFullNameForBooking('  John   Doe  '), 'John Doe');
+  assert.equal(normalizeFullNameForBooking('John '), 'John');
 });
 
 test('sanitizes the email by removing whitespace and lowercasing it', () => {
