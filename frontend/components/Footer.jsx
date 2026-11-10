@@ -17,6 +17,7 @@ export default function Footer() {
     addressLine1,
     addressLine2,
     platformName,
+    slug,
   } = eventConfig;
   const currentYear = new Date().getFullYear();
 
@@ -25,7 +26,7 @@ export default function Footer() {
       <div className="shell">
         <div className="site-footer__top">
           <div className="site-footer__identity">
-            <Link href={buildEventHomeUrl()} className="site-footer__wordmark">
+            <Link href={buildEventHomeUrl(slug)} className="site-footer__wordmark">
               {name}
             </Link>
             <p className="site-footer__meta">

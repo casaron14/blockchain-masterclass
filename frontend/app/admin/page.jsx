@@ -6,6 +6,7 @@ import {
   adminCreateBooking,
   adminDownloadBookingsCsv,
   adminFetchBookingList,
+  adminFetchEventList,
   adminResendTicketConfirmationEmail,
   adminSyncBookingsToGoogleSheet,
 } from '@/lib/api';
@@ -27,7 +28,7 @@ function formatCreatedDate(rawDate) {
   return formatAdminTimestamp(rawDate);
 }
 
-function BookingCreateForm({ adminToken, onCreateBooking }) {
+function BookingCreateForm({ adminToken, eventSlug, onCreateBooking }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -48,6 +49,7 @@ function BookingCreateForm({ adminToken, onCreateBooking }) {
           phone_number: phoneNumber.trim(),
           utm_source: referralSourceCode.trim(),
           autoConfirm,
+          ...(eventSlug ? { event: eventSlug } : {}),
         },
         adminToken
       );
@@ -135,6 +137,8 @@ export default function AdminDashboardPage() {
 
   const [bookingRows, setBookingRows] = useState([]);
   const [statusCounts, setStatusCounts] = useState(null);
+  const [eventRecords, setEventRecords] = useState([]);
+  const [selectedEventSlug, setSelectedEventSlug] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [bookingSearchInputValue, setBookingSearchInputValue] = useState('');
   const [appliedBookingSearchQuery, setAppliedBookingSearchQuery] = useState('');
@@ -161,6 +165,7 @@ export default function AdminDashboardPage() {
       await adminDownloadBookingsCsv(adminToken, {
         statusFilter,
         searchQuery: appliedBookingSearchQuery,
+        eventSlug: selectedEventSlug,
       });
     } catch (error) {
       setExportError(error.message || 'The booking export could not be downloaded.');
@@ -252,6 +257,28 @@ export default function AdminDashboardPage() {
   }, [bookingSearchInputValue]);
 
   useEffect(() => {
+    if (isSessionRestoring || !adminToken) {
+      return;
+    }
+
+    adminFetchEventList(adminToken)
+      .then((responseBody) => {
+        const loadedEventRecords = responseBody.events ?? [];
+        setEventRecords(loadedEventRecords);
+        setSelectedEventSlug((currentSlug) => {
+          if (currentSlug) {
+            return currentSlug;
+          }
+          const openEventRecord = loadedEventRecords.find(
+            (eventRecord) => eventRecord.status === 'open'
+          );
+          return openEventRecord?.slug ?? loadedEventRecords[0]?.slug ?? '';
+        });
+      })
+      .catch(() => setEventRecords([]));
+  }, [isSessionRestoring, adminToken]);
+
+  useEffect(() => {
     if (isSessionRestoring) {
       return;
     }
@@ -261,7 +288,12 @@ export default function AdminDashboardPage() {
     }
     setIsLoadingBookings(true);
     setListError(null);
-    adminFetchBookingList({ statusFilter, searchQuery: appliedBookingSearchQuery, adminToken })
+    adminFetchBookingList({
+      statusFilter,
+      searchQuery: appliedBookingSearchQuery,
+      eventSlug: selectedEventSlug,
+      adminToken,
+    })
       .then((responseBody) => {
         setBookingRows(responseBody.bookings || []);
         setStatusCounts(responseBody.counts || null);
@@ -275,6 +307,7 @@ export default function AdminDashboardPage() {
     adminToken,
     statusFilter,
     appliedBookingSearchQuery,
+    selectedEventSlug,
     listRefreshKey,
     router,
   ]);
@@ -373,6 +406,20 @@ export default function AdminDashboardPage() {
         )}
 
         <div className="admin-filter-row">
+          <label className="field">
+            <span>Filter by event</span>
+            <select
+              value={selectedEventSlug}
+              onChange={(event) => setSelectedEventSlug(event.target.value)}
+            >
+              <option value="">All events</option>
+              {eventRecords.map((eventRecord) => (
+                <option key={eventRecord.id} value={eventRecord.slug}>
+                  {eventRecord.name} ({eventRecord.status})
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="field">
             <span>Search bookings</span>
             <input
@@ -550,7 +597,11 @@ export default function AdminDashboardPage() {
         )}
       </section>
 
-      <BookingCreateForm adminToken={adminToken} onCreateBooking={refreshBookingList} />
+      <BookingCreateForm
+        adminToken={adminToken}
+        eventSlug={selectedEventSlug}
+        onCreateBooking={refreshBookingList}
+      />
     </>
   );
 }

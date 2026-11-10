@@ -33,6 +33,7 @@ export const PAYMENT_METHOD_LABEL_KEYS = {
 
 export const defaultEventConfig = {
   slug: primaryEventConfiguration.slug,
+  lifecycleStatus: 'open',
   name: primaryEventConfiguration.name,
   tagline: primaryEventConfiguration.tagline,
   dateLabel: primaryEventConfiguration.event.date,
@@ -103,6 +104,7 @@ export function buildEventConfigFromPayload(payload) {
 
   return {
     slug: payload.slug || defaultEventConfig.slug,
+    lifecycleStatus: payload.lifecycleStatus || 'open',
     name: payload.name || defaultEventConfig.name,
     tagline: payload.tagline || defaultEventConfig.tagline,
     dateLabel:

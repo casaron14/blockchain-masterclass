@@ -69,7 +69,32 @@ test('an event section link targets a hash on the root page', () => {
   assert.equal(buildEventHomeSectionUrlForSectionId('admission'), '/#admission');
 });
 
+test('an event slug scopes every public URL to that event', () => {
+  assert.equal(buildEventHomeUrl('next-event'), '/events/next-event');
+  assert.equal(buildBookingPageUrl('next-event'), '/events/next-event/book');
+  assert.equal(
+    buildPaymentPageUrlForPaymentId('9f2c1a7b', 'next-event'),
+    '/events/next-event/pay/9f2c1a7b'
+  );
+  assert.equal(
+    buildPaymentConfirmationPageUrlForPaymentId('9f2c1a7b', 'next-event'),
+    '/events/next-event/pay/9f2c1a7b/confirm'
+  );
+  assert.equal(
+    buildSuccessPageUrlForReferenceCode('MASTER123', 'next-event'),
+    '/events/next-event/success/MASTER123'
+  );
+  assert.equal(
+    buildEventHomeSectionUrlForSectionId('admission', 'next-event'),
+    '/events/next-event#admission'
+  );
+});
+
 test('dynamic URL segments are encoded instead of injected verbatim', () => {
+  assert.equal(
+    buildEventHomeUrl('event/with space'),
+    '/events/event%2Fwith%20space'
+  );
   assert.equal(buildPaymentPageUrlForPaymentId('id/with space'), '/pay/id%2Fwith%20space');
   assert.equal(
     buildPaymentConfirmationPageUrlForPaymentId('id/with space'),

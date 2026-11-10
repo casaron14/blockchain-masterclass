@@ -39,6 +39,13 @@ export default function AdminSettingsPage() {
   const [formError, setFormError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
+  function readRequestedEventSlugFromLocation() {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return new URLSearchParams(window.location.search).get('event');
+  }
+
   const loadConfiguration = useCallback(() => {
     if (isSessionRestoring) {
       return;
@@ -49,7 +56,7 @@ export default function AdminSettingsPage() {
     }
     setIsLoadingConfiguration(true);
     setFormError(null);
-    adminFetchEventConfiguration(adminToken)
+    adminFetchEventConfiguration(adminToken, readRequestedEventSlugFromLocation())
       .then((responseBody) => {
         const configuration = responseBody.configuration;
         setReadOnlyDetails({
@@ -147,7 +154,8 @@ export default function AdminSettingsPage() {
     try {
       const responseBody = await adminUpdateEventConfiguration(
         buildOverridePayload(),
-        adminToken
+        adminToken,
+        readRequestedEventSlugFromLocation()
       );
       setLiveSeatCapacity(responseBody.liveSeatCapacity || null);
       setSuccessMessage(formatUpdateTimestamp(responseBody.updatedAt));
@@ -175,8 +183,9 @@ export default function AdminSettingsPage() {
           <div>
             <h2 className="card__title">Event settings</h2>
             <p className="muted">
-              Signed in as {adminUser?.username || 'admin'} · changes apply to the live booking
-              flow immediately
+              {formValues?.slug ? `Editing ${formValues.slug} · ` : ''}
+              Signed in as {adminUser?.username || 'admin'} · changes apply to the live
+              booking flow immediately
             </p>
           </div>
           <LoadingButton

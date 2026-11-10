@@ -10,14 +10,27 @@ import {
   TICKET_PRICE_USDT,
 } from './eventConfigService.js';
 
-import { SEAT_CAPACITY_ROW_ID } from './bookingService.js';
+import {
+  buildEventConfigurationFromEventRecord,
+  ensureEventSeatCapacityRowExistsForEventRecord,
+  fetchEventRecordByIdFromDatabase,
+  fetchEventRecordBySlugFromDatabase,
+  resolveDefaultPublicEventRecordFromDatabase,
+  updateEventConfigurationInDatabase,
+} from './eventRegistryService.js';
 
 export const eventConfigOverrideJoiSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120),
   tagline: Joi.string().trim().max(200),
   event: Joi.object({
     date: Joi.string().trim().max(120),
+    ticketDateLabel: Joi.string().trim().max(40),
     location: Joi.string().trim().max(200),
+    venueName: Joi.string().trim().max(200),
+    motto: Joi.string().trim().max(200),
+    brandName: Joi.string().trim().max(120),
+    websiteAddress: Joi.string().trim().max(200),
+    timeLabel: Joi.string().trim().max(120),
   }).unknown(false),
   price: Joi.object({
     localAmount: Joi.number().positive().precision(2),
@@ -28,6 +41,8 @@ export const eventConfigOverrideJoiSchema = Joi.object({
   seatCapacity: Joi.number().integer().positive(),
   phonePlaceholder: Joi.string().trim().max(60),
   contact: Joi.object({
+    brandName: Joi.string().trim().max(120),
+    websiteAddress: Joi.string().trim().max(200),
     supportEmail: Joi.string().trim().email(),
     supportPhone: Joi.string().trim().max(40),
     addressLine1: Joi.string().trim().max(200),
@@ -68,40 +83,77 @@ export class SeatCapacityBelowConfirmedCountError extends Error {
   }
 }
 
-export async function fetchEventConfigurationOverridesFromDatabase(
-  eventSlug = PRIMARY_EVENT_SLUG
-) {
-  const result = await pool.query(
-    'SELECT slug, overrides, updated_at FROM event_config_overrides WHERE slug = $1',
-    [eventSlug]
-  );
-  return result.rows[0] ?? null;
+export class EventConfigurationNotFoundError extends Error {
+  constructor(eventSlug) {
+    super(`Event configuration not found for ${eventSlug}`);
+    this.name = 'EventConfigurationNotFoundError';
+    this.code = 'EVENT_CONFIGURATION_NOT_FOUND';
+  }
 }
 
-export async function fetchEffectiveEventConfiguration(eventSlug = PRIMARY_EVENT_SLUG) {
-  const baseConfiguration = fetchEventConfigurationBySlug(eventSlug);
-  if (!baseConfiguration) {
+async function resolveAdminTargetEventRecord(eventSlug) {
+  if (eventSlug) {
+    return fetchEventRecordBySlugFromDatabase(eventSlug);
+  }
+
+  return resolveDefaultPublicEventRecordFromDatabase();
+}
+
+export async function fetchEventConfigurationOverridesFromDatabase(eventSlug = null) {
+  const eventRecord = await resolveAdminTargetEventRecord(eventSlug);
+  if (!eventRecord) {
     return null;
   }
 
-  const overrideRow = await fetchEventConfigurationOverridesFromDatabase(eventSlug);
-  return mergeEffectiveEventConfiguration(baseConfiguration, overrideRow?.overrides ?? null);
-}
-
-export async function fetchLiveSeatCapacitySnapshot() {
-  const result = await pool.query(
-    'SELECT confirmed_count, cap FROM seat_capacity WHERE id = $1',
-    [SEAT_CAPACITY_ROW_ID]
-  );
-  const capacityRow = result.rows[0];
   return {
-    confirmedCount: Number(capacityRow.confirmed_count),
-    cap: Number(capacityRow.cap),
+    slug: eventRecord.slug,
+    overrides: buildEventConfigurationFromEventRecord(eventRecord),
+    updated_at: eventRecord.updated_at,
   };
 }
 
-export async function resolveEffectiveExpectedAmountForPaymentMethod(paymentMethod) {
-  const effectiveConfiguration = await fetchEffectiveEventConfiguration();
+export async function fetchEffectiveEventConfiguration(eventSlug = null) {
+  const eventRecord = await resolveAdminTargetEventRecord(eventSlug);
+  if (eventRecord) {
+    return buildEventConfigurationFromEventRecord(eventRecord);
+  }
+
+  return fetchEventConfigurationBySlug(eventSlug ?? PRIMARY_EVENT_SLUG);
+}
+
+export async function fetchLiveSeatCapacitySnapshot(eventSlug) {
+  const eventRecord = eventSlug
+    ? await fetchEventRecordBySlugFromDatabase(eventSlug)
+    : await resolveDefaultPublicEventRecordFromDatabase();
+
+  if (!eventRecord) {
+    return {
+      confirmedCount: 0,
+      cap: 150,
+    };
+  }
+
+  await ensureEventSeatCapacityRowExistsForEventRecord(pool, eventRecord);
+
+  const result = await pool.query(
+    `SELECT confirmed_count, cap
+       FROM event_seat_capacity
+      WHERE event_id = $1`,
+    [eventRecord.id]
+  );
+  const capacityRow = result.rows[0];
+
+  return {
+    confirmedCount: Number(capacityRow?.confirmed_count ?? 0),
+    cap: Number(capacityRow?.cap ?? eventRecord.configuration?.seatCapacity ?? 150),
+  };
+}
+
+export async function resolveEffectiveExpectedAmountForPaymentMethod(
+  paymentMethod,
+  eventReference = PRIMARY_EVENT_SLUG
+) {
+  const effectiveConfiguration = await resolveEventConfigurationForAmount(eventReference);
   if (!effectiveConfiguration?.price) {
     throw new Error('Effective event configuration unavailable');
   }
@@ -117,28 +169,60 @@ export async function resolveEffectiveExpectedAmountForPaymentMethod(paymentMeth
     : TICKET_PRICE_TZS;
 }
 
-export async function saveEventConfigurationOverrides(overridePayload) {
-  const validatedOverrides = validateAndNormalizeEventConfigOverrides(overridePayload);
-
-  if (typeof validatedOverrides.seatCapacity === 'number') {
-    await applySeatCapacityChange(validatedOverrides.seatCapacity);
+async function resolveEventConfigurationForAmount(eventReference) {
+  if (!eventReference) {
+    return fetchEffectiveEventConfiguration();
   }
 
-  await pool.query(
-    `INSERT INTO event_config_overrides (slug, overrides, updated_at)
-     VALUES ($1, $2, now())
-     ON CONFLICT (slug)
-     DO UPDATE SET overrides = EXCLUDED.overrides, updated_at = now()`,
-    [PRIMARY_EVENT_SLUG, JSON.stringify(validatedOverrides)]
-  );
+  if (typeof eventReference === 'string') {
+    return fetchEffectiveEventConfiguration(eventReference);
+  }
 
-  return buildEventConfigurationReport();
+  if (eventReference.configuration && eventReference.slug) {
+    return buildEventConfigurationFromEventRecord(eventReference);
+  }
+
+  if (eventReference.price) {
+    return eventReference;
+  }
+
+  if (eventReference.eventId) {
+    const eventRecord = await fetchEventRecordByIdFromDatabase(eventReference.eventId);
+    return eventRecord ? buildEventConfigurationFromEventRecord(eventRecord) : null;
+  }
+
+  return null;
 }
 
-async function buildEventConfigurationReport() {
-  const configuration = await fetchEffectiveEventConfiguration();
-  const liveSeatCapacity = await fetchLiveSeatCapacitySnapshot();
-  const overrideRow = await fetchEventConfigurationOverridesFromDatabase();
+export async function saveEventConfigurationOverrides(
+  overridePayload,
+  eventSlug = null
+) {
+  const validatedOverrides = validateAndNormalizeEventConfigOverrides(overridePayload);
+  const eventRecord = await resolveAdminTargetEventRecord(eventSlug);
+  if (!eventRecord) {
+    throw new EventConfigurationNotFoundError(eventSlug ?? 'default');
+  }
+
+  if (typeof validatedOverrides.seatCapacity === 'number') {
+    await applySeatCapacityChangeToEvent(eventRecord.id, validatedOverrides.seatCapacity);
+  }
+
+  const currentConfiguration = buildEventConfigurationFromEventRecord(eventRecord);
+  const nextConfiguration = mergeEffectiveEventConfiguration(
+    currentConfiguration,
+    validatedOverrides
+  );
+
+  await updateEventConfigurationInDatabase(eventRecord.id, nextConfiguration);
+
+  return buildEventConfigurationReport(eventSlug);
+}
+
+export async function buildEventConfigurationReport(eventSlug = null) {
+  const configuration = await fetchEffectiveEventConfiguration(eventSlug);
+  const liveSeatCapacity = await fetchLiveSeatCapacitySnapshot(eventSlug);
+  const overrideRow = await fetchEventConfigurationOverridesFromDatabase(eventSlug);
 
   return {
     configuration,
@@ -175,25 +259,58 @@ function mergeEffectiveEventConfiguration(baseConfiguration, overrideValues) {
   };
 }
 
-async function applySeatCapacityChange(newCapacity) {
+async function applySeatCapacityChangeToEvent(eventId, newCapacity) {
   const capacityClient = await pool.connect();
 
   try {
     await capacityClient.query('BEGIN');
-    const confirmedSeatsResult = await capacityClient.query(
-      'SELECT confirmed_count FROM seat_capacity WHERE id = $1 FOR UPDATE',
-      [SEAT_CAPACITY_ROW_ID]
-    );
-    const currentConfirmedCount = Number(confirmedSeatsResult.rows[0].confirmed_count);
 
-    if (newCapacity < currentConfirmedCount) {
-      throw new SeatCapacityBelowConfirmedCountError(newCapacity, currentConfirmedCount);
+    const eventRecordResult = await capacityClient.query(
+      'SELECT * FROM events WHERE id = $1 FOR UPDATE',
+      [eventId]
+    );
+    const eventRecord = eventRecordResult.rows[0];
+    if (!eventRecord) {
+      throw new EventConfigurationNotFoundError(eventId);
     }
 
-    await capacityClient.query('UPDATE seat_capacity SET cap = $1 WHERE id = $2', [
-      newCapacity,
-      SEAT_CAPACITY_ROW_ID,
-    ]);
+    await ensureEventSeatCapacityRowExistsForEventRecord(capacityClient, {
+      ...eventRecord,
+      id: Number(eventRecord.id),
+    });
+
+    const confirmedSeatsResult = await capacityClient.query(
+      'SELECT confirmed_count FROM event_seat_capacity WHERE event_id = $1 FOR UPDATE',
+      [eventId]
+    );
+    const currentConfirmedCount = Number(
+      confirmedSeatsResult.rows[0]?.confirmed_count ?? 0
+    );
+
+    if (newCapacity < currentConfirmedCount) {
+      throw new SeatCapacityBelowConfirmedCountError(
+        newCapacity,
+        currentConfirmedCount
+      );
+    }
+
+    await capacityClient.query(
+      'UPDATE event_seat_capacity SET cap = $1 WHERE event_id = $2',
+      [newCapacity, eventId]
+    );
+    await capacityClient.query(
+      `UPDATE events
+          SET configuration = jsonb_set(
+                configuration,
+                '{seatCapacity}',
+                to_jsonb($1::INTEGER),
+                true
+              ),
+              updated_at = now()
+        WHERE id = $2`,
+      [newCapacity, eventId]
+    );
+
     await capacityClient.query('COMMIT');
   } catch (error) {
     await capacityClient.query('ROLLBACK');

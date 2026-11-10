@@ -1,9 +1,24 @@
 import pool from '../config/db.js';
 import crypto from 'node:crypto';
 
-import { SEAT_HOLD_DURATION_MINUTES, OFFLINE_PAYMENT_REVIEW_HOLD_MINUTES } from './eventConfigService.js';
+import {
+  OFFLINE_PAYMENT_REVIEW_HOLD_MINUTES,
+  PRIMARY_EVENT_SLUG,
+  SEAT_HOLD_DURATION_MINUTES,
+} from './eventConfigService.js';
+
+import {
+  EventNotFoundError,
+  buildEventSnapshotFromEventRecord,
+  ensureEventSeatCapacityRowExistsForEventRecord,
+  fetchEventRecordByIdFromDatabase,
+  fetchEventRecordBySlugFromDatabase,
+} from './eventRegistryService.js';
 
 export const BOOKING_HOLD_DURATION_MINUTES = SEAT_HOLD_DURATION_MINUTES;
+
+// Kept for older operational scripts. Application code now scopes every
+// capacity read to an explicit event id.
 export const SEAT_CAPACITY_ROW_ID = 1;
 
 export class SoldOutError extends Error {
@@ -33,78 +48,143 @@ export function generateBookingReferenceCode(length = 6) {
   ).join('');
 }
 
-async function fetchActiveSeatHoldCount(client = pool, excludedBookingId = null) {
-  const result = await client.query(
+// Callers may pass a slug (public API), an event id (booking already in the
+// database), or a complete event record (already resolved by a controller).
+export async function resolveEventRecordForBookingScope(eventReference) {
+  if (eventReference && typeof eventReference === 'object' && eventReference.id) {
+    return eventReference;
+  }
+
+  if (typeof eventReference === 'number') {
+    const eventRecord = await fetchEventRecordByIdFromDatabase(eventReference);
+    if (eventRecord) {
+      return eventRecord;
+    }
+    throw new EventNotFoundError(eventReference);
+  }
+
+  if (typeof eventReference === 'string' && eventReference.trim() !== '') {
+    const trimmedEventReference = eventReference.trim();
+    // pg returns BIGINT columns as strings, so a stored event_id arrives here
+    // as "1" while a public event slug never contains only digits.
+    if (/^\d+$/.test(trimmedEventReference)) {
+      return resolveEventRecordForBookingScope(Number(trimmedEventReference));
+    }
+
+    const eventRecord = await fetchEventRecordBySlugFromDatabase(trimmedEventReference);
+    if (eventRecord) {
+      return eventRecord;
+    }
+    throw new EventNotFoundError(eventReference);
+  }
+
+  const primaryEventRecord = await fetchEventRecordBySlugFromDatabase(PRIMARY_EVENT_SLUG);
+  if (primaryEventRecord) {
+    return primaryEventRecord;
+  }
+
+  throw new EventNotFoundError(PRIMARY_EVENT_SLUG);
+}
+
+async function fetchActiveSeatHoldCountForEvent(
+  databaseClient,
+  eventId,
+  excludedBookingId = null
+) {
+  const result = await databaseClient.query(
     `SELECT COUNT(*)::INT AS active_holds
        FROM bookings
-      WHERE status = 'pending' AND expires_at > now()
-        AND ($1::bigint IS NULL OR id <> $1::bigint)`,
-    [excludedBookingId]
+      WHERE event_id = $1
+        AND status = 'pending'
+        AND expires_at > now()
+        AND ($2::bigint IS NULL OR id <> $2::bigint)`,
+    [eventId, excludedBookingId]
   );
   return result.rows[0].active_holds;
 }
 
-export async function fetchEventAvailabilitySnapshot() {
-  // One round trip instead of two: the capacity row and the live hold count are
-  // read together, so the availability banner stays a single query per request.
+export async function fetchEventAvailabilitySnapshot(eventReference = PRIMARY_EVENT_SLUG) {
+  const eventRecord = await resolveEventRecordForBookingScope(eventReference);
+  await ensureEventSeatCapacityRowExistsForEventRecord(pool, eventRecord);
+
+  // One round trip instead of two: the event's capacity row and its live hold
+  // count are read together, so the availability banner stays a single query.
   const availabilityResult = await pool.query(
-    `SELECT sc.confirmed_count,
-            sc.cap,
+    `SELECT capacity.confirmed_count,
+            capacity.cap,
             (SELECT COUNT(*)::INT
-               FROM bookings b
-              WHERE b.status = 'pending' AND b.expires_at > now()) AS active_seat_holds
-       FROM seat_capacity sc
-      WHERE sc.id = $1`,
-    [SEAT_CAPACITY_ROW_ID]
+               FROM bookings AS booking_record
+              WHERE booking_record.event_id = $1
+                AND booking_record.status = 'pending'
+                AND booking_record.expires_at > now()) AS active_seat_holds
+       FROM event_seat_capacity AS capacity
+      WHERE capacity.event_id = $1`,
+    [eventRecord.id]
   );
   const capacityRow = availabilityResult.rows[0];
   if (!capacityRow) {
-    throw new Error('Seat capacity row is missing');
+    throw new Error(`Seat capacity row is missing for event ${eventRecord.slug}`);
   }
 
   const confirmedCount = Number(capacityRow.confirmed_count);
   const { cap } = capacityRow;
-  const activeSeatHolds = capacityRow.active_seat_holds;
+  const activeSeatHolds = Number(capacityRow.active_seat_holds);
   const seatsHeld = confirmedCount + activeSeatHolds;
   const seatsRemaining = Math.max(cap - seatsHeld, 0);
   const isSoldOut = seatsRemaining <= 0;
 
   return {
+    eventSlug: eventRecord.slug,
+    eventName: eventRecord.name,
+    eventLifecycleStatus: eventRecord.status,
     eventStatus: isSoldOut ? 'sold_out' : 'open',
     confirmedCount,
     activeSeatHolds,
     seatsRemaining,
+    seatCapacity: Number(cap),
     isSoldOut,
   };
 }
 
-export async function checkSeatAvailabilityBeforeBooking() {
-  const snapshot = await fetchEventAvailabilitySnapshot();
+export async function checkSeatAvailabilityBeforeBooking(
+  eventReference = PRIMARY_EVENT_SLUG
+) {
+  const snapshot = await fetchEventAvailabilitySnapshot(eventReference);
   if (snapshot.isSoldOut) {
     throw new SoldOutError(snapshot.seatsRemaining);
   }
   return snapshot;
 }
 
-export async function createBookingRecordWithActiveSeatHold(attendeeDetails) {
+export async function createBookingRecordWithActiveSeatHold(
+  attendeeDetails,
+  eventReference = PRIMARY_EVENT_SLUG
+) {
+  const eventRecord = await resolveEventRecordForBookingScope(eventReference);
+  const eventSnapshot = buildEventSnapshotFromEventRecord(eventRecord);
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
+    await ensureEventSeatCapacityRowExistsForEventRecord(client, eventRecord);
+
     const capacityLock = await client.query(
-      'SELECT confirmed_count, cap FROM seat_capacity WHERE id = $1 FOR UPDATE',
-      [SEAT_CAPACITY_ROW_ID]
+      `SELECT confirmed_count, cap
+         FROM event_seat_capacity
+        WHERE event_id = $1
+        FOR UPDATE`,
+      [eventRecord.id]
     );
     if (!capacityLock.rows[0]) {
-      throw new Error('Seat capacity row is missing');
+      throw new Error(`Seat capacity row is missing for event ${eventRecord.slug}`);
     }
     const { confirmed_count: confirmedCount, cap } = capacityLock.rows[0];
 
     // Count the competing holds on the transaction's own connection. Counting
     // through the pool would read a different snapshot while this transaction
-    // holds the capacity lock.
-    const activeHolds = await fetchActiveSeatHoldCount(client);
+    // holds the event's capacity lock.
+    const activeHolds = await fetchActiveSeatHoldCountForEvent(client, eventRecord.id);
     const seatsHeld = confirmedCount + activeHolds;
     const seatsRemaining = Math.max(cap - seatsHeld, 0);
     const isSoldOut = seatsRemaining <= 0;
@@ -117,11 +197,21 @@ export async function createBookingRecordWithActiveSeatHold(attendeeDetails) {
     const utmSourceValue = attendeeDetails.utm_source?.trim() || null;
 
     const result = await client.query(
-      `INSERT INTO bookings (ref, full_name, phone_number, email, utm_source)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO bookings (
+         ref,
+         event_id,
+         event_snapshot,
+         full_name,
+         phone_number,
+         email,
+         utm_source
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         bookingReferenceCode,
+        eventRecord.id,
+        JSON.stringify(eventSnapshot),
         attendeeDetails.full_name,
         attendeeDetails.phone_number,
         attendeeDetails.email,
@@ -198,12 +288,26 @@ export async function markBookingAsExpired(bookingId) {
   return updateBookingStatus(bookingId, 'expired');
 }
 
-export async function expireAllExpiredSeatHolds() {
+export async function expireAllExpiredSeatHolds(eventReference = null) {
+  if (!eventReference) {
+    const result = await pool.query(
+      `UPDATE bookings
+          SET status = 'expired'
+        WHERE status = 'pending' AND expires_at <= now()
+        RETURNING id`
+    );
+    return result.rows.length;
+  }
+
+  const eventRecord = await resolveEventRecordForBookingScope(eventReference);
   const result = await pool.query(
     `UPDATE bookings
         SET status = 'expired'
-      WHERE status = 'pending' AND expires_at <= now()
-      RETURNING id`
+      WHERE event_id = $1
+        AND status = 'pending'
+        AND expires_at <= now()
+      RETURNING id`,
+    [eventRecord.id]
   );
   return result.rows.length;
 }
@@ -218,13 +322,36 @@ export async function expireAllExpiredSeatHolds() {
 // arrives after the hold expired worth honouring. A cancelled booking is never
 // silently revived.
 export async function confirmBookingSeatWithinClientCapacity(client, bookingId) {
-  const capacityLock = await client.query(
-    'SELECT confirmed_count, cap FROM seat_capacity WHERE id = $1 FOR UPDATE',
-    [SEAT_CAPACITY_ROW_ID]
+  const bookingResult = await client.query(
+    'SELECT id, event_id FROM bookings WHERE id = $1',
+    [bookingId]
   );
-  const { confirmed_count: confirmedCount, cap } = capacityLock.rows[0];
+  const bookingRecord = bookingResult.rows[0];
+  if (!bookingRecord) {
+    return { seatConfirmed: false, reason: 'BOOKING_NOT_CONFIRMABLE' };
+  }
 
-  const otherActiveHolds = await fetchActiveSeatHoldCount(client, bookingId);
+  const eventRecord = await resolveEventRecordForBookingScope(bookingRecord.event_id);
+  await ensureEventSeatCapacityRowExistsForEventRecord(client, eventRecord);
+
+  const capacityLock = await client.query(
+    `SELECT confirmed_count, cap
+       FROM event_seat_capacity
+      WHERE event_id = $1
+      FOR UPDATE`,
+    [eventRecord.id]
+  );
+  const capacityRow = capacityLock.rows[0];
+  if (!capacityRow) {
+    throw new Error(`Seat capacity row is missing for event ${eventRecord.slug}`);
+  }
+
+  const { confirmed_count: confirmedCount, cap } = capacityRow;
+  const otherActiveHolds = await fetchActiveSeatHoldCountForEvent(
+    client,
+    eventRecord.id,
+    bookingId
+  );
   const seatsRemaining = cap - (confirmedCount + otherActiveHolds);
   if (seatsRemaining <= 0) {
     return { seatConfirmed: false, reason: 'NO_SEAT_AVAILABLE', seatsRemaining };
@@ -289,7 +416,8 @@ export async function reactivateExpiredBookingSeatHold(bookingId) {
     throw new BookingNotExpiredError(bookingId);
   }
 
-  await checkSeatAvailabilityBeforeBooking();
+  const eventRecord = await resolveEventRecordForBookingScope(bookingRecord.event_id);
+  await checkSeatAvailabilityBeforeBooking(eventRecord);
 
   const result = await pool.query(
     `UPDATE bookings

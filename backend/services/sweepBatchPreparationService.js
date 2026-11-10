@@ -6,6 +6,7 @@ import {
   SWEEP_PREPARATION_ALREADY_HANDLED,
   SWEEP_PREPARATION_NOT_COLLECTABLE,
   buildUnsignedSweepAttempts,
+  fetchAbandonedOrdersEligibleForRecoverySweep,
   fetchPaidOrdersEligibleForSweep,
   getSweepMinimumAgeHours,
   markUnfinishedSweepRecordAsFailed,
@@ -34,18 +35,27 @@ export async function prepareSweepBatchForOfflineSigning({
   provider = createUsdtProvider(),
   minimumAgeHours = getSweepMinimumAgeHours(),
   fetchEligibleOrders = fetchPaidOrdersEligibleForSweep,
+  fetchAbandonedEligibleOrders = fetchAbandonedOrdersEligibleForRecoverySweep,
   alertOnSweepFailure = sendTelegramAlertMessage,
   triggeredBy = 'offline-batch',
   ...sweepDependencies
 } = {}) {
   const eligiblePaidOrders = await fetchEligibleOrders({ minimumAgeHours });
+  const eligibleAbandonedOrders = await fetchAbandonedEligibleOrders({ minimumAgeHours });
+
+  const orderCandidatesByOrderId = new Map();
+  for (const orderRow of [...eligiblePaidOrders, ...eligibleAbandonedOrders]) {
+    if (!orderCandidatesByOrderId.has(orderRow.order_id)) {
+      orderCandidatesByOrderId.set(orderRow.order_id, orderRow);
+    }
+  }
 
   const items = [];
   const results = [];
   let cycleSpentBnbWei = 0n;
   let chainId = null;
 
-  for (const orderRow of eligiblePaidOrders) {
+  for (const orderRow of orderCandidatesByOrderId.values()) {
     try {
       const preparation = await prepareSweepRecordWithFundedGas(orderRow, {
         ...sweepDependencies,

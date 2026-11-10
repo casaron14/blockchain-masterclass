@@ -2,7 +2,16 @@ import pool from '../config/db.js';
 
 import { deriveDepositAddressForDerivationIndex } from './depositAddressDerivationService.js';
 
-import { SEAT_HOLD_DURATION_MINUTES, TICKET_PRICE_USDT } from './eventConfigService.js';
+import {
+  PAYMENT_METHOD_USDT_BEP20,
+  SEAT_HOLD_DURATION_MINUTES,
+} from './eventConfigService.js';
+
+import { fetchBookingRecordById } from './bookingService.js';
+import {
+  resolveEventSnapshotForBookingRecord,
+  resolveExpectedAmountForPaymentMethodFromEventSnapshot,
+} from './eventSnapshotService.js';
 
 export const ORDER_STATUS_VALUES = Object.freeze(['pending', 'paid', 'expired', 'swept']);
 export const ORDER_DEFAULT_EXPIRY_MINUTES = SEAT_HOLD_DURATION_MINUTES;
@@ -78,7 +87,22 @@ function normalizeDepositAddressRow(addressRow) {
 // Creates the order row plus its first deposit address. The derivation index
 // is allocated from the monotonic DB sequence, so it is never reused even when
 // an earlier address expires unpaid.
-export async function createOrderWithDepositAddressForBooking(bookingId, orderExpiryMinutes = ORDER_DEFAULT_EXPIRY_MINUTES) {
+export async function createOrderWithDepositAddressForBooking(
+  bookingId,
+  orderExpiryMinutes = ORDER_DEFAULT_EXPIRY_MINUTES,
+  expectedAmountUsdt = null
+) {
+  let orderAmountUsdt = expectedAmountUsdt;
+
+  if (orderAmountUsdt === null || orderAmountUsdt === undefined) {
+    const bookingRecord = await fetchBookingRecordById(bookingId);
+    const eventSnapshot = resolveEventSnapshotForBookingRecord(bookingRecord);
+    orderAmountUsdt = resolveExpectedAmountForPaymentMethodFromEventSnapshot(
+      PAYMENT_METHOD_USDT_BEP20,
+      eventSnapshot
+    );
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -101,7 +125,7 @@ export async function createOrderWithDepositAddressForBooking(bookingId, orderEx
        VALUES ($1, $2, '[]', $4, 'pending',
                now() + make_interval(mins => $3))
        RETURNING *`,
-      [bookingId, derivationIndex, orderExpiryMinutes, TICKET_PRICE_USDT]
+      [bookingId, derivationIndex, orderExpiryMinutes, orderAmountUsdt]
     );
     const createdOrder = orderResult.rows[0];
 

@@ -4,13 +4,9 @@
 // and a receipt email are two different deliveries for the same booking.
 
 import {
-  EVENT_DATE_LABEL,
-  EVENT_LOCATION,
-  EVENT_TITLE,
-  LOCAL_CURRENCY_CODE,
-  TICKET_PRICE_TZS,
-  TICKET_TYPE_LABEL,
-} from './eventConfigService.js';
+  buildEventDisplayDetailsFromSnapshot,
+  resolveEventSnapshotForBookingRecord,
+} from './eventSnapshotService.js';
 
 export const EMAIL_DELIVERY_KIND_TICKET = 'ticket';
 export const EMAIL_DELIVERY_KIND_RECEIPT = 'receipt';
@@ -42,6 +38,10 @@ export function buildBookingEmailDeliveryMetadata(
     ? `${emailDeliveryKind}:${bookingReferenceCode}:${deliveryKeySuffix}`
     : `${emailDeliveryKind}:${bookingReferenceCode}`;
 
+  const eventDisplayDetails = buildEventDisplayDetailsFromSnapshot(
+    resolveEventSnapshotForBookingRecord(bookingRecord)
+  );
+
   return {
     deliveryKey,
     emailKind: emailDeliveryKind,
@@ -54,15 +54,15 @@ export function buildBookingEmailDeliveryMetadata(
       bookingCreatedAt: bookingRecord.created_at ?? null,
     },
     event: {
-      title: EVENT_TITLE,
-      dateLabel: EVENT_DATE_LABEL,
-      timeLabel: process.env.EVENT_TIME_LABEL?.trim() || '',
-      venue: EVENT_LOCATION,
+      title: eventDisplayDetails.eventTitle,
+      dateLabel: eventDisplayDetails.eventDate,
+      timeLabel: eventDisplayDetails.eventTimeLabel,
+      venue: `${eventDisplayDetails.eventVenueName}, ${eventDisplayDetails.eventLocation}`,
     },
     ticket: {
-      ticketTypeLabel: TICKET_TYPE_LABEL,
-      amount: TICKET_PRICE_TZS,
-      currency: LOCAL_CURRENCY_CODE,
+      ticketTypeLabel: eventDisplayDetails.ticketTypeLabel,
+      amount: eventDisplayDetails.localAmount,
+      currency: eventDisplayDetails.localCurrencyCode,
     },
   };
 }

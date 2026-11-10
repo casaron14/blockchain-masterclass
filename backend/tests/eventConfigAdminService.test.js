@@ -21,6 +21,12 @@ import {
 async function resetConfigurationAndCapacityState() {
   await pool.query('TRUNCATE bookings CASCADE');
   await pool.query('DELETE FROM event_config_overrides');
+  await pool.query(
+    `UPDATE events
+        SET configuration = $1::jsonb
+      WHERE slug = 'blockchain-masterclass'`,
+    [JSON.stringify(fetchPrimaryEventConfiguration())]
+  );
   await pool.query('UPDATE seat_capacity SET confirmed_count = 0, cap = $1 WHERE id = 1', [
     SEAT_CAPACITY,
   ]);

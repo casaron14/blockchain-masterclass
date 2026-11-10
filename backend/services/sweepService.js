@@ -37,9 +37,20 @@ import { sendTelegramAlertMessage } from './telegramAlertService.js';
 
 export const SWEEP_RETRY_FAILURE_LIMIT = 3;
 export const DEFAULT_SWEEP_MINIMUM_AGE_HOURS = 24;
+export const DEFAULT_SWEEP_RECOVERY_MINIMUM_USDT = 0.5;
 
 export function getSweepMinimumAgeHours() {
   return Number(process.env.SWEEP_MINIMUM_AGE_HOURS || DEFAULT_SWEEP_MINIMUM_AGE_HOURS);
+}
+
+// Below this value a recovered underpayment is worth less than the gas needed
+// to move it, so it stays on the deposit address and is surfaced to an operator
+// through the underpayment review flag instead of being collected.
+export function getSweepRecoveryMinimumUsdt() {
+  const configuredRecoveryMinimum = Number(process.env.SWEEP_RECOVERY_MINIMUM_USDT);
+  return Number.isFinite(configuredRecoveryMinimum) && configuredRecoveryMinimum >= 0
+    ? configuredRecoveryMinimum
+    : DEFAULT_SWEEP_RECOVERY_MINIMUM_USDT;
 }
 
 export function getUsdtTransferInterface() {
@@ -87,11 +98,18 @@ export function isConfirmedPaymentSettledPastMinimumAge(
  * while the operator-configured threshold sits at 10 USDT. An amount that is
  * still below the expected ticket is left alone while the payer may still be
  * completing the transfer.
+ *
+ * An order whose hold expired without ever producing a confirmed payment is a
+ * different case: no further confirmation is expected, so the money is
+ * collected after the same minimum age (F7). Its balance only has to exceed the
+ * recovery floor instead of the normal sweep threshold, because a recovered
+ * underpayment is usually smaller than a full ticket.
  */
 export function evaluateDepositCollectionReadiness({
   balanceUsdt,
   expectedAmountUsdt,
   confirmedAt,
+  orderExpiresAt = null,
   now = new Date(),
   minimumAgeHours = getSweepMinimumAgeHours(),
 }) {
@@ -104,15 +122,39 @@ export function evaluateDepositCollectionReadiness({
     now,
     minimumAgeHours
   );
-  const belowExpectedAmountAndStillSettling = expectedAmountUsdt > 0
-    && balanceUsdt < expectedAmountUsdt
-    && !settledPastMinimumAge;
-  if (belowExpectedAmountAndStillSettling) {
-    return { collectable: false, reason: 'BELOW_EXPECTED_AMOUNT' };
-  }
-
   if (settledPastMinimumAge) {
     return { collectable: true, reason: 'CONFIRMED_AND_SETTLED' };
+  }
+
+  const computeElapsedHours = (timestamp) => {
+    if (!timestamp) {
+      return null;
+    }
+    const parsedTimestamp = new Date(timestamp);
+    if (Number.isNaN(parsedTimestamp.getTime())) {
+      return null;
+    }
+    return (now.getTime() - parsedTimestamp.getTime()) / (1000 * 60 * 60);
+  };
+
+  const hoursSinceOrderExpiry = computeElapsedHours(orderExpiresAt);
+  const abandonedOrderPastMinimumAge =
+    !confirmedAt
+    && hoursSinceOrderExpiry !== null
+    && hoursSinceOrderExpiry >= minimumAgeHours;
+
+  if (abandonedOrderPastMinimumAge) {
+    const recoveryMinimumUsdt = getSweepRecoveryMinimumUsdt();
+    if (balanceUsdt >= recoveryMinimumUsdt || balanceUsdt >= expectedAmountUsdt) {
+      return { collectable: true, reason: 'ABANDONED_ORDER_RECOVERY' };
+    }
+    return { collectable: false, reason: 'BELOW_RECOVERY_MINIMUM' };
+  }
+
+  const belowExpectedAmountAndStillSettling = expectedAmountUsdt > 0
+    && balanceUsdt < expectedAmountUsdt;
+  if (belowExpectedAmountAndStillSettling) {
+    return { collectable: false, reason: 'BELOW_EXPECTED_AMOUNT' };
   }
 
   if (balanceUsdt > getSweepMinThresholdUsdt()) {
@@ -172,6 +214,71 @@ export async function fetchPaidOrdersEligibleForSweep({
     booking_id: Number(row.booking_id),
     derivation_index: Number(row.derivation_index),
     amount_usdt: Number(row.amount_usdt),
+  }));
+}
+
+/**
+ * Orders that still hold money outside the normal paid path: the hold expired
+ * without a confirmed payment, or a swept order received a later transfer.
+ * Their deposits used to sit on the address for ever because the collection
+ * pass only looked at `orders.status = 'paid'` (F7). They are collected after
+ * the same minimum age as a confirmed payment, using the balance itself as the
+ * evidence.
+ *
+ * A successful sweep of all currently observed deposits is excluded. If a
+ * later payment arrives after that sweep, it gets a newer observed-deposit row
+ * and the order becomes eligible again.
+ */
+export async function fetchAbandonedOrdersEligibleForRecoverySweep({
+  minimumAgeHours = getSweepMinimumAgeHours(),
+} = {}) {
+  const result = await pool.query(
+    `SELECT o.id AS order_id, o.customer_id, o.amount_usdt,
+            o.booking_id, o.expires_at AS order_expires_at,
+            da.address AS deposit_address, da.derivation_index,
+            NULL::timestamptz AS confirmed_at
+       FROM orders o
+       JOIN deposit_addresses da ON da.order_id = o.id AND da.is_active
+      WHERE o.status IN ('pending', 'expired', 'swept')
+        AND o.expires_at <= now() - make_interval(hours => $1)
+        AND EXISTS (
+              SELECT 1
+                FROM deposits_observed observed
+               WHERE observed.order_id = o.id
+            )
+        AND (
+              o.status = 'swept'
+              OR NOT EXISTS (
+                   SELECT 1
+                     FROM payments confirmed_payment
+                    WHERE confirmed_payment.booking_id = o.booking_id
+                      AND confirmed_payment.status = 'confirmed'
+                 )
+            )
+        AND NOT EXISTS (
+              SELECT 1
+                FROM sweeps completed_sweep
+               WHERE completed_sweep.order_id = o.id
+                 AND completed_sweep.status = 'swept'
+                 AND completed_sweep.confirmed_at IS NOT NULL
+                 AND NOT EXISTS (
+                       SELECT 1
+                         FROM deposits_observed late_deposit
+                        WHERE late_deposit.order_id = o.id
+                          AND late_deposit.matched_at > completed_sweep.confirmed_at
+                     )
+            )
+      ORDER BY o.expires_at ASC`,
+    [minimumAgeHours]
+  );
+  return result.rows.map((row) => ({
+    ...row,
+    order_id: Number(row.order_id),
+    customer_id: Number(row.customer_id),
+    booking_id: Number(row.booking_id),
+    derivation_index: Number(row.derivation_index),
+    amount_usdt: Number(row.amount_usdt),
+    confirmed_at: null,
   }));
 }
 
@@ -744,6 +851,7 @@ export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {
     balanceUsdt: convertUsdtWeiToUsdtAmount(usdtBalanceWei),
     expectedAmountUsdt: orderRow.amount_usdt,
     confirmedAt: orderRow.confirmed_at,
+    orderExpiresAt: orderRow.order_expires_at ?? orderRow.expires_at ?? null,
     now,
   });
   if (!collectionReadiness.collectable) {
@@ -920,8 +1028,9 @@ export async function markUnfinishedSweepRecordAsFailed(orderId, failureMessage)
 
 /**
  * Runs one daily collection pass over every paid order whose payment settled
- * at least the minimum age ago. Inputs on-chain dependencies are injected so
- * the pass is deterministic in tests.
+ * at least the minimum age ago, plus abandoned orders that received money but
+ * never produced a confirmed payment. Inputs on-chain dependencies are injected
+ * so the pass is deterministic in tests.
  */
 export async function runSweepCycle({
   provider = createUsdtProvider(),
@@ -940,12 +1049,24 @@ export async function runSweepCycle({
   triggeredBy = 'scheduled',
   minimumAgeHours = getSweepMinimumAgeHours(),
   fetchEligibleOrders = fetchPaidOrdersEligibleForSweep,
+  fetchAbandonedEligibleOrders = fetchAbandonedOrdersEligibleForRecoverySweep,
 } = {}) {
   const eligiblePaidOrders = await fetchEligibleOrders({ minimumAgeHours });
+  const eligibleAbandonedOrders = await fetchAbandonedEligibleOrders({ minimumAgeHours });
+
+  // A payment confirmed between the two queries can appear in both lists. The
+  // first (confirmed) row wins so the order is never collected twice in one
+  // cycle.
+  const orderCandidatesByOrderId = new Map();
+  for (const orderRow of [...eligiblePaidOrders, ...eligibleAbandonedOrders]) {
+    if (!orderCandidatesByOrderId.has(orderRow.order_id)) {
+      orderCandidatesByOrderId.set(orderRow.order_id, orderRow);
+    }
+  }
 
   const sweepResults = [];
   let cycleSpentBnbWei = 0n;
-  for (const orderRow of eligiblePaidOrders) {
+  for (const orderRow of orderCandidatesByOrderId.values()) {
     try {
       const sweepResult = await sweepSingleOrder(orderRow, {
         provider,

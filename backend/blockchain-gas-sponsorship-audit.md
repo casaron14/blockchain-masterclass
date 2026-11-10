@@ -270,17 +270,43 @@ the claim path still stores them under a single row keyed by the transaction has
 so a batch payout that pays two derived addresses in one transaction can only ever
 attribute one of them.
 
+**Status (9 November 2026): accepted risk.** A batch payout that credits two
+derived addresses in one transaction is not a flow the product creates or
+encourages. The manual `verify-usdt` claim path still records the first matching
+transfer, and the operator can reconcile the second from the chain. Revisit only
+if a payer/batch-payout integration is added.
+
 **F7. Funds on orders that never reach `paid` are never collected.**
-`fetchPaidOrdersEligibleForSweep` selects only `orders.status = 'paid'`
+`fetchPaidOrdersEligibleForSweep` selected only `orders.status = 'paid'`
 (`services/sweepService.js:156`). Underpayments and late payments on expired orders
-are correctly recorded in `payment_review_flags`, but their tokens stay on the
+were correctly recorded in `payment_review_flags`, but their tokens stayed on the
 deposit address indefinitely with no sweep path.
 
+**Status (9 November 2026): fixed.** `fetchAbandonedOrdersEligibleForRecoverySweep`
+now selects funded orders whose hold expired without a confirmed payment, plus
+swept orders that received a later transfer. Both `runSweepCycle` and the offline
+`prepareSweepBatchForOfflineSigning` merge those candidates with the paid list and
+de-duplicate by order. `evaluateDepositCollectionReadiness` gained an abandoned
+branch: after `SWEEP_MINIMUM_AGE_HOURS` it collects a balance at or above
+`SWEEP_RECOVERY_MINIMUM_USDT` (default 0.5 USDT) even when the balance is below the
+ticket price. A successful recovery sweep leaves the order `expired`; a later
+late deposit creates a newer observed-deposit row and makes it eligible again.
+Tests: `backend/tests/sweepRecovery.test.js`.
+
 **F8. Documented review reasons are never produced.**
-`payment_review_reason` declares `overpayment`, `hold_expired_with_seat` and
-`swept_before_confirmation`, and `handover.md` describes them, but no code path
-writes them (grep-verified). Overpayments are silently accepted and swept.
-Schema, docs and behaviour disagree.
+`payment_review_reason` declared `overpayment`, `hold_expired_with_seat` and
+`swept_before_confirmation`, and `handover.md` described them, but no code path
+wrote them (grep-verified). Overpayments were silently accepted and swept.
+Schema, docs and behaviour disagreed.
+
+**Status (9 November 2026): fixed.** `confirmUsdtOrderPaymentFromObservedDeposits`
+now records `overpayment` when the observed total exceeds the expected amount,
+`hold_expired_with_seat` when the seat is granted after the booking/order hold
+expired, and `swept_before_confirmation` when a completed sweep exists before the
+confirmation. Overpayment and sweep facts are recorded even when no seat can be
+granted. A confirmation that follows a completed sweep leaves the order `swept`
+instead of `paid`, so a later collection pass does not treat it as awaiting
+collection. Tests: `backend/tests/usdtPaymentReviewFlags.test.js`.
 
 **F9. Seed handling contradicts the stated security model.**
 `blockchain.md` §1 requires the seed in a KMS/HSM and signing isolated from the web

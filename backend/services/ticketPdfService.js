@@ -3,29 +3,14 @@ import QRCode from 'qrcode';
 
 import { buildTicketQrCodeUrl } from './ticketQrCodeService.js';
 import {
-  EVENT_BRAND_NAME,
-  EVENT_LOCATION,
-  EVENT_MOTTO,
-  EVENT_TICKET_DATE_LABEL,
-  EVENT_TITLE,
-  EVENT_VENUE_NAME,
-  EVENT_WEBSITE_ADDRESS,
-  SUPPORT_PHONE_NUMBER,
-} from './eventConfigService.js';
+  buildTicketEventDetailsFromSnapshot,
+  resolveEventSnapshotForBookingRecord,
+} from './eventSnapshotService.js';
 import { INKRYPTUS_LOGO_ON_BLACK_PNG_BASE64 } from '../../shared/inkryptusLogoOnBlackPngAsset.js';
 
-// The ticket is a print-ready pass. Its copy comes from the shared event
-// configuration so the downloaded PDF, the emailed PDF, and the event page
-// cannot drift.
-const TICKET_EVENT_TITLE = EVENT_TITLE;
-const TICKET_EVENT_TITLE_LINES = TICKET_EVENT_TITLE.toUpperCase().split(' ');
-const TICKET_BRAND_NAME = EVENT_BRAND_NAME;
-const TICKET_EVENT_DATE = EVENT_TICKET_DATE_LABEL;
-const TICKET_EVENT_TAGLINE = EVENT_MOTTO;
-const TICKET_VENUE_NAME = EVENT_VENUE_NAME;
-const TICKET_VENUE_CITY = EVENT_LOCATION;
-const TICKET_WEBSITE_ADDRESS = EVENT_WEBSITE_ADDRESS;
-const TICKET_CONTACT_PHONE_NUMBER = SUPPORT_PHONE_NUMBER;
+// The ticket is a print-ready pass. Its copy comes from the booking's event
+// snapshot, not from the currently configured event, so a later event edit
+// cannot rewrite a ticket that was already sold.
 
 const TICKET_PAGE_WIDTH = 841.89;
 const TICKET_PAGE_HEIGHT = 595.28;
@@ -69,6 +54,8 @@ const INKRYPTUS_LOGO_ON_BLACK_PNG_BUFFER = Buffer.from(
 );
 
 export async function generateTicketPdfBuffer(bookingRecord, paymentSummary = null) {
+  const eventSnapshot = resolveEventSnapshotForBookingRecord(bookingRecord);
+  const ticketEventDetails = buildTicketEventDetailsFromSnapshot(eventSnapshot);
   const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
   const qrCodePngBuffer = await QRCode.toBuffer(ticketQrCodeUrl, {
     width: 1000,
@@ -82,8 +69,8 @@ export async function generateTicketPdfBuffer(bookingRecord, paymentSummary = nu
       size: [TICKET_PAGE_WIDTH, TICKET_PAGE_HEIGHT],
       margin: 0,
       info: {
-        Title: `${TICKET_EVENT_TITLE} ticket - ${bookingRecord.ref}`,
-        Author: TICKET_BRAND_NAME,
+        Title: `${ticketEventDetails.eventTitle} ticket - ${bookingRecord.ref}`,
+        Author: ticketEventDetails.eventBrandName,
         Subject: `Admit one: ${bookingRecord.full_name}`,
       },
     });
@@ -94,17 +81,17 @@ export async function generateTicketPdfBuffer(bookingRecord, paymentSummary = nu
     document.on('error', reject);
 
     drawTicketBackground(document);
-    drawTicketHeader(document, ticketQrCodeUrl);
-    drawTicketEventTitle(document);
-    drawTicketDate(document);
-    drawTicketTaglineAndVenue(document);
+    drawTicketHeader(document, ticketQrCodeUrl, ticketEventDetails);
+    drawTicketEventTitle(document, ticketEventDetails);
+    drawTicketDate(document, ticketEventDetails);
+    drawTicketTaglineAndVenue(document, ticketEventDetails);
     drawAttendeeDetails(document, bookingRecord);
 
     if (paymentSummary) {
       drawPaymentSummary(document, paymentSummary);
     }
 
-    drawTicketFooter(document);
+    drawTicketFooter(document, ticketEventDetails);
     drawQrPanelDivider(document);
     drawQrCodePanel(document, qrCodePngBuffer, bookingRecord);
 
@@ -118,7 +105,7 @@ function drawTicketBackground(document) {
     .fill(TICKET_BLACK);
 }
 
-function drawTicketHeader(document, ticketQrCodeUrl) {
+function drawTicketHeader(document, ticketQrCodeUrl, ticketEventDetails) {
   document.image(INKRYPTUS_LOGO_ON_BLACK_PNG_BUFFER, TICKET_PAGE_MARGIN, 37, {
     width: TICKET_LOGO_WIDTH,
     link: ticketQrCodeUrl,
@@ -128,13 +115,13 @@ function drawTicketHeader(document, ticketQrCodeUrl) {
     .font('Helvetica')
     .fontSize(10)
     .fillColor(TICKET_WHITE)
-    .text(TICKET_WEBSITE_ADDRESS, 0, 49, {
+    .text(ticketEventDetails.eventWebsiteAddress, 0, 49, {
       width: TICKET_PAGE_WIDTH,
       align: 'center',
       characterSpacing: 2,
     });
 
-  document.text(TICKET_CONTACT_PHONE_NUMBER, 0, 49, {
+  document.text(ticketEventDetails.supportPhoneNumber, 0, 49, {
     width: TICKET_PAGE_WIDTH - TICKET_PAGE_MARGIN,
     align: 'right',
     characterSpacing: 0.6,
@@ -148,12 +135,16 @@ function drawTicketHeader(document, ticketQrCodeUrl) {
     .stroke();
 }
 
-function drawTicketEventTitle(document) {
-  const sharedTitleFontSize = resolveSharedTitleFontSize(document);
+function drawTicketEventTitle(document, ticketEventDetails) {
+  const ticketEventTitleLines = ticketEventDetails.eventTitle.toUpperCase().split(' ');
+  const sharedTitleFontSize = resolveSharedTitleFontSize(
+    document,
+    ticketEventTitleLines
+  );
 
   document.font('Helvetica-Bold').fontSize(sharedTitleFontSize).fillColor(TICKET_WHITE);
 
-  TICKET_EVENT_TITLE_LINES.forEach((titleLine, titleLineIndex) => {
+  ticketEventTitleLines.forEach((titleLine, titleLineIndex) => {
     document.text(
       titleLine,
       TICKET_PAGE_MARGIN,
@@ -163,10 +154,10 @@ function drawTicketEventTitle(document) {
   });
 }
 
-function resolveSharedTitleFontSize(document) {
+function resolveSharedTitleFontSize(document, ticketEventTitleLines) {
   document.font('Helvetica-Bold').fontSize(TICKET_PREFERRED_TITLE_FONT_SIZE);
 
-  return TICKET_EVENT_TITLE_LINES.reduce((sharedTitleFontSize, titleLine) => {
+  return ticketEventTitleLines.reduce((sharedTitleFontSize, titleLine) => {
     const measuredTitleWidth = document.widthOfString(titleLine);
     const largestFontSizeThatFits =
       (TICKET_PREFERRED_TITLE_FONT_SIZE * TICKET_LEFT_COLUMN_WIDTH) / measuredTitleWidth;
@@ -175,24 +166,24 @@ function resolveSharedTitleFontSize(document) {
   }, TICKET_PREFERRED_TITLE_FONT_SIZE);
 }
 
-function drawTicketDate(document) {
+function drawTicketDate(document, ticketEventDetails) {
   document
     .font('Helvetica-Bold')
     .fontSize(26)
     .fillColor(TICKET_WHITE)
-    .text(TICKET_EVENT_DATE, TICKET_PAGE_MARGIN, TICKET_DATE_TOP_Y, {
+    .text(ticketEventDetails.eventTicketDateLabel, TICKET_PAGE_MARGIN, TICKET_DATE_TOP_Y, {
       width: TICKET_LEFT_COLUMN_WIDTH,
       align: 'center',
       characterSpacing: 1.5,
     });
 }
 
-function drawTicketTaglineAndVenue(document) {
+function drawTicketTaglineAndVenue(document, ticketEventDetails) {
   document
     .font('Helvetica-Oblique')
     .fontSize(15)
     .fillColor(TICKET_SECONDARY_TEXT)
-    .text(TICKET_EVENT_TAGLINE, TICKET_PAGE_MARGIN, TICKET_TAGLINE_TOP_Y, {
+    .text(ticketEventDetails.eventMotto, TICKET_PAGE_MARGIN, TICKET_TAGLINE_TOP_Y, {
       width: TICKET_LEFT_COLUMN_WIDTH,
       align: 'center',
     });
@@ -201,7 +192,7 @@ function drawTicketTaglineAndVenue(document) {
     .font('Helvetica-Bold')
     .fontSize(12.5)
     .fillColor(TICKET_WHITE)
-    .text(TICKET_VENUE_NAME, TICKET_PAGE_MARGIN, TICKET_VENUE_TOP_Y, {
+    .text(ticketEventDetails.eventVenueName, TICKET_PAGE_MARGIN, TICKET_VENUE_TOP_Y, {
       width: TICKET_LEFT_COLUMN_WIDTH,
       align: 'center',
     });
@@ -210,7 +201,7 @@ function drawTicketTaglineAndVenue(document) {
     .font('Helvetica')
     .fontSize(11.5)
     .fillColor(TICKET_SECONDARY_TEXT)
-    .text(TICKET_VENUE_CITY, TICKET_PAGE_MARGIN, TICKET_VENUE_TOP_Y + 17, {
+    .text(ticketEventDetails.eventLocation, TICKET_PAGE_MARGIN, TICKET_VENUE_TOP_Y + 17, {
       width: TICKET_LEFT_COLUMN_WIDTH,
       align: 'center',
     });

@@ -48,9 +48,28 @@ export const DEFAULT_PUBLIC_BSC_TESTNET_RPC_URLS = Object.freeze([
 
 const BSC_TESTNET_RPC_URL_MARKERS = ['testnet', 'prebsc', 'chapel'];
 
+export const BSC_MAINNET_CHAIN_ID = 56;
+export const BSC_TESTNET_CHAIN_ID = 97;
+
 export function isBscTestnetRpcUrl(rpcUrl) {
   const normalizedRpcUrl = String(rpcUrl || '').toLowerCase();
   return BSC_TESTNET_RPC_URL_MARKERS.some((marker) => normalizedRpcUrl.includes(marker));
+}
+
+export function isBscTestnetChainId(chainId = process.env.CHAIN_ID) {
+  return Number(chainId) === BSC_TESTNET_CHAIN_ID;
+}
+
+function isConfiguredForTestnet() {
+  // An explicit RPC URL is the more specific setting: if it names mainnet,
+  // a stale CHAIN_ID must not silently switch the default fallbacks to testnet.
+  if (process.env.BSC_RPC_URL) {
+    return isBscTestnetRpcUrl(process.env.BSC_RPC_URL);
+  }
+  return (
+    isBscTestnetChainId(process.env.CHAIN_ID)
+    || isBscTestnetRpcUrl(process.env.ALCHEMY_RPC_URL)
+  );
 }
 
 export function resolvePublicBscRpcUrlCandidates() {
@@ -60,7 +79,7 @@ export function resolvePublicBscRpcUrlCandidates() {
     .filter(Boolean);
 
   const primaryUrl = resolveBscRpcUrl();
-  const defaultUrls = isBscTestnetRpcUrl(primaryUrl)
+  const defaultUrls = isBscTestnetRpcUrl(primaryUrl) || isConfiguredForTestnet()
     ? DEFAULT_PUBLIC_BSC_TESTNET_RPC_URLS
     : DEFAULT_PUBLIC_BSC_MAINNET_RPC_URLS;
 
@@ -93,7 +112,7 @@ export function resolveBscRpcUrl() {
   if (process.env.BSC_RPC_URL) {
     return process.env.BSC_RPC_URL;
   }
-  const defaultUrls = isBscTestnetRpcUrl(process.env.ALCHEMY_RPC_URL)
+  const defaultUrls = isConfiguredForTestnet()
     ? DEFAULT_PUBLIC_BSC_TESTNET_RPC_URLS
     : DEFAULT_PUBLIC_BSC_MAINNET_RPC_URLS;
   return defaultUrls[0];

@@ -17,6 +17,7 @@ import { TICKET_PRICE_USDT, PAYMENT_METHOD_USDT_BEP20 } from './eventConfigServi
 
 import {
   evaluateOrderPaymentSettlement,
+  fetchCompletedSweepRecordForOrderId,
   fetchObservedDepositRecordsForOrderId,
   getExpectedPaymentAmountWei,
   markObservedDepositsAsFinalized,
@@ -154,6 +155,122 @@ export async function fetchUsdtPaymentRecordById(paymentId) {
   return fetchPaymentRecordById(paymentId);
 }
 
+// A payment that lands after the hold expired is still honoured when a seat is
+// free. The fact that the hold had lapsed is recorded for the reviewer instead
+// of being silently hidden, because it may explain a late ticket or a
+// double-booked seat later.
+export function evaluateBookingHoldExpiryForConfirmation({
+  bookingRecord,
+  orderRecord,
+  now = new Date(),
+}) {
+  const bookingExpiresAt = bookingRecord?.expires_at
+    ? new Date(bookingRecord.expires_at)
+    : null;
+  const orderExpiresAt = orderRecord?.expires_at
+    ? new Date(orderRecord.expires_at)
+    : null;
+  const bookingWasExpired = bookingRecord?.status === 'expired';
+
+  const hasDatePassed = (timestamp) =>
+    timestamp !== null
+    && !Number.isNaN(timestamp.getTime())
+    && timestamp.getTime() <= now.getTime();
+
+  return {
+    holdExpired:
+      bookingWasExpired
+      || hasDatePassed(bookingExpiresAt)
+      || hasDatePassed(orderExpiresAt),
+    bookingStatus: bookingRecord?.status ?? null,
+    bookingExpiresAt,
+    orderExpiresAt,
+  };
+}
+
+// The three review reasons that a confirmation can produce. `overpayment` and
+// `swept_before_confirmation` are recorded even when no seat can be granted,
+// because the money fact is independent of the seat outcome.
+async function recordConfirmationReviewFlags({
+  client,
+  orderId,
+  bookingId,
+  paymentId,
+  depositAddress,
+  completingDeposit,
+  settlementDecision,
+  holdExpiryEvaluation,
+  seatConfirmed,
+  completedSweepRecord,
+}) {
+  const paymentTransactionHash = completingDeposit.tx_hash;
+  const reviewFlagBase = {
+    orderId,
+    bookingId,
+    paymentId,
+    depositAddress,
+    txHash: paymentTransactionHash,
+    autoAction: 'review_required',
+  };
+
+  const overpaidAmountWei =
+    settlementDecision.totalAmountWei - settlementDecision.expectedAmountWei;
+  if (overpaidAmountWei > 0n) {
+    await recordPaymentReviewFlag(
+      {
+        ...reviewFlagBase,
+        amount: settlementDecision.totalAmountUsdt,
+        reason: 'overpayment',
+        details: {
+          expectedAmountUsdt: Number(
+            ethers.formatUnits(settlementDecision.expectedAmountWei, DEFAULT_USDT_DECIMALS)
+          ),
+          observedAmountUsdt: settlementDecision.totalAmountUsdt,
+          overpaidAmountUsdt: Number(
+            ethers.formatUnits(overpaidAmountWei, DEFAULT_USDT_DECIMALS)
+          ),
+          overpaidAmountWei: overpaidAmountWei.toString(),
+        },
+      },
+      client
+    );
+  }
+
+  if (seatConfirmed && holdExpiryEvaluation.holdExpired) {
+    await recordPaymentReviewFlag(
+      {
+        ...reviewFlagBase,
+        amount: settlementDecision.totalAmountUsdt,
+        reason: 'hold_expired_with_seat',
+        details: {
+          bookingStatusAtConfirmation: holdExpiryEvaluation.bookingStatus,
+          bookingExpiresAt: holdExpiryEvaluation.bookingExpiresAt,
+          orderExpiresAt: holdExpiryEvaluation.orderExpiresAt,
+        },
+      },
+      client
+    );
+  }
+
+  if (completedSweepRecord) {
+    await recordPaymentReviewFlag(
+      {
+        ...reviewFlagBase,
+        txHash: completedSweepRecord.tx_hash,
+        amount: Number(completedSweepRecord.amount),
+        reason: 'swept_before_confirmation',
+        details: {
+          sweepId: Number(completedSweepRecord.id),
+          sweepTxHash: completedSweepRecord.tx_hash,
+          sweptAt: completedSweepRecord.confirmed_at,
+          paymentTxHash: paymentTransactionHash,
+        },
+      },
+      client
+    );
+  }
+}
+
 // The one place a USDT payment becomes a confirmed booking.
 //
 // Everything the attendee and the business need to trust the payment is written
@@ -220,6 +337,11 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
 
     const completingDeposit = settlementDecision.completingDeposit;
     const orderRecord = await client.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    const holdExpiryEvaluation = evaluateBookingHoldExpiryForConfirmation({
+      bookingRecord,
+      orderRecord: orderRecord.rows[0] ?? null,
+    });
+    const completedSweepRecord = await fetchCompletedSweepRecordForOrderId(orderId, client);
 
     const seatConfirmation = await confirmBookingSeatWithinClientCapacity(client, bookingId);
 
@@ -260,6 +382,19 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
         client
       );
 
+      await recordConfirmationReviewFlags({
+        client,
+        orderId,
+        bookingId,
+        paymentId,
+        depositAddress,
+        completingDeposit,
+        settlementDecision,
+        holdExpiryEvaluation,
+        seatConfirmed: false,
+        completedSweepRecord,
+      });
+
       if (ownsTransaction) {
         await client.query('COMMIT');
       }
@@ -294,7 +429,13 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
       amountUsdt: Number(completingDeposit.amount),
     });
 
-    await client.query("UPDATE orders SET status = 'paid' WHERE id = $1", [orderId]);
+    // A collection that already ran before this confirmation leaves the order
+    // in the `swept` state instead of `paid`, so no later sweep pass treats it
+    // as still awaiting collection.
+    await client.query('UPDATE orders SET status = $2 WHERE id = $1', [
+      orderId,
+      completedSweepRecord ? 'swept' : 'paid',
+    ]);
 
     receiptRecord = await createPaymentReceiptRecordForConfirmedPayment({
       client,
@@ -308,6 +449,19 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
         confirmationsAtIssue: settlementDecision.confirmations,
         chainId,
       },
+    });
+
+    await recordConfirmationReviewFlags({
+      client,
+      orderId,
+      bookingId,
+      paymentId,
+      depositAddress,
+      completingDeposit,
+      settlementDecision,
+      holdExpiryEvaluation,
+      seatConfirmed: true,
+      completedSweepRecord,
     });
 
     if (ownsTransaction) {

@@ -1,5 +1,8 @@
 import pool from '../config/db.js';
 
+import { resolveEventRecordForBookingScope } from './bookingService.js';
+import { resolveDefaultPublicEventRecordFromDatabase } from './eventRegistryService.js';
+
 const REFERRER_USERNAME_MAX_BASE_LENGTH = 20;
 const REFERRER_USERNAME_MIN_LENGTH = 2;
 const REFERRER_USERNAME_FALLBACK = 'referrer';
@@ -32,7 +35,17 @@ function buildReferrerUsernameCandidate(baseUsername, creationAttemptIndex) {
   return `${baseUsername}${creationAttemptIndex + 1}`;
 }
 
-export async function registerReferrerInviteIdentity(referrerName, referrerPhone) {
+export async function registerReferrerInviteIdentity(
+  referrerName,
+  referrerPhone,
+  eventReference = null
+) {
+  const eventRecord = eventReference
+    ? await resolveEventRecordForBookingScope(eventReference)
+    : await resolveDefaultPublicEventRecordFromDatabase();
+  if (!eventRecord) {
+    throw new Error('No event is available for referral registration');
+  }
   const baseUsername = generateReferrerUsername(referrerName);
 
   for (
@@ -47,10 +60,15 @@ export async function registerReferrerInviteIdentity(referrerName, referrerPhone
 
     try {
       const result = await pool.query(
-        `INSERT INTO referrers (referrer_code, referrer_name, referrer_phone)
-         VALUES ($1, $2, $3)
+        `INSERT INTO referrers (
+           event_id,
+           referrer_code,
+           referrer_name,
+           referrer_phone
+         )
+         VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [referrerUsername, referrerName, referrerPhone]
+        [eventRecord.id, referrerUsername, referrerName, referrerPhone]
       );
       return result.rows[0];
     } catch (error) {

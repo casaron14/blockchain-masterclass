@@ -23,12 +23,11 @@ import { buildExplorerTransactionUrl } from './blockExplorerService.js';
 import { generatePaymentReceiptPdfBuffer } from './paymentReceiptPdfService.js';
 import { isLocalDocumentStorageEnabled } from '../config/documentStorage.js';
 
+import { PRIMARY_EVENT_SLUG } from './eventConfigService.js';
 import {
-  EVENT_TITLE,
-  EVENT_DATE_LABEL,
-  EVENT_LOCATION,
-  PRIMARY_EVENT_SLUG,
-} from './eventConfigService.js';
+  buildEventDisplayDetailsFromSnapshot,
+  resolveEventSnapshotForBookingRecord,
+} from './eventSnapshotService.js';
 
 import {
   buildPaymentReceiptEmailHtml,
@@ -67,11 +66,23 @@ export function resolveActiveChainId() {
   return BSC_MAINNET_CHAIN_ID;
 }
 
-export function resolveEventDetailsForReceipt() {
+export function resolveEventDetailsForReceipt(bookingRecord = null) {
+  if (!bookingRecord) {
+    return {
+      eventTitle: '',
+      eventDate: '',
+      eventLocation: '',
+    };
+  }
+
+  const eventDisplayDetails = buildEventDisplayDetailsFromSnapshot(
+    resolveEventSnapshotForBookingRecord(bookingRecord)
+  );
+
   return {
-    eventTitle: EVENT_TITLE,
-    eventDate: EVENT_DATE_LABEL,
-    eventLocation: EVENT_LOCATION,
+    eventTitle: eventDisplayDetails.eventTitle,
+    eventDate: eventDisplayDetails.eventDate,
+    eventLocation: `${eventDisplayDetails.eventVenueName}, ${eventDisplayDetails.eventLocation}`,
   };
 }
 
@@ -323,7 +334,7 @@ export function buildPaymentReceiptQrPayload(bookingRecord, receiptRecord) {
     amountPaidUsdt: receiptRecord.amountPaidUsdt,
     amountPaidWei: receiptRecord.amountWei,
     explorerTransactionUrl: receiptRecord.explorerTxUrl,
-    eventTitle: EVENT_TITLE,
+    eventTitle: resolveEventDetailsForReceipt(bookingRecord).eventTitle,
   };
 }
 
@@ -352,7 +363,7 @@ export async function buildPaymentReceiptPdfArtifactForBooking(bookingId, receip
     bookingRecord,
     paymentRecord,
     receiptRecord,
-    eventDetails: resolveEventDetailsForReceipt(),
+    eventDetails: resolveEventDetailsForReceipt(bookingRecord),
     qrPayloadPayload: buildPaymentReceiptQrPayload(bookingRecord, receiptRecord),
   });
 

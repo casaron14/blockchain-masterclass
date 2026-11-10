@@ -138,10 +138,12 @@ export default function BookingSearchLookup() {
         return;
       }
 
-      storeBookingRecordLocally(slug, activeBookingRecord);
-      storePaymentIdLocally(slug, paymentToken);
+      const bookingEventSlug =
+        activeBookingRecord.event_snapshot?.slug || slug;
+      storeBookingRecordLocally(bookingEventSlug, activeBookingRecord);
+      storePaymentIdLocally(bookingEventSlug, paymentToken);
 
-      router.push(buildPaymentPageUrlForPaymentId(paymentToken));
+      router.push(buildPaymentPageUrlForPaymentId(paymentToken, bookingEventSlug));
     } catch (error) {
       setActionTone('error');
       setActionMessage(error.message || t('lookup.errors.paymentPreparationFailed'));

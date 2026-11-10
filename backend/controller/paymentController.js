@@ -240,7 +240,11 @@ async function resolveDepositAddressForUsdtInitiation(paymentRecord) {
   let orderDeposit = await fetchActiveOrderDepositAddressForBooking(paymentRecord.booking_id);
 
   if (!orderDeposit) {
-    const createdOrder = await createOrderWithDepositAddressForBooking(paymentRecord.booking_id);
+    const createdOrder = await createOrderWithDepositAddressForBooking(
+      paymentRecord.booking_id,
+      undefined,
+      paymentRecord.amount_expected
+    );
     return {
       order: createdOrder,
       depositAddress: createdOrder.deposit_address,

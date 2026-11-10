@@ -4,6 +4,8 @@ import { createGeneralRequestRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
+router.get('/', createGeneralRequestRateLimiter(), eventController.listPublicEvents);
+
 router.get(
   '/:slug',
   createGeneralRequestRateLimiter(),

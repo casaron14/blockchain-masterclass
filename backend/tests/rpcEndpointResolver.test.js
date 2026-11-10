@@ -13,6 +13,7 @@ import {
 const trackedEnvironmentNames = [
   'BSC_RPC_URL',
   'BSC_RPC_URL_FALLBACK_URLS',
+  'CHAIN_ID',
   'ALCHEMY_RPC_URL',
   'ALCHEMY_API_KEY',
   'ALCHEMY_NETWORK',
@@ -94,6 +95,35 @@ test('a mainnet endpoint falls back to mainnet defaults', () => {
       'more than the configured endpoint is offered, so a throttled node has somewhere to rotate to'
     );
   });
+});
+
+test('CHAIN_ID 97 selects the testnet defaults when no RPC URL is configured', () => {
+  withEnvironment({ BSC_RPC_URL: undefined, CHAIN_ID: '97' }, () => {
+    assert.equal(resolveBscRpcUrl(), DEFAULT_PUBLIC_BSC_TESTNET_RPC_URLS[0]);
+    assert.ok(
+      resolvePublicBscRpcUrlCandidates().includes(DEFAULT_PUBLIC_BSC_TESTNET_RPC_URLS[1]),
+      'testnet fallbacks are offered, so a testnet deployment cannot fall back to mainnet'
+    );
+  });
+});
+
+test('CHAIN_ID 56 keeps the mainnet defaults', () => {
+  withEnvironment({ BSC_RPC_URL: undefined, CHAIN_ID: '56' }, () => {
+    assert.equal(resolveBscRpcUrl(), DEFAULT_PUBLIC_BSC_MAINNET_RPC_URLS[0]);
+  });
+});
+
+test('an explicit mainnet RPC URL wins over a stale testnet CHAIN_ID', () => {
+  withEnvironment(
+    { BSC_RPC_URL: 'https://bsc.publicnode.com', CHAIN_ID: '97' },
+    () => {
+      assert.equal(resolveBscRpcUrl(), 'https://bsc.publicnode.com');
+      assert.ok(
+        resolvePublicBscRpcUrlCandidates().includes(DEFAULT_PUBLIC_BSC_MAINNET_RPC_URLS[1]),
+        'the explicit endpoint decides the network, not the chain-id hint'
+      );
+    }
+  );
 });
 
 test('with nothing configured the resolver still returns a usable public endpoint', () => {

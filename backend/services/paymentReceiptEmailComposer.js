@@ -5,12 +5,9 @@
 // those primitives rather than the site's stylesheet.
 
 import {
-  EVENT_TITLE,
-  EVENT_DATE_LABEL,
-  EVENT_LOCATION,
-  PLATFORM_BRAND_NAME,
-  PLATFORM_WEBSITE_ADDRESS,
-} from './eventConfigService.js';
+  buildEventDisplayDetailsFromSnapshot,
+  resolveEventSnapshotForBookingRecord,
+} from './eventSnapshotService.js';
 
 const EMAIL_INK_COLOR = '#14120E';
 const EMAIL_PAPER_COLOR = '#F2EDE3';
@@ -27,14 +24,22 @@ const EMAIL_BODY_FONT_STACK = 'Helvetica,Arial,sans-serif';
 const EMAIL_DISPLAY_FONT_STACK = "Georgia,'Times New Roman',serif";
 
 export function buildPaymentReceiptEmailSubject(bookingRecord) {
-  return `Your payment receipt for ${EVENT_TITLE} (${bookingRecord.ref})`;
+  const eventDisplayDetails = buildEventDisplayDetailsFromSnapshot(
+    resolveEventSnapshotForBookingRecord(bookingRecord)
+  );
+  return `Your payment receipt for ${eventDisplayDetails.eventTitle} (${bookingRecord.ref})`;
 }
 
 export function buildPaymentReceiptEmailHtml(bookingRecord, receiptRecord) {
+  const eventDisplayDetails = buildEventDisplayDetailsFromSnapshot(
+    resolveEventSnapshotForBookingRecord(bookingRecord)
+  );
   const attendeeName = escapeHtmlTextForEmail(bookingRecord.full_name);
-  const eventTitle = escapeHtmlTextForEmail(EVENT_TITLE);
-  const eventDate = escapeHtmlTextForEmail(EVENT_DATE_LABEL);
-  const eventLocation = escapeHtmlTextForEmail(EVENT_LOCATION);
+  const eventTitle = escapeHtmlTextForEmail(eventDisplayDetails.eventTitle);
+  const eventDate = escapeHtmlTextForEmail(eventDisplayDetails.eventDate);
+  const eventLocation = escapeHtmlTextForEmail(
+    `${eventDisplayDetails.eventVenueName}, ${eventDisplayDetails.eventLocation}`
+  );
   const bookingReference = escapeHtmlTextForEmail(bookingRecord.ref);
   const receiptNumber = `RCP-${receiptRecord.id}`;
   const amountPaidUsdt = escapeHtmlTextForEmail(receiptRecord.amountPaidUsdt);
@@ -43,8 +48,10 @@ export function buildPaymentReceiptEmailHtml(bookingRecord, receiptRecord) {
   const blockNumber = escapeHtmlTextForEmail(String(receiptRecord.blockNumber));
   const depositAddress = escapeHtmlTextForEmail(receiptRecord.depositAddress);
   const explorerTransactionUrl = escapeHtmlTextForEmail(receiptRecord.explorerTxUrl ?? '');
-  const brandName = escapeHtmlTextForEmail(PLATFORM_BRAND_NAME);
-  const websiteAddress = escapeHtmlTextForEmail(PLATFORM_WEBSITE_ADDRESS);
+  const brandName = escapeHtmlTextForEmail(eventDisplayDetails.platformBrandName);
+  const websiteAddress = escapeHtmlTextForEmail(
+    eventDisplayDetails.platformWebsiteAddress
+  );
 
   const eventFactRows = [
     ['EVENT', eventTitle],

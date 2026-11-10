@@ -64,7 +64,9 @@ const SCHEDULED_JOB_DEFINITIONS = [
     jobName: 'reconciliation',
     environmentFlagName: 'ENABLE_RECONCILIATION_JOB',
     advisoryLockKey: 764107,
-    shouldRunAt: (now) => now.getUTCHours() === 2 && now.getUTCMinutes() === 0,
+    // The job itself skips when a run happened in the last 23 hours. That makes
+    // the audit once-a-day without depending on Hobby's imprecise cron timing.
+    shouldRunAt: () => true,
     run: () => runReconciliationJob(),
   },
   {
@@ -95,6 +97,15 @@ async function runScheduledJobUnderAdvisoryLock(jobDefinition) {
 
     try {
       const jobResult = await jobDefinition.run();
+      // A job that deliberately declined this tick (reconciliation already ran,
+      // sweep already ran today) is neither a success nor a failure.
+      if (jobResult && jobResult.skipped === true) {
+        return {
+          jobName: jobDefinition.jobName,
+          status: 'SKIPPED_NOT_DUE',
+          reason: jobResult.reason ?? null,
+        };
+      }
       // runPaymentMonitorJob swallows RPC errors so the timer path keeps
       // ticking; on the cron path that must not be reported as success.
       if (jobResult && jobResult.failed === true) {

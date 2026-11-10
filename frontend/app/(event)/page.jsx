@@ -28,6 +28,7 @@ export default function MasterHomePage() {
     seatHoldMinutes,
     supportEmail,
     supportPhone,
+    slug,
   } = eventConfig;
 
   const statItems = getTranslation(language, 'site.stats.items');
@@ -62,7 +63,7 @@ export default function MasterHomePage() {
             <p className="hero-plate__lede">{t('site.hero.subtitle', { name })}</p>
 
             <div className="hero-plate__actions">
-              <Link href={buildBookingPageUrl()} className="button button--paper">
+              <Link href={buildBookingPageUrl(slug)} className="button button--paper">
                 {t('site.hero.cta')}
               </Link>
               <a href="#programme" className="text-link">
@@ -194,7 +195,7 @@ export default function MasterHomePage() {
                 ))}
             </ul>
 
-            <Link href={buildBookingPageUrl()} className="button button--paper">
+            <Link href={buildBookingPageUrl(slug)} className="button button--paper">
               {t('site.hero.cta')}
             </Link>
             <p className="admission-note">
@@ -290,7 +291,7 @@ export default function MasterHomePage() {
           </div>
 
           <div className="closing-plate__action">
-            <Link href={buildBookingPageUrl()} className="button button--paper">
+            <Link href={buildBookingPageUrl(slug)} className="button button--paper">
               {t('site.hero.cta')}
             </Link>
             <p className="closing-plate__meta">{t('site.closing.meta')}</p>

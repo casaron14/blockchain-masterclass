@@ -98,7 +98,9 @@ export async function buildBookingLookupActions(lookupDetails) {
     !isPaymentSettled &&
     (isPaymentMissing || isPaymentStillInProgress || isPaymentFailed);
 
-  const availabilitySnapshot = await fetchEventAvailabilitySnapshot();
+  const availabilitySnapshot = await fetchEventAvailabilitySnapshot(
+    bookingRecord.event_id
+  );
 
   return {
     canDownloadTicket,

@@ -322,6 +322,51 @@ Do **not** set `ENABLE_JOBS=true` on Vercel: the process is frozen between
 requests and has no timers. Leave `ENABLE_SWEEP_JOB=false` everywhere in
 production; use the offline `npm run sweep:prepare/sign/submit` flow.
 
+### USDT mainnet configuration (rail not enabled yet)
+
+The mainnet variable set is documented in `.env.example` and listed in the
+private root `.env`. Testnet values belong in the root `.env.local`, which is
+loaded first and overrides `.env`; both apps load the same files. Never reuse key
+material between environments:
+
+| Purpose | Production / mainnet | Test / local |
+| --- | --- | --- |
+| Deposit address derivation | `WALLET_ACCOUNT_XPUB` (watch-only) | `WALLET_MNEMONIC` or a testnet-only xpub |
+| Gas for sweeps | dedicated `GAS_WALLET_PRIVATE_KEY` | burner testnet key |
+| Sweep destination | mainnet `TREASURY_WALLET_ADDRESS` | testnet treasury |
+| Token | mainnet USDT `USDT_CONTRACT_ADDRESS` | deployed mock/test token |
+
+Production startup refuses `WALLET_MNEMONIC` and refuses to start without
+`WALLET_ACCOUNT_XPUB` (`backend/config/productionSigningGuard.js`). The
+in-process sweep job is also refused there.
+
+Required before enabling the rail:
+
+```text
+CHAIN_ID=56
+BSC_RPC_URL=                      # blank uses the public mainnet pool; a dedicated provider is recommended
+USDT_CONTRACT_ADDRESS=0x55d398326f99059fF775485246999027B3197955
+WALLET_ACCOUNT_XPUB=
+GAS_WALLET_PRIVATE_KEY=
+TREASURY_WALLET_ADDRESS=
+SETTLEMENT_FINALITY_MODE=finalized
+SETTLEMENT_MIN_CONFIRMATIONS=15
+SWEEP_MINIMUM_AGE_HOURS=24
+SWEEP_RECOVERY_MINIMUM_USDT=0.5
+GAS_SPONSORSHIP_MAX_BNB_PER_SWEEP=0.005
+GAS_SPONSORSHIP_MAX_BNB_PER_CYCLE=0.05
+GAS_SPONSORSHIP_MAX_BNB_PER_DAY=0.2
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+```
+
+Keep `ENABLE_PAYMENT_MONITOR_JOB`, `ENABLE_LISTENER_HEALTH_JOB`,
+`ENABLE_RECONCILIATION_JOB`, `ENABLE_GAS_WALLET_MONITOR_JOB` and
+`ENABLE_SWEEP_JOB` false until the keys, RPC, gas balance and alerts have been
+smoke-tested. `SWEEP_RECOVERY_MINIMUM_USDT` is the floor for collecting an
+underpaid balance on an expired order; below it the balance stays in place and
+is surfaced by the `underpayment_after_window` review flag.
+
 ### Scheduled work on Vercel
 
 `frontend/vercel.json` declares one daily cron (`0 2 * * *`) because the Vercel
@@ -346,10 +391,63 @@ ENABLE_JOBS=false
 `ENABLE_JOBS` must stay false on Vercel (it starts in-process timers); the
 individual flags are read by the cron endpoint.
 
-For minute-level payment monitoring (Vercel Pro) change the schedule to
-`* * * * *`. On Hobby, point an external scheduler (cron-job.org, GitHub
-Actions schedule, …) at `https://<domain>/api/cron/tick` with
-`Authorization: Bearer $CRON_SECRET` once per minute.
+#### Vercel Hobby plan
+
+Hobby only allows **one cron execution per day per schedule** and a small number
+of cron jobs. The `0 2 * * *` entry in `frontend/vercel.json` is deliberately
+daily and valid on Hobby, but **a daily tick is not enough to confirm USDT
+payments**. On Hobby you must add an external scheduler:
+
+1. Deploy with `CRON_SECRET` set and `ENABLE_PAYMENT_MONITOR_JOB=true`.
+2. Create a free scheduler entry (cron-job.org, EasyCron, or a similar service)
+   that calls:
+
+   ```text
+   GET https://<your-domain>/api/cron/tick
+   Authorization: Bearer <CRON_SECRET>
+   ```
+
+   Every **1 minute** is ideal. Every 5 minutes is acceptable: the payment page
+   tells the attendee the ticket will arrive within one hour, so a five-minute
+   confirmation lag is still within the product promise. Avoid GitHub Actions
+   schedules as the primary trigger: they are delayed, can be disabled after
+   inactivity, and have a five-minute minimum.
+3. Keep the Vercel daily cron. It is a backstop for the daily reconciliation
+   job and for the always-due jobs (payment monitor, seat holds, order expiry).
+   It is not the payment confirmation mechanism. Hobby fires the daily cron
+   somewhere inside the scheduled hour, so jobs that depend on an exact minute
+   (listener health, gas wallet monitor, ticket retries) are only reliable when
+   the external scheduler is calling.
+4. Leave `ENABLE_JOBS=false`. `MONITOR_POLL_INTERVAL_MS` is ignored on the cron
+   path; the external scheduler's frequency is the real poll interval.
+5. On a public RPC, set `MONITOR_LOG_SCAN_CHUNK_BLOCKS=5000` so a scheduler
+   outage does not produce one oversized `eth_getLogs` call when the listener
+   catches up.
+
+The endpoint has one advisory lock per job, so overlapping scheduler calls,
+Vercel cron retries and rolling deploys cannot run the same job twice. A second
+call returns `SKIPPED_ALREADY_RUNNING` for the busy job. The reconciliation job
+also checks the durable `reconciliation_runs` history and skips when a run
+started less than 23 hours ago, so the daily Vercel cron and the minute
+scheduler cannot produce two audits in one day.
+
+Because the external scheduler is the primary trigger, use a scheduler that
+sends failure notifications (cron-job.org does), or add an independent uptime
+check on `/api/health`. If the scheduler silently stops, payments stop being
+confirmed and the listener-health job cannot alert you, because that job is also
+driven by the same scheduler.
+
+At a one-minute cadence the project receives about 43,200 scheduler invocations
+per month. That is within Hobby's included function-invocation allowance for a
+project this size, but each call is a separate serverless execution. If the
+invocation count or cold-start cost becomes a problem, use five minutes rather
+than weakening the payment monitor. Vercel Pro removes both the daily cron
+restriction and most of this tuning.
+
+> **Commercial use:** Vercel's Fair Use Policy limits the Hobby plan to
+> personal, non-commercial projects. A paid event with ticket sales may require
+> a Pro plan for account-compliance reasons, independent of the technical cron
+> limit. Confirm this before launch.
 
 The attendee payment page no longer polls the API. It tells the attendee that
 the ticket will be emailed within one hour, so USDT confirmation depends on the
@@ -360,8 +458,10 @@ monitor.
 The cron endpoint fails closed with `503 CRON_NOT_CONFIGURED` when `CRON_SECRET`
 is missing and returns `401 CRON_UNAUTHORIZED` for a wrong secret.
 
-The `/api/[...all]` route exports `maxDuration = 60` so the cron tick, which
-runs the due jobs sequentially, can use the plan maximum.
+The `/api/[...all]` route exports `maxDuration = 60`, giving the cron tick a
+60-second budget instead of the platform default. That is enough for a normal
+minute tick; `MONITOR_LOG_SCAN_CHUNK_BLOCKS=5000` keeps a catch-up scan within
+the same budget.
 
 ## 3. Local development
 

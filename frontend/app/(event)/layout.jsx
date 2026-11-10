@@ -1,9 +1,8 @@
 import EventLayout from './EventLayout';
-import { defaultEventConfig } from '@/lib/eventConfig';
 
-// Every public page belongs to the single event served from this domain, so the
-// layout no longer reads a slug from the URL. The slug is still passed to the
-// event provider because the API and browser storage are keyed by it.
+// The bare domain has no event slug. EventProvider asks the API which event is
+// currently public (the open event when one exists) so the next event can be
+// launched without redeploying the frontend.
 export default function PublicEventLayout({ children }) {
-  return <EventLayout slug={defaultEventConfig.slug}>{children}</EventLayout>;
+  return <EventLayout>{children}</EventLayout>;
 }

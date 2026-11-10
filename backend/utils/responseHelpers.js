@@ -66,6 +66,18 @@ export function eventNotFoundResponse() {
   };
 }
 
+export function eventNotOpenForBookingResponse(eventSlug, eventStatus) {
+  return {
+    message:
+      eventSlug === 'default'
+        ? 'No event is currently open for booking'
+        : `Event ${eventSlug} is not open for booking`,
+    error: 'EVENT_NOT_OPEN_FOR_BOOKING',
+    eventSlug,
+    eventStatus,
+  };
+}
+
 export function ticketNotFoundResponse() {
   return {
     message: 'Booking not found for redelivery',
