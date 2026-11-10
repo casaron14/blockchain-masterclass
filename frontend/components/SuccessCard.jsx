@@ -14,8 +14,8 @@ import { buildBookingPageUrl, buildEventHomeUrl } from '@/lib/siteRoutes';
 
 export default function SuccessCard({ referenceCode }) {
   const { t } = useLanguage();
-  const { eventConfig, applyEventConfigurationSnapshot } = useEvent();
-  const { supportEmail, slug } = eventConfig;
+  const { eventConfig } = useEvent();
+  const { supportEmail } = eventConfig;
   const [bookingRecord, setBookingRecord] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -38,10 +38,6 @@ export default function SuccessCard({ referenceCode }) {
       isMounted = false;
     };
   }, [referenceCode]);
-
-  useEffect(() => {
-    applyEventConfigurationSnapshot(bookingRecord?.event_snapshot);
-  }, [bookingRecord, applyEventConfigurationSnapshot]);
 
   useEffect(() => {
     if (!bookingRecord || bookingRecord.status !== 'confirmed') {
@@ -139,10 +135,10 @@ export default function SuccessCard({ referenceCode }) {
 
       <div className="toast-footer-row">
         <div className="toast-footer-links">
-          <Link href={buildBookingPageUrl(slug)} className="toast-link">
+          <Link href={buildBookingPageUrl()} className="toast-link">
             {t('success.findBooking')}
           </Link>
-          <Link href={buildEventHomeUrl(slug)} className="toast-link">
+          <Link href={buildEventHomeUrl()} className="toast-link">
             {t('success.backHome')}
           </Link>
         </div>

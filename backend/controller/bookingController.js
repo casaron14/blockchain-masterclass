@@ -19,18 +19,8 @@ import {
 import { InvalidBookingSearchValueError } from '../services/bookingSearchIdentifierService.js';
 
 import {
-  EventNotFoundError,
-  EventNotOpenForBookingError,
-  fetchEventRecordBySlugFromDatabase,
-  resolveDefaultOpenEventRecordFromDatabase,
-  resolveDefaultPublicEventRecordFromDatabase,
-} from '../services/eventRegistryService.js';
-
-import {
   ambiguousBookingLookupResponse,
   bookingNotFoundResponse,
-  eventNotOpenForBookingResponse,
-  eventNotFoundResponse,
   invalidBookingSearchValueResponse,
   missingRequiredFieldResponse,
   soldOutResponse,
@@ -51,51 +41,6 @@ const bookingCreationSchema = Joi.object({
     .optional(),
 });
 
-function readRequestedEventSlugFromRequest(req) {
-  const queryEventSlug = typeof req.query?.event === 'string' ? req.query.event.trim() : '';
-  if (queryEventSlug) {
-    return queryEventSlug;
-  }
-
-  const bodyEventSlug = typeof req.body?.event === 'string' ? req.body.event.trim() : '';
-  return bodyEventSlug || null;
-}
-
-async function resolveRequestedEventRecordForRequest(req, { requireOpenEvent }) {
-  const requestedEventSlug = readRequestedEventSlugFromRequest(req);
-
-  if (requestedEventSlug) {
-    const requestedEventRecord =
-      await fetchEventRecordBySlugFromDatabase(requestedEventSlug);
-    if (!requestedEventRecord) {
-      throw new EventNotFoundError(requestedEventSlug);
-    }
-    if (requireOpenEvent && requestedEventRecord.status !== 'open') {
-      throw new EventNotOpenForBookingError(
-        requestedEventRecord.slug,
-        requestedEventRecord.status
-      );
-    }
-    return requestedEventRecord;
-  }
-
-  const defaultEventRecord = requireOpenEvent
-    ? await resolveDefaultOpenEventRecordFromDatabase()
-    : await resolveDefaultPublicEventRecordFromDatabase();
-
-  if (!defaultEventRecord) {
-    throw new EventNotOpenForBookingError('default', 'none');
-  }
-  if (requireOpenEvent && defaultEventRecord.status !== 'open') {
-    throw new EventNotOpenForBookingError(
-      defaultEventRecord.slug,
-      defaultEventRecord.status
-    );
-  }
-
-  return defaultEventRecord;
-}
-
 async function createBookingRecord(req, res) {
   const { error: validationError, value: validatedAttendeeDetails } =
     bookingCreationSchema.validate(req.body);
@@ -107,23 +52,9 @@ async function createBookingRecord(req, res) {
   }
 
   try {
-    const eventRecord = await resolveRequestedEventRecordForRequest(req, {
-      requireOpenEvent: true,
-    });
-    const bookingRecord = await createBookingRecordWithActiveSeatHold(
-      validatedAttendeeDetails,
-      eventRecord
-    );
+    const bookingRecord = await createBookingRecordWithActiveSeatHold(validatedAttendeeDetails);
     return res.status(201).json({ booking: bookingRecord });
   } catch (error) {
-    if (error instanceof EventNotFoundError) {
-      return res.status(404).json(eventNotFoundResponse());
-    }
-    if (error instanceof EventNotOpenForBookingError) {
-      return res
-        .status(409)
-        .json(eventNotOpenForBookingResponse(error.eventSlug, error.eventStatus));
-    }
     if (error.code === 'SOLD_OUT') {
       return res.status(400).json(soldOutResponse(0));
     }
@@ -139,20 +70,9 @@ async function createBookingRecord(req, res) {
 
 async function fetchEventAvailability(req, res) {
   try {
-    const eventRecord = await resolveRequestedEventRecordForRequest(req, {
-      requireOpenEvent: false,
-    });
-    const availabilitySnapshot = await fetchEventAvailabilitySnapshot(eventRecord);
+    const availabilitySnapshot = await fetchEventAvailabilitySnapshot();
     return res.status(200).json(availabilitySnapshot);
   } catch (error) {
-    if (error instanceof EventNotFoundError) {
-      return res.status(404).json(eventNotFoundResponse());
-    }
-    if (error instanceof EventNotOpenForBookingError) {
-      return res
-        .status(409)
-        .json(eventNotOpenForBookingResponse(error.eventSlug, error.eventStatus));
-    }
     console.error('Error fetching event availability', error);
     return res.status(500).json({ message: 'Server error' });
   }
@@ -283,11 +203,6 @@ async function reactivateBookingHold(req, res) {
     }
     if (error instanceof BookingNotExpiredError) {
       return res.status(409).json({ message: error.message });
-    }
-    if (error instanceof EventNotOpenForBookingError) {
-      return res
-        .status(409)
-        .json(eventNotOpenForBookingResponse(error.eventSlug, error.eventStatus));
     }
     if (error.code === 'SOLD_OUT') {
       return res.status(400).json(soldOutResponse(0));

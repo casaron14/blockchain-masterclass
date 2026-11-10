@@ -8,15 +8,8 @@ import {
   confirmBookingSeatWithinCapacity,
   generateBookingReferenceCode,
   checkSeatAvailabilityBeforeBooking,
-  resolveEventRecordForBookingScope,
   BookingNotFoundError,
 } from './bookingService.js';
-
-import {
-  buildEventSnapshotFromEventRecord,
-  resolveDefaultOpenEventRecordFromDatabase,
-  resolveDefaultPublicEventRecordFromDatabase,
-} from './eventRegistryService.js';
 
 import {
   fetchPaymentRecordByBookingId,
@@ -102,21 +95,9 @@ async function fetchPaymentRecordForBookingRow(bookingRow) {
 
 // Shared by the admin list and the CSV export so an exported file always
 // contains exactly the rows the screen is showing.
-export function buildAdminBookingListWhereClause({
-  statusFilter,
-  searchQuery,
-  eventSlug,
-} = {}) {
+export function buildAdminBookingListWhereClause({ statusFilter, searchQuery } = {}) {
   const whereConditions = [];
   const queryParameters = [];
-
-  const trimmedEventSlug = typeof eventSlug === 'string' ? eventSlug.trim() : '';
-  if (trimmedEventSlug) {
-    queryParameters.push(trimmedEventSlug);
-    whereConditions.push(
-      `b.event_id = (SELECT id FROM events WHERE slug = $${queryParameters.length})`
-    );
-  }
 
   const trimmedStatusFilter = typeof statusFilter === 'string' ? statusFilter.trim() : '';
   if (trimmedStatusFilter) {
@@ -157,15 +138,10 @@ export function buildAdminBookingListWhereClause({
   };
 }
 
-export async function fetchAdminBookingList({
-  statusFilter,
-  searchQuery,
-  eventSlug,
-} = {}) {
+export async function fetchAdminBookingList({ statusFilter, searchQuery } = {}) {
   const { whereClause, queryParameters } = buildAdminBookingListWhereClause({
     statusFilter,
     searchQuery,
-    eventSlug,
   });
 
   const result = await pool.query(
@@ -190,22 +166,9 @@ export async function fetchAdminBookingList({
   return result.rows;
 }
 
-export async function fetchBookingStatusCounts(eventSlug = null) {
-  const queryParameters = [];
-  let eventFilterClause = '';
-
-  if (eventSlug) {
-    queryParameters.push(eventSlug);
-    eventFilterClause =
-      'WHERE event_id = (SELECT id FROM events WHERE slug = $1)';
-  }
-
+export async function fetchBookingStatusCounts() {
   const result = await pool.query(
-    `SELECT status, COUNT(*)::int AS count
-       FROM bookings
-       ${eventFilterClause}
-      GROUP BY status`,
-    queryParameters
+    'SELECT status, COUNT(*)::int AS count FROM bookings GROUP BY status'
   );
 
   const statusCounts = { pending: 0, confirmed: 0, cancelled: 0, expired: 0 };
@@ -242,39 +205,21 @@ export async function fetchAdminBookingDetail(bookingId) {
 
 export async function createAdminBookingRecord(
   attendeeDetails,
-  { autoConfirm = false, eventReference = null } = {}
+  { autoConfirm = false } = {}
 ) {
-  const eventRecord = eventReference
-    ? await resolveEventRecordForBookingScope(eventReference)
-    : (await resolveDefaultOpenEventRecordFromDatabase())
-      ?? (await resolveDefaultPublicEventRecordFromDatabase());
-  if (!eventRecord) {
-    throw new Error('No event is available for admin booking creation');
-  }
-  const eventSnapshot = buildEventSnapshotFromEventRecord(eventRecord);
   const bookingReferenceCode = generateBookingReferenceCode();
   const utmSourceValue = attendeeDetails.utm_source?.trim() || null;
 
   if (autoConfirm) {
-    await checkSeatAvailabilityBeforeBooking(eventRecord);
+    await checkSeatAvailabilityBeforeBooking();
   }
 
   const insertResult = await pool.query(
-    `INSERT INTO bookings (
-       ref,
-       event_id,
-       event_snapshot,
-       full_name,
-       phone_number,
-       email,
-       utm_source
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO bookings (ref, full_name, phone_number, email, utm_source)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
     [
       bookingReferenceCode,
-      eventRecord.id,
-      JSON.stringify(eventSnapshot),
       attendeeDetails.full_name,
       attendeeDetails.phone_number,
       attendeeDetails.email,

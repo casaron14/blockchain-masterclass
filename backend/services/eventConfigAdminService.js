@@ -10,27 +10,14 @@ import {
   TICKET_PRICE_USDT,
 } from './eventConfigService.js';
 
-import {
-  buildEventConfigurationFromEventRecord,
-  ensureEventSeatCapacityRowExistsForEventRecord,
-  fetchEventRecordByIdFromDatabase,
-  fetchEventRecordBySlugFromDatabase,
-  resolveDefaultPublicEventRecordFromDatabase,
-  updateEventConfigurationInDatabase,
-} from './eventRegistryService.js';
+import { SEAT_CAPACITY_ROW_ID } from './bookingService.js';
 
 export const eventConfigOverrideJoiSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120),
   tagline: Joi.string().trim().max(200),
   event: Joi.object({
     date: Joi.string().trim().max(120),
-    ticketDateLabel: Joi.string().trim().max(40),
     location: Joi.string().trim().max(200),
-    venueName: Joi.string().trim().max(200),
-    motto: Joi.string().trim().max(200),
-    brandName: Joi.string().trim().max(120),
-    websiteAddress: Joi.string().trim().max(200),
-    timeLabel: Joi.string().trim().max(120),
   }).unknown(false),
   price: Joi.object({
     localAmount: Joi.number().positive().precision(2),
@@ -41,8 +28,6 @@ export const eventConfigOverrideJoiSchema = Joi.object({
   seatCapacity: Joi.number().integer().positive(),
   phonePlaceholder: Joi.string().trim().max(60),
   contact: Joi.object({
-    brandName: Joi.string().trim().max(120),
-    websiteAddress: Joi.string().trim().max(200),
     supportEmail: Joi.string().trim().email(),
     supportPhone: Joi.string().trim().max(40),
     addressLine1: Joi.string().trim().max(200),
@@ -83,77 +68,40 @@ export class SeatCapacityBelowConfirmedCountError extends Error {
   }
 }
 
-export class EventConfigurationNotFoundError extends Error {
-  constructor(eventSlug) {
-    super(`Event configuration not found for ${eventSlug}`);
-    this.name = 'EventConfigurationNotFoundError';
-    this.code = 'EVENT_CONFIGURATION_NOT_FOUND';
-  }
+export async function fetchEventConfigurationOverridesFromDatabase(
+  eventSlug = PRIMARY_EVENT_SLUG
+) {
+  const result = await pool.query(
+    'SELECT slug, overrides, updated_at FROM event_config_overrides WHERE slug = $1',
+    [eventSlug]
+  );
+  return result.rows[0] ?? null;
 }
 
-async function resolveAdminTargetEventRecord(eventSlug) {
-  if (eventSlug) {
-    return fetchEventRecordBySlugFromDatabase(eventSlug);
-  }
-
-  return resolveDefaultPublicEventRecordFromDatabase();
-}
-
-export async function fetchEventConfigurationOverridesFromDatabase(eventSlug = null) {
-  const eventRecord = await resolveAdminTargetEventRecord(eventSlug);
-  if (!eventRecord) {
+export async function fetchEffectiveEventConfiguration(eventSlug = PRIMARY_EVENT_SLUG) {
+  const baseConfiguration = fetchEventConfigurationBySlug(eventSlug);
+  if (!baseConfiguration) {
     return null;
   }
 
-  return {
-    slug: eventRecord.slug,
-    overrides: buildEventConfigurationFromEventRecord(eventRecord),
-    updated_at: eventRecord.updated_at,
-  };
+  const overrideRow = await fetchEventConfigurationOverridesFromDatabase(eventSlug);
+  return mergeEffectiveEventConfiguration(baseConfiguration, overrideRow?.overrides ?? null);
 }
 
-export async function fetchEffectiveEventConfiguration(eventSlug = null) {
-  const eventRecord = await resolveAdminTargetEventRecord(eventSlug);
-  if (eventRecord) {
-    return buildEventConfigurationFromEventRecord(eventRecord);
-  }
-
-  return fetchEventConfigurationBySlug(eventSlug ?? PRIMARY_EVENT_SLUG);
-}
-
-export async function fetchLiveSeatCapacitySnapshot(eventSlug) {
-  const eventRecord = eventSlug
-    ? await fetchEventRecordBySlugFromDatabase(eventSlug)
-    : await resolveDefaultPublicEventRecordFromDatabase();
-
-  if (!eventRecord) {
-    return {
-      confirmedCount: 0,
-      cap: 150,
-    };
-  }
-
-  await ensureEventSeatCapacityRowExistsForEventRecord(pool, eventRecord);
-
+export async function fetchLiveSeatCapacitySnapshot() {
   const result = await pool.query(
-    `SELECT confirmed_count, cap
-       FROM event_seat_capacity
-      WHERE event_id = $1`,
-    [eventRecord.id]
+    'SELECT confirmed_count, cap FROM seat_capacity WHERE id = $1',
+    [SEAT_CAPACITY_ROW_ID]
   );
   const capacityRow = result.rows[0];
-
   return {
-    confirmedCount: Number(capacityRow?.confirmed_count ?? 0),
-    cap: Number(capacityRow?.cap ?? eventRecord.configuration?.seatCapacity ?? 150),
+    confirmedCount: Number(capacityRow.confirmed_count),
+    cap: Number(capacityRow.cap),
   };
 }
 
-export async function resolveEffectiveExpectedAmountForPaymentMethod(
-  paymentMethod,
-  eventReference = PRIMARY_EVENT_SLUG
-) {
-  const effectiveConfiguration = await resolveEventConfigurationForAmount(eventReference);
+export async function resolveEffectiveExpectedAmountForPaymentMethod(paymentMethod) {
+  const effectiveConfiguration = await fetchEffectiveEventConfiguration();
   if (!effectiveConfiguration?.price) {
     throw new Error('Effective event configuration unavailable');
   }
@@ -169,60 +117,28 @@ export async function resolveEffectiveExpectedAmountForPaymentMethod(
     : TICKET_PRICE_TZS;
 }
 
-async function resolveEventConfigurationForAmount(eventReference) {
-  if (!eventReference) {
-    return fetchEffectiveEventConfiguration();
-  }
-
-  if (typeof eventReference === 'string') {
-    return fetchEffectiveEventConfiguration(eventReference);
-  }
-
-  if (eventReference.configuration && eventReference.slug) {
-    return buildEventConfigurationFromEventRecord(eventReference);
-  }
-
-  if (eventReference.price) {
-    return eventReference;
-  }
-
-  if (eventReference.eventId) {
-    const eventRecord = await fetchEventRecordByIdFromDatabase(eventReference.eventId);
-    return eventRecord ? buildEventConfigurationFromEventRecord(eventRecord) : null;
-  }
-
-  return null;
-}
-
-export async function saveEventConfigurationOverrides(
-  overridePayload,
-  eventSlug = null
-) {
+export async function saveEventConfigurationOverrides(overridePayload) {
   const validatedOverrides = validateAndNormalizeEventConfigOverrides(overridePayload);
-  const eventRecord = await resolveAdminTargetEventRecord(eventSlug);
-  if (!eventRecord) {
-    throw new EventConfigurationNotFoundError(eventSlug ?? 'default');
-  }
 
   if (typeof validatedOverrides.seatCapacity === 'number') {
-    await applySeatCapacityChangeToEvent(eventRecord.id, validatedOverrides.seatCapacity);
+    await applySeatCapacityChange(validatedOverrides.seatCapacity);
   }
 
-  const currentConfiguration = buildEventConfigurationFromEventRecord(eventRecord);
-  const nextConfiguration = mergeEffectiveEventConfiguration(
-    currentConfiguration,
-    validatedOverrides
+  await pool.query(
+    `INSERT INTO event_config_overrides (slug, overrides, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (slug)
+     DO UPDATE SET overrides = EXCLUDED.overrides, updated_at = now()`,
+    [PRIMARY_EVENT_SLUG, JSON.stringify(validatedOverrides)]
   );
 
-  await updateEventConfigurationInDatabase(eventRecord.id, nextConfiguration);
-
-  return buildEventConfigurationReport(eventSlug);
+  return buildEventConfigurationReport();
 }
 
-export async function buildEventConfigurationReport(eventSlug = null) {
-  const configuration = await fetchEffectiveEventConfiguration(eventSlug);
-  const liveSeatCapacity = await fetchLiveSeatCapacitySnapshot(eventSlug);
-  const overrideRow = await fetchEventConfigurationOverridesFromDatabase(eventSlug);
+async function buildEventConfigurationReport() {
+  const configuration = await fetchEffectiveEventConfiguration();
+  const liveSeatCapacity = await fetchLiveSeatCapacitySnapshot();
+  const overrideRow = await fetchEventConfigurationOverridesFromDatabase();
 
   return {
     configuration,
@@ -259,58 +175,25 @@ function mergeEffectiveEventConfiguration(baseConfiguration, overrideValues) {
   };
 }
 
-async function applySeatCapacityChangeToEvent(eventId, newCapacity) {
+async function applySeatCapacityChange(newCapacity) {
   const capacityClient = await pool.connect();
 
   try {
     await capacityClient.query('BEGIN');
-
-    const eventRecordResult = await capacityClient.query(
-      'SELECT * FROM events WHERE id = $1 FOR UPDATE',
-      [eventId]
-    );
-    const eventRecord = eventRecordResult.rows[0];
-    if (!eventRecord) {
-      throw new EventConfigurationNotFoundError(eventId);
-    }
-
-    await ensureEventSeatCapacityRowExistsForEventRecord(capacityClient, {
-      ...eventRecord,
-      id: Number(eventRecord.id),
-    });
-
     const confirmedSeatsResult = await capacityClient.query(
-      'SELECT confirmed_count FROM event_seat_capacity WHERE event_id = $1 FOR UPDATE',
-      [eventId]
+      'SELECT confirmed_count FROM seat_capacity WHERE id = $1 FOR UPDATE',
+      [SEAT_CAPACITY_ROW_ID]
     );
-    const currentConfirmedCount = Number(
-      confirmedSeatsResult.rows[0]?.confirmed_count ?? 0
-    );
+    const currentConfirmedCount = Number(confirmedSeatsResult.rows[0].confirmed_count);
 
     if (newCapacity < currentConfirmedCount) {
-      throw new SeatCapacityBelowConfirmedCountError(
-        newCapacity,
-        currentConfirmedCount
-      );
+      throw new SeatCapacityBelowConfirmedCountError(newCapacity, currentConfirmedCount);
     }
 
-    await capacityClient.query(
-      'UPDATE event_seat_capacity SET cap = $1 WHERE event_id = $2',
-      [newCapacity, eventId]
-    );
-    await capacityClient.query(
-      `UPDATE events
-          SET configuration = jsonb_set(
-                configuration,
-                '{seatCapacity}',
-                to_jsonb($1::INTEGER),
-                true
-              ),
-              updated_at = now()
-        WHERE id = $2`,
-      [newCapacity, eventId]
-    );
-
+    await capacityClient.query('UPDATE seat_capacity SET cap = $1 WHERE id = $2', [
+      newCapacity,
+      SEAT_CAPACITY_ROW_ID,
+    ]);
     await capacityClient.query('COMMIT');
   } catch (error) {
     await capacityClient.query('ROLLBACK');

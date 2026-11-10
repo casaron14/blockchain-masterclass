@@ -188,9 +188,6 @@ export const translations = {
       resumeNote: 'Your previous booking is still active for {minutes} minutes.',
       resumePayment: 'Continue to payment',
       startOver: 'Start over',
-      notOpenTitle: 'Booking is closed for this event',
-      notOpenNote:
-        'This event is no longer accepting new bookings. You can still look up an existing booking below.',
       errors: {
         required: '{field} is required',
         invalidEmail: 'Please enter a valid email address',
@@ -546,9 +543,6 @@ export const translations = {
       resumeNote: 'Booking yako ya awali bado inatumika kwa dakika {minutes}.',
       resumePayment: 'Endelea na malipo',
       startOver: 'Anza upya',
-      notOpenTitle: 'Uhifadhi umefungwa kwa tukio hili',
-      notOpenNote:
-        'Tukio hili halipokei booking mpya. Bado unaweza kutafuta booking iliyopo hapa chini.',
       errors: {
         required: '{field} inahitajika',
         invalidEmail: 'Tafadhali weka barua pepe sahihi',

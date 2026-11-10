@@ -1,7 +1,6 @@
 import express from 'express';
 import adminController from '../controller/adminController.js';
 import adminConfigController from '../controller/adminConfigController.js';
-import adminEventController from '../controller/adminEventController.js';
 import adminPaymentReviewController from '../controller/adminPaymentReviewController.js';
 import adminTransactionController from '../controller/adminTransactionController.js';
 import offlinePaymentController from '../controller/offlinePaymentController.js';
@@ -16,16 +15,6 @@ router.use(createGeneralRequestRateLimiter());
 router.use(requireAdminAccess);
 
 router.get('/report', adminController.fetchAdminSummaryReport);
-
-router.get('/events', adminEventController.fetchAdminEventListEndpoint);
-
-router.post('/events', adminEventController.createAdminEventEndpoint);
-
-router.put(
-  '/events/:id',
-  validatePositiveIntegerRouteParam('id'),
-  adminEventController.updateAdminEventEndpoint
-);
 
 router.get('/configuration', adminConfigController.fetchAdminEventConfigurationEndpoint);
 

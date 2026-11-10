@@ -29,10 +29,6 @@ import {
   TICKET_TYPE_LABEL,
 } from './eventConfigService.js';
 import {
-  buildTicketEventDetailsFromSnapshot,
-  resolveEventSnapshotForBookingRecord,
-} from './eventSnapshotService.js';
-import {
   InvalidAttendeeEmailAddressError,
   validateAttendeeEmailAddressForTicketDelivery,
 } from './attendeeEmailAddressValidator.js';
@@ -69,22 +65,13 @@ export function isTicketEmailDeliveryEnabled() {
   return !['false', 'off', '0', 'no'].includes(configuredDeliveryFlag);
 }
 
-export function getEventDetails(bookingRecord = null) {
-  if (bookingRecord) {
-    return buildTicketEventDetailsFromSnapshot(
-      resolveEventSnapshotForBookingRecord(bookingRecord)
-    );
-  }
-
+export function getEventDetails() {
   return {
     eventTitle: EVENT_TITLE,
     eventDate: EVENT_DATE_LABEL,
     eventLocation: `${EVENT_VENUE_NAME}, ${EVENT_LOCATION}`,
     eventTimeLabel: process.env.EVENT_TIME_LABEL?.trim() || '',
     ticketTypeLabel: TICKET_TYPE_LABEL,
-    eventBrandName: EVENT_BRAND_NAME,
-    eventWebsiteAddress: EVENT_WEBSITE_ADDRESS,
-    supportPhoneNumber: SUPPORT_PHONE_NUMBER,
   };
 }
 
@@ -98,8 +85,7 @@ function escapeHtmlTextForTicketEmail(htmlTextValue) {
 }
 
 export function buildTicketEmailSubject(bookingRecord) {
-  const eventDetails = getEventDetails(bookingRecord);
-  return `Your ${eventDetails.eventTitle} ticket (EVT-${bookingRecord.ref})`;
+  return `Your ${EVENT_TITLE} ticket (EVT-${bookingRecord.ref})`;
 }
 
 export function resolveTicketSenderAddress() {
@@ -107,7 +93,7 @@ export function resolveTicketSenderAddress() {
 }
 
 export function buildTicketEmailHtml(bookingRecord) {
-  const eventDetails = getEventDetails(bookingRecord);
+  const eventDetails = getEventDetails();
   const attendeeName = escapeHtmlTextForTicketEmail(bookingRecord.full_name);
   const eventTitle = escapeHtmlTextForTicketEmail(eventDetails.eventTitle);
   const eventDate = escapeHtmlTextForTicketEmail(eventDetails.eventDate);
@@ -115,11 +101,9 @@ export function buildTicketEmailHtml(bookingRecord) {
   const eventTimeLabel = escapeHtmlTextForTicketEmail(eventDetails.eventTimeLabel);
   const ticketTypeLabel = escapeHtmlTextForTicketEmail(eventDetails.ticketTypeLabel);
   const ticketCode = escapeHtmlTextForTicketEmail(`EVT-${bookingRecord.ref}`);
-  const brandName = escapeHtmlTextForTicketEmail(eventDetails.eventBrandName);
-  const websiteAddress = escapeHtmlTextForTicketEmail(eventDetails.eventWebsiteAddress);
-  const contactPhoneNumber = escapeHtmlTextForTicketEmail(
-    eventDetails.supportPhoneNumber
-  );
+  const brandName = escapeHtmlTextForTicketEmail(EVENT_BRAND_NAME);
+  const websiteAddress = escapeHtmlTextForTicketEmail(EVENT_WEBSITE_ADDRESS);
+  const contactPhoneNumber = escapeHtmlTextForTicketEmail(SUPPORT_PHONE_NUMBER);
   const eventTimeTableRow = eventTimeLabel
     ? `<tr>
                   <td style="padding:10px 0;border-bottom:1px solid #444444;font-family:'Courier New',Courier,monospace;font-size:10px;letter-spacing:1px;color:#8A8A8A;">TIME</td>
@@ -195,7 +179,7 @@ export function buildTicketEmailHtml(bookingRecord) {
 }
 
 export function buildTicketEmailText(bookingRecord) {
-  const eventDetails = getEventDetails(bookingRecord);
+  const eventDetails = getEventDetails();
   const ticketCode = `EVT-${bookingRecord.ref}`;
 
   return [
@@ -213,9 +197,9 @@ export function buildTicketEmailText(bookingRecord) {
     '',
     `You can also download the ticket PDF from the booking lookup using reference ${bookingRecord.ref}.`,
     '',
-    eventDetails.eventBrandName,
-    eventDetails.eventWebsiteAddress,
-    eventDetails.supportPhoneNumber,
+    EVENT_BRAND_NAME,
+    EVENT_WEBSITE_ADDRESS,
+    SUPPORT_PHONE_NUMBER,
   ].join('\n');
 }
 

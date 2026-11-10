@@ -5,18 +5,11 @@ import {
   generateAzamPayExternalId,
 } from './azamPayClient.js';
 
-import {
-  BookingNotFoundError,
-  confirmBookingSeatWithinCapacity,
-  fetchBookingRecordById,
-} from './bookingService.js';
+import { confirmBookingSeatWithinCapacity } from './bookingService.js';
 
 import { deliverTicketForConfirmedBooking } from './ticketDeliveryService.js';
 
-import {
-  resolveEventSnapshotForBookingRecord,
-  resolveExpectedAmountForPaymentMethodFromEventSnapshot,
-} from './eventSnapshotService.js';
+import { resolveEffectiveExpectedAmountForPaymentMethod } from './eventConfigAdminService.js';
 
 import {
   VALID_PAYMENT_METHODS,
@@ -77,18 +70,8 @@ export function assertPaymentMethodIsAvailableForNewPayment(paymentMethod) {
   return paymentMethod;
 }
 
-export function resolveExpectedAmountForPaymentMethod(
-  paymentMethod,
-  eventSnapshot = null
-) {
+export function resolveExpectedAmountForPaymentMethod(paymentMethod) {
   validatePaymentMethodSelection(paymentMethod);
-  if (eventSnapshot) {
-    return resolveExpectedAmountForPaymentMethodFromEventSnapshot(
-      paymentMethod,
-      eventSnapshot
-    );
-  }
-
   return paymentMethod === PAYMENT_METHOD_USDT_BEP20
     ? TICKET_PRICE_USDT
     : TICKET_PRICE_TZS;
@@ -97,16 +80,7 @@ export function resolveExpectedAmountForPaymentMethod(
 export async function createPendingPaymentRecordForBooking(bookingId, paymentMethod) {
   assertPaymentMethodIsAvailableForNewPayment(paymentMethod);
 
-  const bookingRecord = await fetchBookingRecordById(bookingId);
-  if (!bookingRecord) {
-    throw new BookingNotFoundError(bookingId);
-  }
-
-  const eventSnapshot = resolveEventSnapshotForBookingRecord(bookingRecord);
-  const amountExpected = resolveExpectedAmountForPaymentMethod(
-    paymentMethod,
-    eventSnapshot
-  );
+  const amountExpected = await resolveEffectiveExpectedAmountForPaymentMethod(paymentMethod);
 
   const result = await pool.query(
     `INSERT INTO payments (booking_id, payment_method, amount_expected, status)

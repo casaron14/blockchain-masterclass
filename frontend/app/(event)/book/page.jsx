@@ -33,16 +33,8 @@ export default function BookingPage() {
 
           <div className="booking-main">
             <section className="paper-sheet">
-              <h2 className="sheet-heading">
-                {eventConfig.lifecycleStatus === 'open'
-                  ? t('booking.attendeeHeading')
-                  : t('booking.notOpenTitle')}
-              </h2>
-              {eventConfig.lifecycleStatus === 'open' ? (
-                <BookingForm />
-              ) : (
-                <p className="muted">{t('booking.notOpenNote')}</p>
-              )}
+              <h2 className="sheet-heading">{t('booking.attendeeHeading')}</h2>
+              <BookingForm />
             </section>
 
             <BookingSearchLookup />

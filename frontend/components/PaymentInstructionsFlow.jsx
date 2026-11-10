@@ -57,7 +57,7 @@ function AddressCopiedIcon() {
 
 export default function PaymentInstructionsFlow({ paymentId }) {
   const { t } = useLanguage();
-  const { eventConfig, applyEventConfigurationSnapshot } = useEvent();
+  const { eventConfig } = useEvent();
   const {
     slug,
     currency,
@@ -75,12 +75,6 @@ export default function PaymentInstructionsFlow({ paymentId }) {
     eventSlug: slug,
   });
   const paymentRecord = paymentOverview?.payment ?? null;
-
-  // A payment opened from an older link must describe the event that was sold,
-  // not whichever event the bare domain now defaults to.
-  useEffect(() => {
-    applyEventConfigurationSnapshot(bookingRecord?.event_snapshot);
-  }, [bookingRecord, applyEventConfigurationSnapshot]);
 
   const [usdtInstructions, setUsdtInstructions] = useState(null);
   const [depositQrDataUrl, setDepositQrDataUrl] = useState(null);
@@ -193,7 +187,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
   }
 
   function handleContinueToPaymentConfirmation() {
-    router.push(buildPaymentConfirmationPageUrlForPaymentId(paymentId, slug));
+    router.push(buildPaymentConfirmationPageUrlForPaymentId(paymentId));
   }
 
   const isPaymentStatusTerminal = TERMINAL_PAYMENT_STATUSES.includes(paymentStatusValue);

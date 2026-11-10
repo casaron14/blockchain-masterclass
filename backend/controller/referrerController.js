@@ -21,7 +21,6 @@ const referrerRegistrationSchema = Joi.object({
     .trim()
     .pattern(/^\+?[0-9]{9,15}$/)
     .required(),
-  event: Joi.string().trim().min(2).max(100).optional(),
 });
 
 const REFERRAL_CODE_PATTERN = /^[a-zA-Z0-9_.-]{2,100}$/;
@@ -51,8 +50,7 @@ async function registerReferrerInviteLink(req, res) {
   try {
     const referrerRecord = await registerReferrerInviteIdentity(
       validatedReferrerDetails.full_name,
-      validatedReferrerDetails.phone_number,
-      validatedReferrerDetails.event
+      validatedReferrerDetails.phone_number
     );
     return res.status(201).json({ referrer: referrerRecord });
   } catch (error) {
@@ -74,8 +72,7 @@ async function createReferrerInviteRecordEndpoint(req, res) {
   try {
     const referrerRecord = await registerReferrerInviteIdentity(
       validatedReferrerDetails.full_name,
-      validatedReferrerDetails.phone_number,
-      validatedReferrerDetails.event
+      validatedReferrerDetails.phone_number
     );
     return res.status(201).json({ referrer: referrerRecord });
   } catch (error) {

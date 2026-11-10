@@ -7,53 +7,26 @@ export const EVENT_HOME_URL = '/';
 export const BOOKING_PAGE_URL = '/book';
 export const BACK_OFFICE_HOME_URL = '/admin';
 
-function buildEventScopedBasePath(eventSlug, unscopedBasePath) {
-  const normalizedEventSlug = String(eventSlug ?? '').trim();
-  if (!normalizedEventSlug) {
-    return unscopedBasePath;
-  }
-
-  const scopedEventBasePath = `/events/${encodeURIComponent(normalizedEventSlug)}`;
-  return unscopedBasePath === '/'
-    ? scopedEventBasePath
-    : `${scopedEventBasePath}${unscopedBasePath}`;
+export function buildEventHomeUrl() {
+  return EVENT_HOME_URL;
 }
 
-export function buildEventHomeUrl(eventSlug = null) {
-  return buildEventScopedBasePath(eventSlug, EVENT_HOME_URL) || '/';
+export function buildBookingPageUrl() {
+  return BOOKING_PAGE_URL;
 }
 
-export function buildBookingPageUrl(eventSlug = null) {
-  return buildEventScopedBasePath(eventSlug, BOOKING_PAGE_URL);
+export function buildPaymentPageUrlForPaymentId(paymentId) {
+  return `/pay/${encodeURIComponent(paymentId)}`;
 }
 
-export function buildPaymentPageUrlForPaymentId(paymentId, eventSlug = null) {
-  return buildEventScopedBasePath(
-    eventSlug,
-    `/pay/${encodeURIComponent(paymentId)}`
-  );
+export function buildPaymentConfirmationPageUrlForPaymentId(paymentId) {
+  return `/pay/${encodeURIComponent(paymentId)}/confirm`;
 }
 
-export function buildPaymentConfirmationPageUrlForPaymentId(
-  paymentId,
-  eventSlug = null
-) {
-  return buildEventScopedBasePath(
-    eventSlug,
-    `/pay/${encodeURIComponent(paymentId)}/confirm`
-  );
+export function buildSuccessPageUrlForReferenceCode(bookingReferenceCode) {
+  return `/success/${encodeURIComponent(bookingReferenceCode)}`;
 }
 
-export function buildSuccessPageUrlForReferenceCode(
-  bookingReferenceCode,
-  eventSlug = null
-) {
-  return buildEventScopedBasePath(
-    eventSlug,
-    `/success/${encodeURIComponent(bookingReferenceCode)}`
-  );
-}
-
-export function buildEventHomeSectionUrlForSectionId(sectionId, eventSlug = null) {
-  return `${buildEventHomeUrl(eventSlug)}#${sectionId}`;
+export function buildEventHomeSectionUrlForSectionId(sectionId) {
+  return `${EVENT_HOME_URL}#${sectionId}`;
 }

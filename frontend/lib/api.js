@@ -48,10 +48,6 @@ export function fetchEventAvailability(eventSlug) {
   return request(`/api/bookings/availability${query}`);
 }
 
-export function fetchPublicEventList() {
-  return request('/api/events');
-}
-
 export function fetchEventConfigurationBySlug(eventSlug) {
   return request(`/api/events/${encodeURIComponent(eventSlug)}`);
 }
@@ -223,21 +219,13 @@ function buildAdminAuthorizationHeaders(adminToken) {
   return { Authorization: `Bearer ${adminToken}` };
 }
 
-export function adminFetchBookingList({
-  statusFilter,
-  searchQuery,
-  eventSlug,
-  adminToken,
-}) {
+export function adminFetchBookingList({ statusFilter, searchQuery, adminToken }) {
   const queryParameters = new URLSearchParams();
   if (statusFilter) {
     queryParameters.set('status', statusFilter);
   }
   if (searchQuery) {
     queryParameters.set('q', searchQuery);
-  }
-  if (eventSlug) {
-    queryParameters.set('event', eventSlug);
   }
   const serializedQueryParameters = queryParameters.toString();
   const query = serializedQueryParameters ? `?${serializedQueryParameters}` : '';
@@ -336,42 +324,14 @@ export function adminFetchSummaryReport(adminToken) {
   });
 }
 
-export function adminFetchEventList(adminToken) {
-  return request('/api/admin/events', {
+export function adminFetchEventConfiguration(adminToken) {
+  return request('/api/admin/configuration', {
     headers: buildAdminAuthorizationHeaders(adminToken),
   });
 }
 
-export function adminCreateEvent(eventDetails, adminToken) {
-  return request('/api/admin/events', {
-    method: 'POST',
-    headers: buildAdminAuthorizationHeaders(adminToken),
-    body: JSON.stringify(eventDetails),
-  });
-}
-
-export function adminUpdateEvent(eventId, updateFields, adminToken) {
-  return request(`/api/admin/events/${encodeURIComponent(eventId)}`, {
-    method: 'PUT',
-    headers: buildAdminAuthorizationHeaders(adminToken),
-    body: JSON.stringify(updateFields),
-  });
-}
-
-export function adminFetchEventConfiguration(adminToken, eventSlug = null) {
-  const query = eventSlug ? `?event=${encodeURIComponent(eventSlug)}` : '';
-  return request(`/api/admin/configuration${query}`, {
-    headers: buildAdminAuthorizationHeaders(adminToken),
-  });
-}
-
-export function adminUpdateEventConfiguration(
-  updateFields,
-  adminToken,
-  eventSlug = null
-) {
-  const query = eventSlug ? `?event=${encodeURIComponent(eventSlug)}` : '';
-  return request(`/api/admin/configuration${query}`, {
+export function adminUpdateEventConfiguration(updateFields, adminToken) {
+  return request('/api/admin/configuration', {
     method: 'PUT',
     headers: buildAdminAuthorizationHeaders(adminToken),
     body: JSON.stringify(updateFields),
@@ -451,19 +411,13 @@ async function downloadAuthorizedCsvFile(downloadPath, adminToken, fallbackFileN
   return downloadFileName;
 }
 
-export function adminDownloadBookingsCsv(
-  adminToken,
-  { statusFilter, searchQuery, eventSlug } = {}
-) {
+export function adminDownloadBookingsCsv(adminToken, { statusFilter, searchQuery } = {}) {
   const queryParameters = new URLSearchParams();
   if (statusFilter) {
     queryParameters.set('status', statusFilter);
   }
   if (searchQuery) {
     queryParameters.set('q', searchQuery);
-  }
-  if (eventSlug) {
-    queryParameters.set('event', eventSlug);
   }
   const serializedQueryParameters = queryParameters.toString();
   const query = serializedQueryParameters ? `?${serializedQueryParameters}` : '';

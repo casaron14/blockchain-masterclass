@@ -75,11 +75,6 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
-DO $$ BEGIN
-  CREATE TYPE event_lifecycle_status AS ENUM ('draft', 'open', 'closed', 'archived');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
 -- ---------------------------------------------------------------------
 -- Helper: generic updated_at trigger function
 -- ---------------------------------------------------------------------
@@ -93,52 +88,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ---------------------------------------------------------------------
--- events - one row per bookable or historical event.
---
---   configuration stores the complete event payload used to render the
---   public site and to issue tickets. A booking also stores its own
---   event_snapshot, so editing an event later never rewrites a historical
---   ticket, receipt, or confirmation email.
--- ---------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS events (
-  id            BIGSERIAL PRIMARY KEY,
-  slug          TEXT NOT NULL UNIQUE,
-  name          TEXT NOT NULL,
-  status        event_lifecycle_status NOT NULL DEFAULT 'draft',
-  starts_at     TIMESTAMPTZ,
-  ends_at       TIMESTAMPTZ,
-  configuration JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT events_slug_format_chk CHECK (
-    slug ~ '^[a-z0-9][a-z0-9-]{1,99}$'
-  )
-);
-
-CREATE INDEX IF NOT EXISTS idx_events_status ON events (status);
-CREATE INDEX IF NOT EXISTS idx_events_lifecycle_order
-  ON events (status, starts_at, created_at);
-
-CREATE OR REPLACE TRIGGER trg_events_updated_at
-  BEFORE UPDATE ON events
-  FOR EACH ROW
-  EXECUTE FUNCTION set_updated_at();
-
--- ---------------------------------------------------------------------
 -- bookings
 -- ---------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS bookings (
   id              BIGSERIAL PRIMARY KEY,
   ref             TEXT NOT NULL UNIQUE,
-
-  -- every booking belongs permanently to one event. The snapshot preserves
-  -- the event values that were true when the seat was sold.
-  event_id        BIGINT NOT NULL REFERENCES events (id),
-  event_snapshot  JSONB NOT NULL DEFAULT '{}'::jsonb,
-
   full_name       TEXT NOT NULL,
   phone_number    TEXT NOT NULL,
   email           TEXT NOT NULL,
@@ -166,11 +121,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   CONSTRAINT bookings_email_format_chk CHECK (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$')
 );
 
--- add the columns to an existing deployment without dropping data. event_id
--- starts nullable here; migration 003 backfills it and adds NOT NULL/FK once
--- every first-event booking has been attached to its event.
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS event_id BIGINT;
-ALTER TABLE bookings ADD COLUMN IF NOT EXISTS event_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+-- add the columns to an existing deployment without dropping data
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS utm_source TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_sent_at TIMESTAMPTZ;
 
@@ -178,21 +129,17 @@ CREATE INDEX IF NOT EXISTS idx_bookings_ticket_sent_at
   ON bookings (ticket_sent_at)
   WHERE ticket_sent_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_bookings_event_id ON bookings (event_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_phone  ON bookings (phone_number);
 CREATE INDEX IF NOT EXISTS idx_bookings_email  ON bookings (email);
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status);
 CREATE INDEX IF NOT EXISTS idx_bookings_utm_source ON bookings (utm_source);
 
--- Availability reads and the hold-expiry job both filter the live pending
--- holds of one event only. The composite index keeps that count cheap as the
--- table grows across events.
-CREATE INDEX IF NOT EXISTS idx_bookings_event_active_holds
-  ON bookings (event_id, expires_at)
+-- Availability reads and the hold-expiry job both filter on the live pending
+-- holds only. A partial index keeps that count cheap as the bookings table
+-- grows past the event.
+CREATE INDEX IF NOT EXISTS idx_bookings_active_holds
+  ON bookings (expires_at)
   WHERE status = 'pending';
-
-CREATE INDEX IF NOT EXISTS idx_bookings_event_status_created
-  ON bookings (event_id, status, created_at DESC);
 
 CREATE OR REPLACE TRIGGER trg_bookings_updated_at
   BEFORE UPDATE ON bookings
@@ -209,8 +156,6 @@ CREATE OR REPLACE TRIGGER trg_bookings_updated_at
 CREATE TABLE IF NOT EXISTS referrers (
   id               BIGSERIAL PRIMARY KEY,
 
-  event_id         BIGINT NOT NULL REFERENCES events (id),
-
   referrer_code    TEXT NOT NULL UNIQUE,
   referrer_name    TEXT NOT NULL,
   referrer_phone   TEXT NOT NULL,
@@ -222,10 +167,7 @@ CREATE TABLE IF NOT EXISTS referrers (
   )
 );
 
-ALTER TABLE referrers ADD COLUMN IF NOT EXISTS event_id BIGINT;
-
 CREATE INDEX IF NOT EXISTS idx_referrers_code ON referrers (referrer_code);
-CREATE INDEX IF NOT EXISTS idx_referrers_event_id ON referrers (event_id);
 
 -- ---------------------------------------------------------------------
 -- payments  (1:1 with bookings via unique booking_id)
@@ -482,94 +424,67 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
 
 -- ---------------------------------------------------------------------
--- event_seat_capacity - one counter row per event.
---
---   Every event has its own confirmed count and cap. Availability, booking
---   creation and confirmation lock only the row belonging to the requested
---   event, so one event can never consume another event's seats.
+-- seat_capacity - single counter row, seeded from the event cap (must match
+-- shared/eventConfig.js seatCapacity)
 -- ---------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS event_seat_capacity (
-  event_id        BIGINT PRIMARY KEY
-                    REFERENCES events (id) ON DELETE CASCADE,
-  confirmed_count INTEGER NOT NULL DEFAULT 0,
-  cap             INTEGER NOT NULL,
+-- A database that still has the per-event compatibility view must lose it
+-- before the single counter table can take the name. Migration 004 drops the
+-- rest of the multi-event structures on that same deploy. The per-event cap is
+-- not carried over: the row starts at the default 150 seats and is raised if
+-- more seats are already confirmed.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class WHERE relname = 'seat_capacity' AND relkind = 'v'
+  ) THEN
+    DROP VIEW seat_capacity;
+  END IF;
+END $$;
 
-  CONSTRAINT event_seat_capacity_within_cap_chk
-    CHECK (confirmed_count BETWEEN 0 AND cap)
+CREATE TABLE IF NOT EXISTS seat_capacity (
+  id              SMALLINT PRIMARY KEY DEFAULT 1,
+  confirmed_count INTEGER NOT NULL DEFAULT 0,
+  cap             INTEGER NOT NULL DEFAULT 150,
+
+  CONSTRAINT seat_capacity_single_row_chk CHECK (id = 1),
+  CONSTRAINT seat_capacity_within_cap_chk CHECK (confirmed_count BETWEEN 0 AND cap)
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_seat_capacity_cap
-  ON event_seat_capacity (event_id, cap);
+-- seed the single counter row. ON CONFLICT keeps re-runs non-destructive:
+-- it must never reset confirmed_count on an existing deployment.
+INSERT INTO seat_capacity (id, confirmed_count, cap) VALUES (1, 0, 150)
+  ON CONFLICT (id) DO NOTHING;
 
--- The old single-event counter is replaced by event_seat_capacity. Migration
--- 003 copies its values into the first event before dropping it, and leaves a
--- read/update compatibility view named seat_capacity for existing tooling.
-
--- keep each event's counter in sync whenever a booking changes event or status.
--- Application code still locks the event's capacity row with FOR UPDATE before
--- deciding to confirm a new booking (see concurrency note at top of file).
-CREATE OR REPLACE FUNCTION sync_event_seat_capacity()
+-- keep the counter in sync automatically whenever a booking's status
+-- transitions into or out of 'confirmed' (application still must lock
+-- this row with FOR UPDATE before deciding to confirm a new booking --
+-- see concurrency note at top of file)
+CREATE OR REPLACE FUNCTION sync_seat_capacity()
 RETURNS TRIGGER AS $$
-DECLARE
-  target_event_id BIGINT;
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    target_event_id := OLD.event_id;
-  ELSE
-    target_event_id := NEW.event_id;
-  END IF;
-
-  IF target_event_id IS NULL THEN
-    RETURN NULL;
-  END IF;
-
   IF TG_OP = 'INSERT' THEN
     IF NEW.status = 'confirmed' THEN
-      UPDATE event_seat_capacity
-         SET confirmed_count = confirmed_count + 1
-       WHERE event_id = target_event_id;
+      UPDATE seat_capacity SET confirmed_count = confirmed_count + 1 WHERE id = 1;
     END IF;
   ELSIF TG_OP = 'UPDATE' THEN
-    IF OLD.event_id IS DISTINCT FROM NEW.event_id THEN
-      IF OLD.status = 'confirmed' THEN
-        UPDATE event_seat_capacity
-           SET confirmed_count = GREATEST(confirmed_count - 1, 0)
-         WHERE event_id = OLD.event_id;
-      END IF;
-      IF NEW.status = 'confirmed' THEN
-        UPDATE event_seat_capacity
-           SET confirmed_count = confirmed_count + 1
-         WHERE event_id = NEW.event_id;
-      END IF;
-    ELSIF OLD.status <> 'confirmed' AND NEW.status = 'confirmed' THEN
-      UPDATE event_seat_capacity
-         SET confirmed_count = confirmed_count + 1
-       WHERE event_id = target_event_id;
+    IF OLD.status <> 'confirmed' AND NEW.status = 'confirmed' THEN
+      UPDATE seat_capacity SET confirmed_count = confirmed_count + 1 WHERE id = 1;
     ELSIF OLD.status = 'confirmed' AND NEW.status <> 'confirmed' THEN
-      UPDATE event_seat_capacity
-         SET confirmed_count = GREATEST(confirmed_count - 1, 0)
-       WHERE event_id = target_event_id;
+      UPDATE seat_capacity SET confirmed_count = confirmed_count - 1 WHERE id = 1;
     END IF;
   ELSIF TG_OP = 'DELETE' THEN
     IF OLD.status = 'confirmed' THEN
-      UPDATE event_seat_capacity
-         SET confirmed_count = GREATEST(confirmed_count - 1, 0)
-       WHERE event_id = target_event_id;
+      UPDATE seat_capacity SET confirmed_count = confirmed_count - 1 WHERE id = 1;
     END IF;
   END IF;
-
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_sync_seat_capacity ON bookings;
-DROP FUNCTION IF EXISTS sync_seat_capacity();
-
-CREATE OR REPLACE TRIGGER trg_sync_event_seat_capacity
-  AFTER INSERT OR UPDATE OF status, event_id OR DELETE ON bookings
+CREATE OR REPLACE TRIGGER trg_sync_seat_capacity
+  AFTER INSERT OR UPDATE OR DELETE ON bookings
   FOR EACH ROW
-  EXECUTE FUNCTION sync_event_seat_capacity();
+  EXECUTE FUNCTION sync_seat_capacity();
 
 -- ---------------------------------------------------------------------
 -- USDT BEP20 deposit collection (per-order HD derived addresses)
@@ -1159,29 +1074,39 @@ END $$;
 
 -- ---------------------------------------------------------------------
 -- Derived counter reconciliation.
---   event_seat_capacity.confirmed_count is derived state, not the truth. The
---   truth is the bookings table. A trigger can be missing entirely (recreating
---   a status enum drops it, because the trigger function depends on the type)
+--   seat_capacity.confirmed_count is derived state, not the truth. The truth
+--   is the bookings table. A trigger can be missing entirely (recreating a
+--   status enum drops it, because the trigger function depends on the type)
 --   and once it is gone every insert, update and delete stops being counted,
 --   so the counter silently drifts. Drift is expensive in both directions:
 --   seats are withheld from sale for bookings that do not exist, or sold past
 --   the cap.
 --
---   Recompute per event rather than nudge by one, and only write when the
---   stored value actually disagrees, so a correct deployment is left untouched.
+--   Recompute rather than nudge by one, and only write when the stored value
+--   actually disagrees, so a correct deployment is left untouched.
 -- ---------------------------------------------------------------------
 
-DO $$ BEGIN
-  UPDATE event_seat_capacity
-     SET confirmed_count = actual_counts.confirmed_count
-    FROM (
-      SELECT event_id, COUNT(*)::INT AS confirmed_count
-        FROM bookings
-       WHERE status = 'confirmed'
-       GROUP BY event_id
-    ) AS actual_counts
-   WHERE event_seat_capacity.event_id = actual_counts.event_id
-     AND event_seat_capacity.confirmed_count IS DISTINCT FROM actual_counts.confirmed_count;
+DO $$ DECLARE
+  actual_confirmed_count INTEGER;
+  stored_confirmed_count INTEGER;
+BEGIN
+  SELECT count(*) INTO actual_confirmed_count
+    FROM bookings WHERE status = 'confirmed';
+
+  SELECT confirmed_count INTO stored_confirmed_count
+    FROM seat_capacity WHERE id = 1;
+
+  -- A database reverted from the per-event counter merges every event's
+  -- confirmed seats into this one row, so the cap must be able to hold them.
+  UPDATE seat_capacity
+     SET cap = actual_confirmed_count
+   WHERE id = 1 AND cap < actual_confirmed_count;
+
+  IF stored_confirmed_count IS DISTINCT FROM actual_confirmed_count THEN
+    UPDATE seat_capacity
+       SET confirmed_count = actual_confirmed_count
+     WHERE id = 1;
+  END IF;
 END $$;
 
 -- ---------------------------------------------------------------------

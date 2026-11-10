@@ -33,10 +33,6 @@ import {
 } from '../services/appsScriptWebhookClientService.js';
 
 import { BookingNotFoundError, SoldOutError } from '../services/bookingService.js';
-import {
-  EventNotFoundError,
-  EventNotOpenForBookingError,
-} from '../services/eventRegistryService.js';
 
 import { sendCsvFileDownloadResponse } from '../utils/csvDownloadResponse.js';
 
@@ -45,8 +41,6 @@ import {
   soldOutResponse,
   bookingNotFoundResponse,
   adminBookingStatusInvalidResponse,
-  eventNotOpenForBookingResponse,
-  eventNotFoundResponse,
 } from '../utils/responseHelpers.js';
 
 async function fetchAdminSummaryReport(req, res) {
@@ -59,27 +53,12 @@ async function fetchAdminSummaryReport(req, res) {
   }
 }
 
-function readAdminRequestEventSlug(req) {
-  const queryEventSlug = typeof req.query?.event === 'string' ? req.query.event.trim() : '';
-  if (queryEventSlug) {
-    return queryEventSlug;
-  }
-
-  const bodyEventSlug = typeof req.body?.event === 'string' ? req.body.event.trim() : '';
-  return bodyEventSlug || null;
-}
-
 async function fetchAdminBookingListEndpoint(req, res) {
   const { status: statusFilter, q: searchQuery } = req.query;
-  const eventSlug = readAdminRequestEventSlug(req);
 
   try {
-    const bookingRows = await fetchAdminBookingList({
-      statusFilter,
-      searchQuery,
-      eventSlug,
-    });
-    const statusCounts = await fetchBookingStatusCounts(eventSlug);
+    const bookingRows = await fetchAdminBookingList({ statusFilter, searchQuery });
+    const statusCounts = await fetchBookingStatusCounts();
     return res.status(200).json({ bookings: bookingRows, counts: statusCounts });
   } catch (error) {
     console.error('Error fetching admin booking list', error);
@@ -89,14 +68,9 @@ async function fetchAdminBookingListEndpoint(req, res) {
 
 async function exportAdminBookingListAsCsvEndpoint(req, res) {
   const { status: statusFilter, q: searchQuery } = req.query;
-  const eventSlug = readAdminRequestEventSlug(req);
 
   try {
-    const bookingRows = await fetchAdminBookingList({
-      statusFilter,
-      searchQuery,
-      eventSlug,
-    });
+    const bookingRows = await fetchAdminBookingList({ statusFilter, searchQuery });
     const csvDownloadFileName = buildCsvExportFileName(
       statusFilter ? `bookings-${statusFilter}` : 'bookings'
     );
@@ -130,14 +104,7 @@ async function fetchAdminBookingDetailEndpoint(req, res) {
 async function createAdminBookingEndpoint(req, res) {
   // A request that arrives without a parsed JSON body must answer 400, not
   // crash on destructuring undefined.
-  const {
-    autoConfirm = false,
-    event: bodyEventSlug,
-    ...attendeeDetails
-  } = req.body ?? {};
-  const eventReference =
-    (typeof bodyEventSlug === 'string' && bodyEventSlug.trim()) ||
-    readAdminRequestEventSlug(req);
+  const { autoConfirm = false, ...attendeeDetails } = req.body ?? {};
 
   const { error: validationError, value: validatedAttendeeDetails } =
     adminBookingCreationSchema.validate(attendeeDetails);
@@ -151,18 +118,9 @@ async function createAdminBookingEndpoint(req, res) {
   try {
     const createdBooking = await createAdminBookingRecord(validatedAttendeeDetails, {
       autoConfirm: Boolean(autoConfirm),
-      eventReference,
     });
     return res.status(201).json({ booking: createdBooking });
   } catch (error) {
-    if (error instanceof EventNotFoundError) {
-      return res.status(404).json(eventNotFoundResponse());
-    }
-    if (error instanceof EventNotOpenForBookingError) {
-      return res
-        .status(409)
-        .json(eventNotOpenForBookingResponse(error.eventSlug, error.eventStatus));
-    }
     if (error.code === 'SOLD_OUT') {
       return res.status(400).json(soldOutResponse(0));
     }

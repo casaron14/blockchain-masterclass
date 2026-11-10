@@ -19,19 +19,19 @@ const EVENT_SECTION_LINKS = [
 export default function Header() {
   const { t } = useLanguage();
   const { eventConfig, isLoadingEvent } = useEvent();
-  const { name, dateLabel, slug } = eventConfig;
+  const { name, dateLabel } = eventConfig;
 
   return (
     <header className="site-header" aria-busy={isLoadingEvent || undefined}>
       <div className="site-header__inner shell">
-        <Link href={buildEventHomeUrl(slug)} className="site-wordmark">
+        <Link href={buildEventHomeUrl()} className="site-wordmark">
           <span className="site-wordmark__institution">DienAcademy</span>
           <span className="site-wordmark__event">{name}</span>
         </Link>
 
         <nav className="site-nav" aria-label="Main">
           {EVENT_SECTION_LINKS.map(({ sectionId, labelKey }) => (
-            <Link key={sectionId} href={buildEventHomeSectionUrlForSectionId(sectionId, slug)} className="site-nav__link">
+            <Link key={sectionId} href={buildEventHomeSectionUrlForSectionId(sectionId)} className="site-nav__link">
               {t(labelKey)}
             </Link>
           ))}
@@ -40,7 +40,7 @@ export default function Header() {
         <div className="site-header__actions">
           <span className="site-header__dateline">{dateLabel}</span>
           <LanguageSwitcher />
-          <Link href={buildBookingPageUrl(slug)} className="button button--paper site-header__cta">
+          <Link href={buildBookingPageUrl()} className="button button--paper site-header__cta">
             {t('app.bookNow')}
           </Link>
         </div>

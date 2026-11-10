@@ -9,7 +9,7 @@
     "start": "NODE_ENV=production node server.js",
     "local:setup": "bash local-dev/setupLocalChain.sh",
     "local:pay": "node local-dev/simulateUsdtPayment.mjs",
-    "test": "TEST_DATABASE_NAME=masterclass_test DB_DATABASE=masterclass_test node scripts/prepareTestDatabaseEventLifecycle.js && TEST_DATABASE_NAME=masterclass_test DB_DATABASE=masterclass_test USDT_CONTRACT_ADDRESS=0x55d398326f99059fF775485246999027B3197955 TREASURY_WALLET_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8 npm run test:isolated",
+    "test": "TEST_DATABASE_NAME=masterclass_test DB_DATABASE=masterclass_test USDT_CONTRACT_ADDRESS=0x55d398326f99059fF775485246999027B3197955 TREASURY_WALLET_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8 npm run test:isolated",
     "test:isolated": "node --test --test-concurrency=1 --test-force-exit 'tests/**/*.test.js'",
     "test:ticket-email": "node scripts/sendDevelopmentTestTicketEmail.js",
     "db:migrate": "node scripts/runDatabaseMigrations.js",

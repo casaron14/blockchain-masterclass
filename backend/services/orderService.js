@@ -2,16 +2,7 @@ import pool from '../config/db.js';
 
 import { deriveDepositAddressForDerivationIndex } from './depositAddressDerivationService.js';
 
-import {
-  PAYMENT_METHOD_USDT_BEP20,
-  SEAT_HOLD_DURATION_MINUTES,
-} from './eventConfigService.js';
-
-import { fetchBookingRecordById } from './bookingService.js';
-import {
-  resolveEventSnapshotForBookingRecord,
-  resolveExpectedAmountForPaymentMethodFromEventSnapshot,
-} from './eventSnapshotService.js';
+import { SEAT_HOLD_DURATION_MINUTES, TICKET_PRICE_USDT } from './eventConfigService.js';
 
 export const ORDER_STATUS_VALUES = Object.freeze(['pending', 'paid', 'expired', 'swept']);
 export const ORDER_DEFAULT_EXPIRY_MINUTES = SEAT_HOLD_DURATION_MINUTES;
@@ -92,16 +83,9 @@ export async function createOrderWithDepositAddressForBooking(
   orderExpiryMinutes = ORDER_DEFAULT_EXPIRY_MINUTES,
   expectedAmountUsdt = null
 ) {
-  let orderAmountUsdt = expectedAmountUsdt;
-
-  if (orderAmountUsdt === null || orderAmountUsdt === undefined) {
-    const bookingRecord = await fetchBookingRecordById(bookingId);
-    const eventSnapshot = resolveEventSnapshotForBookingRecord(bookingRecord);
-    orderAmountUsdt = resolveExpectedAmountForPaymentMethodFromEventSnapshot(
-      PAYMENT_METHOD_USDT_BEP20,
-      eventSnapshot
-    );
-  }
+  // The caller may already know the amount from the payment record; otherwise
+  // the single configured ticket price applies.
+  const orderAmountUsdt = expectedAmountUsdt ?? TICKET_PRICE_USDT;
 
   const client = await pool.connect();
   try {

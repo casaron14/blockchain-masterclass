@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   triggerTicketPdfDownload,
   uploadLipaNambaPaymentReceipt,
@@ -32,7 +32,7 @@ const TERMINAL_PAYMENT_STATUSES = ['confirmed', 'failed', 'expired'];
 
 export default function PaymentConfirmationFlow({ paymentId }) {
   const { t } = useLanguage();
-  const { eventConfig, applyEventConfigurationSnapshot } = useEvent();
+  const { eventConfig } = useEvent();
   const { slug, currency, ticketPrice, cryptoCurrency, cryptoNetwork } = eventConfig;
 
   const {
@@ -42,10 +42,6 @@ export default function PaymentConfirmationFlow({ paymentId }) {
     refreshPaymentOverview,
     refreshBookingRecord,
   } = usePaymentOverviewPolling({ paymentId, eventSlug: slug });
-
-  useEffect(() => {
-    applyEventConfigurationSnapshot(bookingRecord?.event_snapshot);
-  }, [bookingRecord, applyEventConfigurationSnapshot]);
 
   const [selectedReceiptFile, setSelectedReceiptFile] = useState(null);
   const [receiptUploadError, setReceiptUploadError] = useState(null);
@@ -311,13 +307,13 @@ export default function PaymentConfirmationFlow({ paymentId }) {
 
       <div className="payment-next-step">
         <Link
-          href={buildPaymentPageUrlForPaymentId(paymentId, slug)}
+          href={buildPaymentPageUrlForPaymentId(paymentId)}
           className="btn btn-secondary"
         >
           {t('payment.backToPaymentInstructions')}
         </Link>
         {isPaymentStatusTerminal && !isPaymentConfirmed && (
-          <Link href={buildBookingPageUrl(slug)} className="btn btn-secondary">
+          <Link href={buildBookingPageUrl()} className="btn btn-secondary">
             {t('payment.bookAgain')}
           </Link>
         )}

@@ -95,22 +95,12 @@ export function clearStoredBookingDraft(eventSlug) {
 
 const ATTENDEE_PROFILE_STORAGE_KEY = 'attendeeProfile';
 
-function buildAttendeeProfileKey(eventSlug) {
-  const normalizedEventSlug = String(eventSlug ?? '').trim();
-  return normalizedEventSlug
-    ? `${ATTENDEE_PROFILE_STORAGE_KEY}:${normalizedEventSlug}`
-    : ATTENDEE_PROFILE_STORAGE_KEY;
+export function storeAttendeeProfileLocally(attendeeProfile) {
+  writeLocalStorageValue(ATTENDEE_PROFILE_STORAGE_KEY, JSON.stringify(attendeeProfile));
 }
 
-export function storeAttendeeProfileLocally(attendeeProfile, eventSlug = null) {
-  writeLocalStorageValue(
-    buildAttendeeProfileKey(eventSlug),
-    JSON.stringify(attendeeProfile)
-  );
-}
-
-export function fetchStoredAttendeeProfile(eventSlug = null) {
-  const rawValue = readLocalStorageValue(buildAttendeeProfileKey(eventSlug));
+export function fetchStoredAttendeeProfile() {
+  const rawValue = readLocalStorageValue(ATTENDEE_PROFILE_STORAGE_KEY);
   if (!rawValue) {
     return null;
   }
@@ -121,6 +111,6 @@ export function fetchStoredAttendeeProfile(eventSlug = null) {
   }
 }
 
-export function clearStoredAttendeeProfile(eventSlug = null) {
-  removeLocalStorageValue(buildAttendeeProfileKey(eventSlug));
+export function clearStoredAttendeeProfile() {
+  removeLocalStorageValue(ATTENDEE_PROFILE_STORAGE_KEY);
 }

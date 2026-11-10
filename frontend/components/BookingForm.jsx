@@ -84,7 +84,7 @@ export default function BookingForm() {
       return;
     }
 
-    const storedAttendeeProfile = fetchStoredAttendeeProfile(slug);
+    const storedAttendeeProfile = fetchStoredAttendeeProfile();
     if (storedAttendeeProfile) {
       setAttendeeDetails({
         full_name: sanitizeAttendeeFieldValue('full_name', storedAttendeeProfile.full_name),
@@ -137,7 +137,7 @@ export default function BookingForm() {
         (profileValue) => profileValue !== '' && profileValue !== null
       )
     ) {
-      storeAttendeeProfileLocally(nextAttendeeProfile, slug);
+      storeAttendeeProfileLocally(nextAttendeeProfile);
     }
   }
 
@@ -241,11 +241,9 @@ export default function BookingForm() {
 
       storePaymentIdLocally(slug, createdPaymentResult.payment.id);
       clearStoredBookingDraft(slug);
-      storeAttendeeProfileLocally(sanitizedAttendeePayload, slug);
+      storeAttendeeProfileLocally(sanitizedAttendeePayload);
 
-      router.push(
-        buildPaymentPageUrlForPaymentId(createdPaymentResult.payment.id, slug)
-      );
+      router.push(buildPaymentPageUrlForPaymentId(createdPaymentResult.payment.id));
     } catch (error) {
       if (isTurnstileEnabled()) {
         turnstileWidgetRef.current?.resetChallengeWidget();
@@ -288,9 +286,7 @@ export default function BookingForm() {
               type="button"
               className="btn btn-primary"
               spinnerColor="#f2ede3"
-              onClick={() =>
-                router.push(buildPaymentPageUrlForPaymentId(activePaymentId, slug))
-              }
+              onClick={() => router.push(buildPaymentPageUrlForPaymentId(activePaymentId))}
             >
               {t('booking.resumePayment')}
             </LoadingButton>
