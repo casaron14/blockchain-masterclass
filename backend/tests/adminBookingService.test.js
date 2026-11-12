@@ -14,7 +14,7 @@ import {
   InvalidAdminBookingStatusError,
 } from '../services/adminBookingService.js';
 
-import { createPendingPaymentRecordForBooking } from '../services/paymentService.js';
+import { createPendingPaymentRecordForBooking, fetchPaymentRecordByBookingId } from '../services/paymentService.js';
 
 import {
   fetchOfflinePaymentReceiptByPaymentId,
@@ -89,14 +89,70 @@ test('updateAdminBookingRecord confirms a booking through the capacity gate', as
     phone_number: '+255712345699',
   });
 
-  const updatedBooking = await updateAdminBookingRecord(createdBooking.id, {
-    status: 'confirmed',
-  });
+  const updatedBooking = await updateAdminBookingRecord(
+    createdBooking.id,
+    { status: 'confirmed' },
+    stubTicketDeliverySucceeds
+  );
 
   assert.equal(updatedBooking.status, 'confirmed');
 
   const availabilitySnapshot = await fetchEventAvailabilitySnapshot();
   assert.equal(availabilitySnapshot.confirmedCount, 1);
+});
+
+test('updateAdminBookingRecord settles the payment when the status is set to confirmed', async () => {
+  const createdBooking = await createAdminBookingRecord({
+    full_name: 'Paid By Status',
+    email: 'paidbystatus@example.com',
+    phone_number: '+255712345699',
+  });
+  const paymentRecord = await createPendingPaymentRecordForBooking(
+    createdBooking.id,
+    'lipanamba'
+  );
+
+  const updatedBooking = await updateAdminBookingRecord(
+    createdBooking.id,
+    { status: 'confirmed' },
+    stubTicketDeliverySucceeds
+  );
+
+  assert.equal(updatedBooking.status, 'confirmed');
+
+  const confirmedPayment = await fetchPaymentRecordByBookingId(createdBooking.id);
+  assert.equal(confirmedPayment.id, paymentRecord.id);
+  assert.equal(confirmedPayment.status, 'confirmed');
+  assert.ok(confirmedPayment.confirmed_at);
+});
+
+test('updateAdminBookingRecord refuses to move a confirmed booking back to pending', async () => {
+  const createdBooking = await createAdminBookingRecord({
+    full_name: 'Paid Seat',
+    email: 'paidseat@example.com',
+    phone_number: '+255712345699',
+  });
+  await createPendingPaymentRecordForBooking(createdBooking.id, 'lipanamba');
+  await updateAdminBookingRecord(
+    createdBooking.id,
+    { status: 'confirmed' },
+    stubTicketDeliverySucceeds
+  );
+
+  await assert.rejects(
+    () =>
+      updateAdminBookingRecord(
+        createdBooking.id,
+        { status: 'pending' },
+        stubTicketDeliverySucceeds
+      ),
+    (error) => error.code === 'BOOKING_STATUS_TRANSITION_NOT_ALLOWED'
+  );
+
+  const refreshedBooking = await pool.query('SELECT status FROM bookings WHERE id = $1', [
+    createdBooking.id,
+  ]);
+  assert.equal(refreshedBooking.rows[0].status, 'confirmed');
 });
 
 test('updateAdminBookingRecord rejects an invalid status value', async () => {
@@ -221,7 +277,11 @@ test('confirmAdminBookingRecord records the payment when the booking was already
     phone_number: '+255712345710',
   });
   await createPendingPaymentRecordForBooking(createdBooking.id, 'lipanamba');
-  await updateAdminBookingRecord(createdBooking.id, { status: 'confirmed' });
+  // Simulate a booking confirmed before the payment and seat were tied
+  // together: a confirmed seat with a still-pending payment.
+  await pool.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [
+    createdBooking.id,
+  ]);
 
   let deliveredBookingId = null;
   const confirmationResult = await confirmAdminBookingRecord(

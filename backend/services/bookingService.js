@@ -3,6 +3,11 @@ import crypto from 'node:crypto';
 
 import { SEAT_HOLD_DURATION_MINUTES, OFFLINE_PAYMENT_REVIEW_HOLD_MINUTES } from './eventConfigService.js';
 
+import {
+  assertBookingStatusTransitionAllowed,
+  BookingStatusTransitionError,
+} from './bookingPaymentLifecycleRules.js';
+
 export const BOOKING_HOLD_DURATION_MINUTES = SEAT_HOLD_DURATION_MINUTES;
 export const SEAT_CAPACITY_ROW_ID = 1;
 
@@ -186,16 +191,37 @@ export async function fetchBookingRecordsByAttendeeNameFragment(attendeeNameFrag
   return result.rows;
 }
 
+// Every booking status change goes through here, so the allowed moves live in
+// one place. A raw setter used to let an admin edit a paid booking back to
+// "pending", which released the seat without any refund record.
 export async function updateBookingStatus(bookingId, newBookingStatus) {
-  const result = await pool.query(
-    'UPDATE bookings SET status = $1 WHERE id = $2 RETURNING *',
-    [newBookingStatus, bookingId]
-  );
-  return result.rows[0] ?? null;
-}
+  const currentBookingRecord = await fetchBookingRecordById(bookingId);
+  if (!currentBookingRecord) {
+    throw new BookingNotFoundError(bookingId);
+  }
 
-export async function markBookingAsExpired(bookingId) {
-  return updateBookingStatus(bookingId, 'expired');
+  if (currentBookingRecord.status === newBookingStatus) {
+    return currentBookingRecord;
+  }
+
+  assertBookingStatusTransitionAllowed(currentBookingRecord.status, newBookingStatus);
+
+  const result = await pool.query(
+    `UPDATE bookings
+        SET status = $1, updated_at = now()
+      WHERE id = $2 AND status = $3
+      RETURNING *`,
+    [newBookingStatus, bookingId, currentBookingRecord.status]
+  );
+
+  if (!result.rows[0]) {
+    throw new BookingStatusTransitionError(
+      currentBookingRecord.status,
+      newBookingStatus
+    );
+  }
+
+  return result.rows[0];
 }
 
 export async function expireAllExpiredSeatHolds() {

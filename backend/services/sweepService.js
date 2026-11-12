@@ -10,6 +10,7 @@ import {
 } from './usdtPaymentService.js';
 
 import {
+  buildUnsignedGasFundingTransactionForDepositAddress,
   createGasWalletSigner,
   fetchUsdtBalanceAtDepositAddress,
   fetchBnbBalanceAtDepositAddress,
@@ -19,6 +20,7 @@ import {
   getSweepMinThresholdUsdt,
   getSweepGasPriceBumpPercent,
   getSweepMaxRetries,
+  resolveGasWalletAddress,
 } from './gasWalletService.js';
 
 import { signSerializedTransactionWithDerivedKey } from './signingService.js';
@@ -787,13 +789,19 @@ export const SWEEP_PREPARATION_READY_FOR_SIGNING = 'SWEEP_PREPARATION_READY_FOR_
 
 /**
  * The shared first half of a collection: recover or abandon a previous
- * unfinished sweep, check readiness, create the sweep row, and fund the
- * deposit address with BNB.
+ * unfinished sweep, check readiness, create the sweep row, and arrange the BNB
+ * that pays for the USDT transfer.
  *
- * Funding does not need the deposit seed (the gas wallet is a separate hot
- * key), so it stays on the server even when signing happens offline. Both the
- * in-process path and the offline prepare/sign/submit path call this, which
- * keeps the balance, budget and recovery rules in one place.
+ * Two funding modes exist:
+ *   * `unsignedGasFundingOnly: true` (the offline batch) builds an unsigned BNB
+ *     transfer from the gas wallet. Nothing is signed or broadcast here, so the
+ *     gas wallet key can stay off the web host.
+ *   * otherwise the funding is broadcast with the in-process gas wallet signer.
+ *     This path is development/tests only, and production startup refuses it.
+ *
+ * The sweep row is marked funded in both modes, because the funding is fully
+ * decided at this point: the gas budget must count it, and the recovery pass
+ * must treat the order as in flight.
  */
 export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {}) {
   const {
@@ -811,6 +819,8 @@ export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {
     maxRetries = getSweepMaxRetries(),
     gasPriceBumpPercent = getSweepGasPriceBumpPercent(),
     triggeredBy = 'scheduled',
+    unsignedGasFundingOnly = false,
+    gasWalletFundingNonce = null,
     now = new Date(),
   } = dependencies;
 
@@ -839,8 +849,6 @@ export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {
       'Sweep transaction was never broadcast; a new attempt replaced it'
     );
   }
-
-  const resolvedGasWalletSigner = await createSweepGasWalletSigner(provider, dependencies);
 
   const depositAddress = orderRow.deposit_address;
   const derivationIndex = orderRow.derivation_index;
@@ -887,6 +895,7 @@ export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {
   }
 
   let bnbFundedWei = 0n;
+  let unsignedGasFunding = null;
   if (bnbBalanceWei < sweepFeeWei) {
     bnbFundedWei = sweepFeeWei - bnbBalanceWei;
 
@@ -907,7 +916,24 @@ export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {
       throw new GasSponsorshipLimitExceededError(refusalMessage, sponsorshipDecision);
     }
 
-    await fundDepositAddress(depositAddress, bnbFundedWei, resolvedGasWalletSigner);
+    if (unsignedGasFundingOnly) {
+      const gasWalletAddress = resolveGasWalletAddress();
+      const fundingNonce = gasWalletFundingNonce
+        ?? await provider.getTransactionCount(gasWalletAddress, 'pending');
+      unsignedGasFunding = buildUnsignedGasFundingTransactionForDepositAddress({
+        depositAddress,
+        amountWei: bnbFundedWei,
+        nonce: fundingNonce,
+        gasPriceWei: currentGasPriceWei,
+        chainId: await resolveSweepChainId(provider),
+      });
+    } else {
+      const resolvedGasWalletSigner = await createSweepGasWalletSigner(
+        provider,
+        dependencies
+      );
+      await fundDepositAddress(depositAddress, bnbFundedWei, resolvedGasWalletSigner);
+    }
   }
   await markSweepAsFunded(sweepRecord.id, bnbFundedWei);
 
@@ -918,6 +944,7 @@ export async function prepareSweepRecordWithFundedGas(orderRow, dependencies = {
     derivationIndex,
     usdtBalanceWei,
     bnbFundedWei,
+    unsignedGasFunding,
     gasLimit,
     baseGasPriceWei: currentGasPriceWei,
     maxRetries,

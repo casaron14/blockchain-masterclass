@@ -1,8 +1,10 @@
 // RPC endpoint selection for the backend.
 //
 // The payment listener reads the token contract with standard eth_getLogs, so
-// it must not depend on a provider-specific indexing API: no Alchemy key is
-// required to run this project.
+// it can run against any node that serves that call. Alchemy is the preferred
+// endpoint when a key is configured (the same key powers the deposit webhook);
+// the public nodes below stay as fallbacks because an Alchemy outage or an
+// exhausted free-tier quota must not stall deposit detection.
 //
 // Only endpoints that actually serve a RECENT eth_getLogs range for the real
 // USDT contract are listed. Each entry below was probed against a 50-block
@@ -104,13 +106,20 @@ export function resolveAlchemyBscRpcUrl() {
   if (!alchemyApiKey) {
     throw new Error('ALCHEMY_API_KEY is not configured');
   }
-  const alchemyNetwork = process.env.ALCHEMY_NETWORK || 'bnb-mainnet';
+  const alchemyNetwork = process.env.ALCHEMY_NETWORK
+    || (isConfiguredForTestnet() ? 'bnb-testnet' : 'bnb-mainnet');
   return `https://${alchemyNetwork}.g.alchemy.com/v2/${alchemyApiKey}`;
 }
 
 export function resolveBscRpcUrl() {
   if (process.env.BSC_RPC_URL) {
     return process.env.BSC_RPC_URL;
+  }
+  // Alchemy first when configured, so the listener and the deposit webhook see
+  // the same provider view of the chain. Public nodes remain in the fallback
+  // list below.
+  if (process.env.ALCHEMY_RPC_URL || process.env.ALCHEMY_API_KEY) {
+    return resolveAlchemyBscRpcUrl();
   }
   const defaultUrls = isConfiguredForTestnet()
     ? DEFAULT_PUBLIC_BSC_TESTNET_RPC_URLS

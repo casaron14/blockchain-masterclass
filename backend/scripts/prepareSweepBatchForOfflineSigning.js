@@ -18,6 +18,12 @@ const skippedResults = preparedBatch.results.filter(
 
 console.log(`Batch ${preparedBatch.batchId}`);
 console.log(`Prepared ${preparedItemCount} order(s) for offline signing.`);
+const preparedGasFundingCount = preparedBatch.items.filter(
+  (batchItem) => batchItem.gasFunding
+).length;
+console.log(
+  `${preparedGasFundingCount} of them need a BNB funding transaction, also signed offline.`
+);
 if (skippedResults.length > 0) {
   console.log(`Skipped ${skippedResults.length} order(s):`);
   for (const skippedResult of skippedResults) {

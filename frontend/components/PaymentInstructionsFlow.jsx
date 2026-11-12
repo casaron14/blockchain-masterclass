@@ -10,13 +10,12 @@ import { useEvent } from '@/context/EventContext';
 import { SUPPORTED_PAYMENT_METHODS } from '@/lib/eventConfig';
 import { formatLocalPrice } from '@/lib/eventFormat';
 import { usePaymentOverviewPolling } from '@/lib/usePaymentOverviewPolling';
+import { isPaymentStatusTerminal } from '@/lib/paymentStatus';
 import { buildPaymentConfirmationPageUrlForPaymentId } from '@/lib/siteRoutes';
 import LoadingButton from '@/components/LoadingButton';
 import PaymentHoldCountdown from '@/components/PaymentHoldCountdown';
 import HairlineLoadingIndicator from '@/components/HairlineLoadingIndicator';
 import PaymentLoadingSkeleton from '@/components/PaymentLoadingSkeleton';
-
-const TERMINAL_PAYMENT_STATUSES = ['confirmed', 'failed', 'expired'];
 
 function CopyAddressIcon() {
   return (
@@ -190,7 +189,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
     router.push(buildPaymentConfirmationPageUrlForPaymentId(paymentId));
   }
 
-  const isPaymentStatusTerminal = TERMINAL_PAYMENT_STATUSES.includes(paymentStatusValue);
+  const paymentStatusIsTerminal = isPaymentStatusTerminal(paymentStatusValue);
 
   if (loadError) {
     return <p className="error-banner">{loadError}</p>;
@@ -202,7 +201,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
 
   const paymentMethod = paymentRecord.payment_method;
   const canContinueToPaymentConfirmation =
-    !isPaymentStatusTerminal &&
+    !paymentStatusIsTerminal &&
     (paymentMethod === SUPPORTED_PAYMENT_METHODS.lipanamba ||
       paymentMethod === SUPPORTED_PAYMENT_METHODS.usdt_bep20);
 

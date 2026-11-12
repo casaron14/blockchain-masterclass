@@ -1,4 +1,4 @@
-import { fetchGasWalletBnbBalance, createGasWalletSigner } from '../services/gasWalletService.js';
+import { fetchGasWalletBnbBalance } from '../services/gasWalletService.js';
 import { sendTelegramAlertMessage } from '../services/telegramAlertService.js';
 
 export function resolveGasWalletLowBalanceThresholdEth() {
@@ -14,8 +14,7 @@ export async function runGasWalletMonitorJob({
 
   let gasWalletBnbBalanceEth;
   try {
-    const gasWalletSigner = createGasWalletSigner(provider);
-    const balanceWei = await fetchGasBalance(gasWalletSigner);
+    const balanceWei = await fetchGasBalance(provider);
     gasWalletBnbBalanceEth = Number(balanceWei) / 10 ** 18;
   } catch (error) {
     await alertOnLowBalance(`Gas wallet balance check failed: ${error.message}`).catch(() => {});

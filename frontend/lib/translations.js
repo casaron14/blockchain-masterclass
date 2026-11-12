@@ -105,12 +105,16 @@ export const translations = {
         ]
       },
       agenda: {
-        title: 'Three focused learning moments',
-        intro: 'The day moves from first principles to a working action plan.',
+        title: 'One afternoon, from first principles to practice',
+        intro: 'Seven sessions covering blockchain fundamentals, token utility, security, and a live challenge with the presenters.',
         items: [
-          { step: '01', title: 'Foundations', description: 'Learn the building blocks of blockchain, wallets, networks, and how transactions work.' },
-          { step: '02', title: 'Use cases', description: 'Explore the most relevant business and product opportunities shaping modern digital systems.' },
-          { step: '03', title: 'Action plan', description: 'Leave with a clear understanding of how to evaluate, prototype, and adopt blockchain tools responsibly.' }
+          { time: '2:40–3:10 PM · 30 min', speaker: 'Trizy Magno', title: 'Understanding blockchain', description: 'What blockchain is and is not, how shared records, transparency and verification work, and why blockchain and cryptocurrency are two different concepts.' },
+          { time: '3:10–3:30 PM · 20 min', speaker: 'Trizy Magno', title: 'Exploring opportunities through crypto', description: 'Digital tokens and their common functions, staking and blockchain-based economic participation. Not every blockchain application needs a token, and access does not guarantee profit.' },
+          { time: '3:30–4:10 PM · 40 min', speaker: 'Trizy Magno', title: 'Case study: the INKRYPTUS ecosystem', description: 'The vision behind INKRYPTUS, the wallet ecosystem, the INKY token and how staking and participation work. Token utility does not guarantee investment returns.' },
+          { time: '4:10–4:40 PM · 30 min', speaker: 'Charity Aron', title: 'Security and responsibility', description: 'Custodial and non-custodial wallets, private keys and recovery phrases, phishing and fake apps, device hygiene and transaction verification. Holding your own keys is not automatically safer.' },
+          { time: '4:40–5:00 PM · Q&A', speaker: 'Father Mo', title: 'Open question and answer', description: 'Questions on blockchain, cryptocurrency, the INKRYPTUS ecosystem and digital asset security, moderated by Father Mo.' },
+          { time: '5:00–5:20 PM · Challenge', speaker: 'Charity Aron & Trizy Magno', title: 'Audience challenge and giveaways', description: 'A friendly quiz built from the sessions, with giveaways for participants.' },
+          { time: '5:20–5:30 PM · Closing', speaker: 'Father Mo & presenters', title: 'Closing and group photo', description: 'Final reflections with Father Mo and the presenters, and a group photograph to mark the end of the masterclass.' }
         ]
       },
       stats: {
@@ -306,6 +310,8 @@ export const translations = {
         'We have seen a transfer of {amount} {crypto} and are waiting for it to settle.',
       confirmedTicketNote:
         'Your seat is confirmed. Download your ticket now, or check your inbox.',
+      ticketNotReadyYet:
+        'Your payment is confirmed. Your ticket appears here as soon as the seat is confirmed — refresh in a moment.',
       downloadTicket: 'Download your ticket',
       downloadTicketFailed: 'The ticket could not be downloaded. Please try again.',
       backToPaymentInstructions: 'Back to payment instructions',
@@ -317,6 +323,9 @@ export const translations = {
     },
     success: {
       title: 'Booking confirmed',
+      notConfirmedTitle: 'Booking not confirmed yet',
+      notConfirmedMessage:
+        'This booking is not confirmed. Open the booking lookup to check its status or continue payment.',
       checkGlyph: '✓',
       message: 'Your seat is secured and your ticket is being prepared.',
       reference: 'Booking reference',
@@ -460,12 +469,16 @@ export const translations = {
         ]
       },
       agenda: {
-        title: 'Mifano mitatu ya kujifunza kwa kina',
-        intro: 'Siku huanza na misingi na kuishia na mpango wa hatua wa kufanyia kazi.',
+        title: 'Mchana mmoja, kutoka misingi hadi vitendo',
+        intro: 'Vipindi saba vinavyohusu misingi ya blockchain, matumizi ya tokeni, usalama, na changamoto ya moja kwa moja na wawasilishaji.',
         items: [
-          { step: '01', title: 'Misingi', description: 'Jifunze misingi ya blockchain, pochi, mitandao, na jinsi miamala inavyofanya kazi.' },
-          { step: '02', title: 'Matumizi', description: 'Tambua fursa muhimu za biashara na bidhaa zinazobadilisha mifumo ya leo.' },
-          { step: '03', title: 'Mpango wa hatua', description: 'Ondoka na uelewa wa jinsi ya kutathmini, kuunda mfano, na kutumia blockchain kwa uwajibikaji.' }
+          { time: '2:40–3:10 PM · dakika 30', speaker: 'Trizy Magno', title: 'Kuelewa blockchain', description: 'Blockchain ni nini na si nini, jinsi kumbukumbu za pamoja, uwazi na uthibitishaji hufanya kazi, na kwa nini blockchain na cryptocurrency ni dhana mbili tofauti.' },
+          { time: '3:10–3:30 PM · dakika 20', speaker: 'Trizy Magno', title: 'Kuchunguza fursa kupitia crypto', description: 'Tokeni za kidijitali na kazi zake, staking na ushiriki wa kiuchumi kupitia blockchain. Si kila matumizi ya blockchain yanahitaji tokeni, na upatikanaji hauhakikishi faida.' },
+          { time: '3:30–4:10 PM · dakika 40', speaker: 'Trizy Magno', title: 'Uchunguzi wa kesi: mfumo wa INKRYPTUS', description: 'Dira ya INKRYPTUS, mfumo wa pochi, tokeni ya INKY na jinsi staking na ushiriki hufanya kazi. Matumizi ya tokeni hayahakikishi faida ya uwekezaji.' },
+          { time: '4:10–4:40 PM · dakika 30', speaker: 'Charity Aron', title: 'Usalama na uwajibikaji', description: 'Pochi zinazosimamiwa na zisizosimamiwa, funguo za faragha na maneno ya kurejesha, utapeli na programu za uongo, usafi wa kifaa na ukaguzi wa miamala. Kukaa na funguo zako si salama zaidi kiotomatiki.' },
+          { time: '4:40–5:00 PM · Maswali', speaker: 'Father Mo', title: 'Maswali na majibu ya wazi', description: 'Maswali kuhusu blockchain, cryptocurrency, mfumo wa INKRYPTUS na usalama wa mali za kidijitali, yakiongozwa na Father Mo.' },
+          { time: '5:00–5:20 PM · Changamoto', speaker: 'Charity Aron & Trizy Magno', title: 'Changamoto kwa hadhira na zawadi', description: 'Mashindano rafiki ya maswali kutoka kwa vipindi, pamoja na zawadi kwa washiriki.' },
+          { time: '5:20–5:30 PM · Kufunga', speaker: 'Father Mo & wawasilishaji', title: 'Kufunga na picha ya pamoja', description: 'Tafakari za mwisho pamoja na Father Mo na wawasilishaji, na picha ya pamoja kuadhimisha mwisho wa masterclass.' }
         ]
       },
       stats: {
@@ -662,6 +675,8 @@ export const translations = {
         'Tumeona uhamisho wa {amount} {crypto} na tunasubiri uthibitisho wake.',
       confirmedTicketNote:
         'Nafasi yako imethibitishwa. Pakua tikiti yako sasa, au angalia inbox yako.',
+      ticketNotReadyYet:
+        'Malipo yako yamethibitishwa. Tikiti yako itaonekana hapa mara nafasi inapothibitishwa — onyesha upya baada ya muda mfupi.',
       downloadTicket: 'Pakua tikiti yako',
       downloadTicketFailed: 'Tikiti haikuweza kupakuliwa. Tafadhali jaribu tena.',
       backToPaymentInstructions: 'Rudi kwenye maelekezo ya malipo',
@@ -673,6 +688,9 @@ export const translations = {
     },
     success: {
       title: 'Booking imethibitishwa',
+      notConfirmedTitle: 'Booking haijathibitishwa bado',
+      notConfirmedMessage:
+        'Booking hii haijathibitishwa. Fungua utafutaji wa booking kuangalia hali yake au endelea na malipo.',
       checkGlyph: '✓',
       message: 'Nafasi yako imehifadhiwa na tikiti yako inatayarishwa.',
       reference: 'Namba ya kumbukumbu',

@@ -11,6 +11,7 @@ import { useEvent } from '@/context/EventContext';
 import { SUPPORTED_PAYMENT_METHODS } from '@/lib/eventConfig';
 import { formatLocalPrice } from '@/lib/eventFormat';
 import { usePaymentOverviewPolling } from '@/lib/usePaymentOverviewPolling';
+import { isPaymentStatusTerminal } from '@/lib/paymentStatus';
 import { buildBookingPageUrl, buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
 import LoadingButton from '@/components/LoadingButton';
 import PaymentHoldCountdown from '@/components/PaymentHoldCountdown';
@@ -27,8 +28,6 @@ const SUPPORTED_RECEIPT_MIME_TYPES = [
   'image/png',
   'image/webp',
 ];
-
-const TERMINAL_PAYMENT_STATUSES = ['confirmed', 'failed', 'expired'];
 
 export default function PaymentConfirmationFlow({ paymentId }) {
   const { t } = useLanguage();
@@ -67,18 +66,23 @@ export default function PaymentConfirmationFlow({ paymentId }) {
   const paymentStatusValue = paymentRecord?.status;
   const paymentMethod = paymentRecord?.payment_method;
   const isPaymentConfirmed = paymentStatusValue === 'confirmed';
-  const isPaymentStatusTerminal = TERMINAL_PAYMENT_STATUSES.includes(paymentStatusValue);
+  const paymentStatusIsTerminal = isPaymentStatusTerminal(paymentStatusValue);
+  // The ticket download endpoint requires a confirmed seat and a confirmed
+  // payment, so the button is only offered when both are true. Otherwise the
+  // attendee sees a button that is guaranteed to fail.
+  const canDownloadTicket =
+    isPaymentConfirmed && bookingRecord?.status === 'confirmed';
 
   const isOfflinePaymentAwaitingReview =
     paymentMethod === SUPPORTED_PAYMENT_METHODS.lipanamba &&
     offlinePaymentReceipt?.status === 'submitted' &&
-    !isPaymentStatusTerminal;
+    !paymentStatusIsTerminal;
 
   const canUploadOfflinePaymentReceipt =
     paymentMethod === SUPPORTED_PAYMENT_METHODS.lipanamba &&
     paymentStatusValue !== 'confirmed' &&
     offlinePaymentReceipt?.status !== 'approved' &&
-    (offlinePaymentReceipt?.status !== 'submitted' || isPaymentStatusTerminal);
+    (offlinePaymentReceipt?.status !== 'submitted' || paymentStatusIsTerminal);
 
   function handleReceiptFileSelection(event) {
     const receiptFile = event.target.files?.[0] ?? null;
@@ -189,18 +193,21 @@ export default function PaymentConfirmationFlow({ paymentId }) {
             {t('payment.confirmedNotice')}
           </p>
           <p className="muted">{t('payment.confirmedTicketNote')}</p>
-          <LoadingButton
-            type="button"
-            className="btn btn-primary"
-            spinnerColor="#f2ede3"
-            autoLoading={false}
-            loading={isDownloadingTicket}
-            loadingLabel={t('loadingStates.downloadingTicket')}
-            disabled={!bookingReferenceCode}
-            onClick={handleDownloadTicket}
-          >
-            {t('payment.downloadTicket')}
-          </LoadingButton>
+          {canDownloadTicket ? (
+            <LoadingButton
+              type="button"
+              className="btn btn-primary"
+              spinnerColor="#f2ede3"
+              autoLoading={false}
+              loading={isDownloadingTicket}
+              loadingLabel={t('loadingStates.downloadingTicket')}
+              onClick={handleDownloadTicket}
+            >
+              {t('payment.downloadTicket')}
+            </LoadingButton>
+          ) : (
+            <p className="muted">{t('payment.ticketNotReadyYet')}</p>
+          )}
           {downloadError && (
             <p className="field-error" role="alert">
               {downloadError}
@@ -312,7 +319,7 @@ export default function PaymentConfirmationFlow({ paymentId }) {
         >
           {t('payment.backToPaymentInstructions')}
         </Link>
-        {isPaymentStatusTerminal && !isPaymentConfirmed && (
+        {paymentStatusIsTerminal && !isPaymentConfirmed && (
           <Link href={buildBookingPageUrl()} className="btn btn-secondary">
             {t('payment.bookAgain')}
           </Link>

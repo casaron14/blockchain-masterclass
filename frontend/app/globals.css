@@ -973,6 +973,15 @@ code {
   color: var(--copper);
 }
 
+.programme-row__meta {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--copper);
+}
+
 .programme-row__title {
   margin: 0 0 0.45rem;
   font-family: var(--font-display), serif;

@@ -118,6 +118,105 @@ function assertSignedSweepAttemptMatchesBatchItem({
   }
 }
 
+function assertSignedGasFundingMatchesBatchItem({
+  batchItem,
+  batchNetwork,
+  signedGasFundingTransaction,
+}) {
+  const expectedGasWalletAddress = normalizeAddress(batchNetwork.gasWalletAddress);
+  if (!expectedGasWalletAddress) {
+    throw new Error('Signed sweep batch has no gas wallet address');
+  }
+  if (normalizeAddress(signedGasFundingTransaction.from) !== expectedGasWalletAddress) {
+    throw new Error(
+      `Gas funding for order ${batchItem.orderId} was signed by `
+      + `${signedGasFundingTransaction.from}, not by the gas wallet `
+      + `${batchNetwork.gasWalletAddress}`
+    );
+  }
+  if (normalizeAddress(signedGasFundingTransaction.to) !== normalizeAddress(batchItem.depositAddress)) {
+    throw new Error(
+      `Gas funding for order ${batchItem.orderId} sends BNB to `
+      + `${signedGasFundingTransaction.to}, not the deposit address ${batchItem.depositAddress}`
+    );
+  }
+  if (signedGasFundingTransaction.value.toString() !== String(batchItem.gasFunding.valueWei)) {
+    throw new Error(
+      `Gas funding for order ${batchItem.orderId} sends `
+      + `${signedGasFundingTransaction.value}, expected ${batchItem.gasFunding.valueWei}`
+    );
+  }
+  if (signedGasFundingTransaction.nonce !== batchItem.gasFunding.nonce) {
+    throw new Error(
+      `Gas funding for order ${batchItem.orderId} uses nonce `
+      + `${signedGasFundingTransaction.nonce}, expected ${batchItem.gasFunding.nonce}`
+    );
+  }
+  if (String(signedGasFundingTransaction.chainId) !== String(batchItem.chainId)) {
+    throw new Error(
+      `Gas funding for order ${batchItem.orderId} is for chain `
+      + `${signedGasFundingTransaction.chainId}, expected ${batchItem.chainId}`
+    );
+  }
+}
+
+function assertSignedGasFundingIsSafeToBroadcast({ batchItem, batchNetwork }) {
+  if (!batchItem.gasFunding) {
+    return null;
+  }
+  if (typeof batchItem.gasFunding.rawTransaction !== 'string') {
+    throw new Error(
+      `Gas funding for order ${batchItem.orderId} has no raw transaction. `
+      + 'Run npm run sweep:sign on the offline machine first.'
+    );
+  }
+  const signedGasFundingTransaction = ethers.Transaction.from(
+    batchItem.gasFunding.rawTransaction
+  );
+  assertSignedGasFundingMatchesBatchItem({
+    batchItem,
+    batchNetwork,
+    signedGasFundingTransaction,
+  });
+  return signedGasFundingTransaction;
+}
+
+/**
+ * A funding transaction must be mined before the USDT transfer is valid, so it
+ * is broadcast and waited on separately. Re-running a batch after a crash finds
+ * the funding already on chain and continues instead of failing on a duplicate.
+ */
+async function broadcastSignedGasFundingTransaction({
+  provider,
+  batchItem,
+  fetchTransactionReceipt,
+}) {
+  const alreadyMinedReceipt = await fetchTransactionReceipt(
+    batchItem.gasFunding.transactionHash
+  ).catch(() => null);
+  if (alreadyMinedReceipt) {
+    if (alreadyMinedReceipt.status === 0) {
+      throw new Error(
+        `Gas funding transaction ${batchItem.gasFunding.transactionHash} for order `
+        + `${batchItem.orderId} reverted`
+      );
+    }
+    return alreadyMinedReceipt;
+  }
+
+  const broadcastResponse = await provider.broadcastTransaction(
+    batchItem.gasFunding.rawTransaction
+  );
+  const minedReceipt = await broadcastResponse.wait();
+  if (minedReceipt && minedReceipt.status === 0) {
+    throw new Error(
+      `Gas funding transaction ${batchItem.gasFunding.transactionHash} for order `
+      + `${batchItem.orderId} reverted`
+    );
+  }
+  return minedReceipt;
+}
+
 async function loadSweepRecordMatchingSignedBatchItem({
   batchItem,
   fetchSweepRecord,
@@ -292,6 +391,14 @@ async function submitValidatedSweepBatchItem({
   }
 
   try {
+    if (batchItem.gasFunding?.rawTransaction) {
+      await broadcastSignedGasFundingTransaction({
+        provider,
+        batchItem,
+        fetchTransactionReceipt,
+      });
+    }
+
     const { receipt, signedTransaction } = await broadcastSignedSweepAttempts({
       provider,
       batchItem,
@@ -317,6 +424,7 @@ async function submitValidatedSweepBatchItem({
       sweepId: sweepRecord.id,
       status: SWEEP_BATCH_SUBMISSION_SWEPT,
       txHash: receipt.hash ?? signedTransaction.hash,
+      gasFundingTxHash: batchItem.gasFunding?.transactionHash ?? null,
       completion,
     };
   } catch (broadcastError) {
@@ -358,6 +466,11 @@ export async function submitSignedSweepBatch(signedBatch, {
     let parsedAttempts = null;
     if (sweepRecord.status !== 'swept' && !sweepRecord.tx_hash) {
       parsedAttempts = assertSignedAttemptsAreSafeToBroadcast({
+        batchItem,
+        batchNetwork: signedBatch.network,
+      });
+
+      assertSignedGasFundingIsSafeToBroadcast({
         batchItem,
         batchNetwork: signedBatch.network,
       });

@@ -11,6 +11,13 @@ import {
 } from './middleware/httpSecurityMiddleware.js';
 import { attachRequestLogging } from './middleware/requestLoggingMiddleware.js';
 
+// Webhook providers sign the exact bytes they sent. Keeping the parsed body
+// only would make the signature unverifiable, because re-serialising the same
+// JSON can change key order and whitespace.
+function preserveRawRequestBodyForWebhookSignatures(req, res, bodyBuffer) {
+  req.rawBody = bodyBuffer;
+}
+
 export function configureCommonApiMiddleware(expressApplication) {
   expressApplication.disable('x-powered-by');
 
@@ -23,7 +30,14 @@ export function configureCommonApiMiddleware(expressApplication) {
   expressApplication.use(attachRequestLogging);
   expressApplication.use(buildSecurityHeaders());
   expressApplication.use(buildCorsPolicy());
-  expressApplication.use(express.json({ limit: '16kb' }));
+  expressApplication.use(
+    express.json({
+      // Address Activity payloads can carry many transfers at once, so the
+      // webhook body limit is larger than a booking form needs.
+      limit: '256kb',
+      verify: preserveRawRequestBodyForWebhookSignatures,
+    })
+  );
 }
 
 export function createScopedApiApplication(apiBasePath, apiRouter) {

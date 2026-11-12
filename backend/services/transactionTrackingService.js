@@ -6,6 +6,8 @@ import {
   PAYMENT_METHOD_LIPANAMBA,
 } from './eventConfigService.js';
 
+import { isPaymentStatusTerminal } from './bookingPaymentLifecycleRules.js';
+
 export const TRANSACTION_METHOD_VALUES = Object.freeze([...VALID_PAYMENT_METHODS]);
 
 export const TRANSACTION_PAYMENT_STATUS_VALUES = Object.freeze([
@@ -248,12 +250,6 @@ export async function fetchTransactionTrackingRecords({
   });
 }
 
-const TERMINAL_PAYMENT_STATUSES = Object.freeze(['confirmed', 'failed', 'expired']);
-
-function isPaymentStatusTerminal(paymentStatus) {
-  return TERMINAL_PAYMENT_STATUSES.includes(paymentStatus);
-}
-
 function findLatestTimestamp(timestamps) {
   const parseableMilliseconds = timestamps
     .filter((timestamp) => timestamp != null && timestamp !== '')
@@ -340,17 +336,22 @@ function buildAzamPesaStageTimeline(stages, transactionRecord) {
 }
 
 function pushTicketDeliveryStage(stages, transactionRecord) {
-  const ticketDeliveryStatus = transactionRecord.ticket_delivery_status;
+  // `ticket_sent_at` is the delivery ledger's sent_at: it is set the first time
+  // a send succeeds and is never cleared, so a later failed resend cannot make
+  // an already-delivered ticket look undelivered.
+  const ticketWasDelivered = Boolean(transactionRecord.ticket_sent_at);
+  const lastTicketDeliveryFailed =
+    transactionRecord.ticket_delivery_status === 'failed';
+
   pushStage(
     stages,
     'ticket_delivered',
     'Ticket emailed',
-    ticketDeliveryStatus === 'sent'
-      ? 'done'
-      : ticketDeliveryStatus === 'failed'
-        ? 'failed'
-        : 'waiting',
-    transactionRecord.ticket_sent_at
+    ticketWasDelivered ? 'done' : lastTicketDeliveryFailed ? 'failed' : 'waiting',
+    transactionRecord.ticket_sent_at,
+    ticketWasDelivered && lastTicketDeliveryFailed
+      ? 'Delivered earlier; the most recent resend failed'
+      : null
   );
 }
 
@@ -475,7 +476,13 @@ function buildUsdtStageTimeline(stages, transactionRecord) {
     latestSweptTimestamp
   );
 
-  if (transactionRecord.order_status === 'expired') {
+  // A confirmed payment settles the order even when the deposit arrived after
+  // the hold lapsed, so an expired order on a confirmed payment would show two
+  // contradictory stages on the attendee timeline.
+  if (
+    transactionRecord.order_status === 'expired' &&
+    transactionRecord.payment_status !== 'confirmed'
+  ) {
     const latestFailedSweep = transactionRecord.sweeps.find(
       (sweep) => sweep.status === 'failed'
     );

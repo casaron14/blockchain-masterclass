@@ -276,8 +276,8 @@ export async function sendTicketEmailToAttendee(bookingRecord, options = {}) {
 
 // The claim is the single atomic gate. Two confirmations may both reach this
 // function, but only the one whose UPDATE finds a free claim (or an expired
-// claim) gets a row back. The booking's ticket_sent_at is checked in the same
-// statement, so an already-delivered ticket can never be claimed again.
+// claim) gets a row back. `sent_at` is the delivered marker, so an
+// already-delivered ticket can never be claimed for an automatic send again.
 export async function claimTicketEmailSendForBooking(bookingRecord) {
   const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
 
@@ -296,6 +296,7 @@ export async function claimTicketEmailSendForBooking(bookingRecord) {
             updated_at = now()
       WHERE ticket_delivery.booking_id = $1
         AND ticket_delivery.status IN ('pending', 'failed')
+        AND ticket_delivery.sent_at IS NULL
         AND (
           ticket_delivery.send_claimed_at IS NULL
           OR ticket_delivery.send_claimed_at < now() - ($2 * INTERVAL '1 minute')
@@ -305,7 +306,6 @@ export async function claimTicketEmailSendForBooking(bookingRecord) {
             FROM bookings AS booking_record
            WHERE booking_record.id = ticket_delivery.booking_id
              AND booking_record.status = 'confirmed'
-             AND booking_record.ticket_sent_at IS NULL
         )
       RETURNING ticket_delivery.*`,
     [bookingRecord.id, TICKET_EMAIL_SEND_CLAIM_LEASE_MINUTES]
@@ -315,8 +315,8 @@ export async function claimTicketEmailSendForBooking(bookingRecord) {
 }
 
 // An admin resend is allowed after a successful delivery, so this claim cannot
-// require ticket_sent_at to be NULL. It still takes the same short lease, which
-// is what stops two resend clicks (or a resend racing an automatic send) from
+// require sent_at to be NULL. It still takes the same short lease, which is
+// what stops two resend clicks (or a resend racing an automatic send) from
 // producing two emails at once.
 export async function claimTicketEmailResendForBooking(bookingRecord) {
   const ticketQrCodeUrl = buildTicketQrCodeUrl(bookingRecord);
@@ -353,37 +353,17 @@ export async function claimTicketEmailResendForBooking(bookingRecord) {
   return claimResult.rows[0] ?? null;
 }
 
-async function markTicketEmailDeliveredForBooking(bookingRecord, deliveryRecord) {
-  const databaseClient = await pool.connect();
-
-  try {
-    await databaseClient.query('BEGIN');
-
-    await databaseClient.query(
-      `UPDATE bookings
-          SET ticket_sent_at = now(), updated_at = now()
-        WHERE id = $1 AND ticket_sent_at IS NULL`,
-      [bookingRecord.id]
-    );
-
-    await databaseClient.query(
-      `UPDATE ticket_deliveries
-          SET status = 'sent',
-              sent_at = now(),
-              send_claimed_at = NULL,
-              last_error = NULL,
-              updated_at = now()
-        WHERE id = $1`,
-      [deliveryRecord.id]
-    );
-
-    await databaseClient.query('COMMIT');
-  } catch (error) {
-    await databaseClient.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally {
-    databaseClient.release();
-  }
+async function markTicketEmailDeliveredForBooking(deliveryRecord) {
+  await pool.query(
+    `UPDATE ticket_deliveries
+        SET status = 'sent',
+            sent_at = now(),
+            send_claimed_at = NULL,
+            last_error = NULL,
+            updated_at = now()
+      WHERE id = $1`,
+    [deliveryRecord.id]
+  );
 }
 
 async function markTicketEmailSendFailedForBooking(deliveryRecordId, failureReason) {
@@ -547,11 +527,14 @@ async function deliverTicketEmailForConfirmedBooking(
   deliveryOptions
 ) {
   // Automatic confirmation is idempotent: once a ticket has been accepted by
-  // the mail server, a repeated webhook must not email the attendee again.
-  // An admin resend deliberately bypasses this guard but still uses the claim
+  // the mail server, a repeated webhook must not email the attendee again. An
+  // admin resend deliberately bypasses this guard but still uses the claim
   // below, so two resend clicks cannot send at the same time.
+  const existingDeliveryRecord = await fetchTicketDeliveryRecordByBookingId(
+    bookingRecord.id
+  );
   if (
-    bookingRecord.ticket_sent_at &&
+    existingDeliveryRecord?.sent_at &&
     !deliveryOptions.allowResendAfterSuccessfulDelivery
   ) {
     return {
@@ -604,14 +587,16 @@ async function deliverTicketEmailForConfirmedBooking(
     ? await claimTicketEmailResendForBooking(bookingRecord)
     : await claimTicketEmailSendForBooking(bookingRecord);
   if (!deliveryRecord) {
-    const refreshedBookingRecord = await fetchBookingRecordById(bookingRecord.id);
+    const refreshedDeliveryRecord = await fetchTicketDeliveryRecordByBookingId(
+      bookingRecord.id
+    );
 
     return {
       delivered: false,
       skipped: true,
       reason: deliveryOptions.allowResendAfterSuccessfulDelivery
         ? TICKET_EMAIL_SEND_IN_PROGRESS_REASON
-        : refreshedBookingRecord?.ticket_sent_at
+        : refreshedDeliveryRecord?.sent_at
           ? TICKET_EMAIL_ALREADY_SENT_REASON
           : TICKET_EMAIL_SEND_IN_PROGRESS_REASON,
       bookingId: bookingRecord.id,
@@ -635,7 +620,7 @@ async function deliverTicketEmailForConfirmedBooking(
         ? `resend-${deliveryRecord.attempt_count}`
         : '',
     });
-    await markTicketEmailDeliveredForBooking(bookingRecord, deliveryRecord);
+    await markTicketEmailDeliveredForBooking(deliveryRecord);
 
     const receiptDelivery =
       builtReceiptPdf && deliverReceiptEmail
@@ -858,15 +843,6 @@ export async function redeliverFailedTicketEmail(
       };
     }
 
-    if (bookingRecord.ticket_sent_at) {
-      return {
-        delivered: false,
-        skipped: true,
-        reason: TICKET_EMAIL_ALREADY_SENT_REASON,
-        bookingId: bookingRecord.id,
-      };
-    }
-
     return await deliverTicketEmailForConfirmedBooking(
       bookingRecord,
       sendTicketEmail,
@@ -902,7 +878,7 @@ export async function fetchFailedTicketDeliveryRecordsBelowMaxAttempts(maxAttemp
        JOIN bookings b ON b.id = td.booking_id
       WHERE td.status = 'failed'
         AND b.status = 'confirmed'
-        AND b.ticket_sent_at IS NULL
+        AND td.sent_at IS NULL
         AND td.attempt_count < $1
       ORDER BY td.updated_at ASC`,
     [maxAttempts]

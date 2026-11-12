@@ -70,16 +70,32 @@ export default function SuccessCard({ referenceCode }) {
     }
   }, [referenceCode, t]);
 
+  // The page is reachable by reference code alone, so a pending or cancelled
+  // booking must not be presented as a confirmed one.
+  const bookingStatusIsConfirmed = bookingRecord?.status === 'confirmed';
+  const bookingStatusIsKnownNotConfirmed =
+    Boolean(bookingRecord) && bookingRecord.status !== 'confirmed';
+
   return (
     <section className="toast-card success-toast" role="status" aria-live="polite">
-      <div className="toast-check-stamp" aria-hidden="true">
-        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M8 16.5 13.5 22 24 10" />
-        </svg>
-      </div>
+      {!bookingStatusIsKnownNotConfirmed && (
+        <div className="toast-check-stamp" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M8 16.5 13.5 22 24 10" />
+          </svg>
+        </div>
+      )}
 
-      <h2 className="toast-title">{t('success.title')}</h2>
-      <p className="toast-message muted">{t('success.message')}</p>
+      <h2 className="toast-title">
+        {bookingStatusIsKnownNotConfirmed
+          ? t('success.notConfirmedTitle')
+          : t('success.title')}
+      </h2>
+      <p className="toast-message muted">
+        {bookingStatusIsKnownNotConfirmed
+          ? t('success.notConfirmedMessage')
+          : t('success.message')}
+      </p>
 
       <dl className="toast-detail-list">
         <div>
@@ -109,7 +125,7 @@ export default function SuccessCard({ referenceCode }) {
 
       {loadError && <p className="field-error">{loadError}</p>}
 
-      {!loadError && (
+      {!loadError && !bookingStatusIsKnownNotConfirmed && (
         <p className="toast-ticket-note muted">{t('success.ticketNote')}</p>
       )}
 
@@ -121,17 +137,21 @@ export default function SuccessCard({ referenceCode }) {
         />
       )}
 
-      <LoadingButton
-        type="button"
-        className="btn btn-primary toast-download-btn"
-        autoLoading={false}
-        loading={isDownloading}
-        loadingLabel={t('success.downloading')}
-        onClick={handleManualTicketDownload}
-      >
-        {t('success.downloadTicket')}
-      </LoadingButton>
-      {downloadError && <p className="field-error">{downloadError}</p>}
+      {bookingStatusIsConfirmed && (
+        <LoadingButton
+          type="button"
+          className="btn btn-primary toast-download-btn"
+          autoLoading={false}
+          loading={isDownloading}
+          loadingLabel={t('success.downloading')}
+          onClick={handleManualTicketDownload}
+        >
+          {t('success.downloadTicket')}
+        </LoadingButton>
+      )}
+      {bookingStatusIsConfirmed && downloadError && (
+        <p className="field-error">{downloadError}</p>
+      )}
 
       <div className="toast-footer-row">
         <div className="toast-footer-links">

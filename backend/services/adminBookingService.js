@@ -236,7 +236,11 @@ export async function createAdminBookingRecord(
   return createdBooking;
 }
 
-export async function updateAdminBookingRecord(bookingId, updateFields) {
+export async function updateAdminBookingRecord(
+  bookingId,
+  updateFields,
+  deliverTicket = deliverTicketForConfirmedBooking
+) {
   const { status: requestedStatus, ...attendeeFields } = updateFields;
 
   if (attendeeFields.utm_source === '' || attendeeFields.utm_source === null) {
@@ -267,7 +271,11 @@ export async function updateAdminBookingRecord(bookingId, updateFields) {
     validateAdminBookingStatus(requestedStatus);
 
     if (requestedStatus === 'confirmed') {
-      updatedBooking = await confirmBookingSeatWithinCapacity(bookingId);
+      // "Confirmed" is the one status that also settles the money and sends the
+      // ticket, so it runs the same final step as the confirm button. Confirming
+      // the seat alone left a confirmed booking with a pending payment, and the
+      // ticket was downloadable from the booking lookup in that state.
+      updatedBooking = (await confirmAdminBookingRecord(bookingId, deliverTicket)).booking;
     } else {
       updatedBooking = await updateBookingStatus(bookingId, requestedStatus);
     }

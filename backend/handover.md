@@ -361,13 +361,19 @@ All environment variables are in `.env` (untracked) with documented placeholders
   - `MONITOR_SCAN_OVERLAP_BLOCKS=5`,
     `MONITOR_INITIAL_SCAN_LOOKBACK_BLOCKS=2000`,
     `MONITOR_LOG_SCAN_CHUNK_BLOCKS=0`
-  - **No `ALCHEMY_*` value and no `MONITOR_TRANSFER_STRATEGY` is required or read
-    by the payment path any more**; the listener uses `eth_getLogs` only.
+  - **Deposit detection (Alchemy):** `ALCHEMY_API_KEY` makes Alchemy the primary
+    RPC; `ALCHEMY_WEBHOOK_ID`, `ALCHEMY_WEBHOOK_AUTH_TOKEN` and
+    `ALCHEMY_WEBHOOK_SIGNING_KEY` enable the Address Activity webhook at
+    `POST /api/webhook/alchemy`. The `eth_getLogs` listener still runs and remains
+    the backfill, so a missed delivery or an unregistered address cannot lose a
+    deposit.
 - Phase 5 collection:
-  - `GAS_WALLET_PRIVATE_KEY` — hot wallet that tops up deposit addresses with BNB
-    for sweep fees
+  - `GAS_WALLET_ADDRESS` — the gas wallet the server may only observe
+  - `GAS_WALLET_PRIVATE_KEY` — **offline machine only**; signs both the BNB
+    funding transfer and the USDT sweep. Production startup refuses it.
   - `TREASURY_WALLET_ADDRESS` — destination of every swept USDT balance
-  - `SWEEP_MIN_THRESHOLD_USDT=10`, `SWEEP_ESTIMATED_GAS_UNITS=65000`,
+  - `SWEEP_MIN_THRESHOLD_USDT=0` (sweep every funded address each pass),
+    `SWEEP_ESTIMATED_GAS_UNITS=65000`,
     `SWEEP_GAS_BUFFER_PERCENT=20`, `SWEEP_MAX_RETRIES=2`,
     `SWEEP_GAS_PRICE_BUMP_PERCENT=20`
   - `SWEEP_INTERVAL_HOURS=24` and `SWEEP_MINIMUM_AGE_HOURS=24` — collection is
@@ -398,10 +404,12 @@ All environment variables are in `.env` (untracked) with documented placeholders
   in the environment (`EVENT_TITLE` / `EVENT_DATE` / `EVENT_LOCATION` were removed)
 
 > The deposit-address derivation uses `WALLET_ACCOUNT_XPUB` on the server (the
-> BSC mainnet is the default). `GAS_WALLET_PRIVATE_KEY` and
-> `TREASURY_WALLET_ADDRESS` are required to actually send sweeps. In production
-> set `ENABLE_SWEEP_JOB=false` and collect through the offline flow in 9e.8; the
-> startup guard rejects `ENABLE_SWEEP_JOB=true` because that job signs in-process.
+> BSC mainnet is the default). `GAS_WALLET_ADDRESS` and
+> `TREASURY_WALLET_ADDRESS` are what the server needs; the gas key is only on the
+> offline machine. In production set `ENABLE_SWEEP_JOB=false` and collect through
+> the offline flow in 9e.8; the startup guard rejects `ENABLE_SWEEP_JOB=true`
+> because that job signs in-process, and rejects `GAS_WALLET_PRIVATE_KEY` on the
+> web host for the same reason.
 
 Frontend (repo root, separate npm project, `.env.local`):
 - `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:3001`) — see `.env.local.example`.
@@ -439,9 +447,12 @@ Phase 5 collection tables:
   only one active address per order), `last_observed_at`. Superseded addresses
   stay scannable so a late payment to one is still attributed (see 9e.5).
 - `deposits_observed` — every qualifying on-chain transfer seen by the listener
-  (`tx_hash` UNIQUE, `amount` plus exact `amount_wei`, `block_number`,
-  `block_hash` for the reorg guard, `confirmations`, `is_finalized` /
-  `finality_confirmed_at` / `finalized_block_number`, `order_id` FK).
+  (`tx_hash` + `log_index` UNIQUE, `amount` plus exact `amount_wei`,
+  `block_number`, `block_hash` for the reorg guard, `confirmations`,
+  `is_finalized` / `finality_confirmed_at` / `finalized_block_number`,
+  `order_id` FK). The pair is the identity because one transaction can carry
+  several USDT `Transfer` logs; keying on the hash alone silently kept only the
+  first.
 - `sweeps` — fund-then-sweep lifecycle (`status` pending → funded → swept/failed,
   `amount`, `amount_wei`, `block_number`, `block_hash`, `bnb_funded`, `gas_used`,
   `treasury_address`, `triggered_by`, `confirmed_at`, `failure_reason`). A
@@ -594,7 +605,7 @@ Local Anvil end-to-end (verified live):
 Phase 5 admin (`GET /api/admin/report`):
 - Returns `treasuryWalletAddress`, `pendingOrderCount`, `paidOrderCount`,
   `ordersAwaitingSweep`, `gasWalletBnbBalance`, `treasuryUsdtBalance`.
-- With `GAS_WALLET_PRIVATE_KEY` / `TREASURY_WALLET_ADDRESS` unset, balances come
+- With `GAS_WALLET_ADDRESS` / `TREASURY_WALLET_ADDRESS` unset, balances come
   back `null` and the report still succeeds (wrapped in try/catch).
 
 Tickets (`POST /api/tickets/redeliver/:bookingId`):
@@ -997,7 +1008,8 @@ BSC_RPC_URL_FALLBACK_URLS=<two or three more public endpoints, comma separated>
 USDT_CONTRACT_ADDRESS=0x55d398326f99059fF775485246999027B3197955
 WALLET_ACCOUNT_XPUB=<xpub for m/44'/60'/0'/0>
 ENABLE_SWEEP_JOB=false                       # production collects through 9e.8
-GAS_WALLET_PRIVATE_KEY=<hot wallet that funds sweeps>
+GAS_WALLET_ADDRESS=0xYourGasWalletAddress     # address only; key stays offline
+# GAS_WALLET_PRIVATE_KEY is NOT set here: it belongs on the offline machine.
 TREASURY_WALLET_ADDRESS=0xYourTreasuryWalletAddress
 SETTLEMENT_FINALITY_MODE=finalized           # the default; "depth" is the local-node fallback
 ENABLE_JOBS=true
@@ -1138,8 +1150,9 @@ broadcastable transactions, not keys. The unsigned batch can be discarded too.
 - Do **not** prepare a replacement batch while a signed batch is waiting to be
   submitted: the new prepare abandons the un-broadcast `sweeps` row (marks it
   failed) and the old signed file is then refused as stale by design.
-- The server still holds `GAS_WALLET_PRIVATE_KEY` (BNB only). It cannot move
-  USDT; the sponsorship caps bound its spend.
+- The server holds no private key at all: the gas wallet address is read for
+  balance and nonce, and the key stays on the offline machine with the deposit
+  seed. Both the BNB funding transfer and the USDT sweep arrive from `sweep:sign`.
 
 ---
 

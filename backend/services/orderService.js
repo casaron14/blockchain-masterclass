@@ -2,6 +2,10 @@ import pool from '../config/db.js';
 
 import { deriveDepositAddressForDerivationIndex } from './depositAddressDerivationService.js';
 
+import {
+  registerDepositAddressWithAlchemyWebhookSafely,
+} from './alchemyWebhookAddressRegistry.js';
+
 import { SEAT_HOLD_DURATION_MINUTES, TICKET_PRICE_USDT } from './eventConfigService.js';
 
 export const ORDER_STATUS_VALUES = Object.freeze(['pending', 'paid', 'expired', 'swept']);
@@ -120,6 +124,11 @@ export async function createOrderWithDepositAddressForBooking(
     );
 
     await client.query('COMMIT');
+
+    // Webhook registration is best effort: the polling listener still finds the
+    // deposit if Alchemy never learns the address.
+    await registerDepositAddressWithAlchemyWebhookSafely(address);
+
     return {
       ...createdOrder,
       id: Number(createdOrder.id),
@@ -194,6 +203,7 @@ export async function reissueDepositAddressForOrder(orderId, orderExpiryMinutes 
     );
 
     await client.query('COMMIT');
+    await registerDepositAddressWithAlchemyWebhookSafely(address);
     return {
       ...normalizeOrderRow(renewedOrderResult.rows[0]),
       deposit_address: address,

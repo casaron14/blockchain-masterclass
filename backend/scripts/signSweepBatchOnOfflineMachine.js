@@ -28,6 +28,14 @@ console.log(
     0
   )} transaction(s).`
 );
+const signedGasFundingTransactionCount = signedBatch.items.filter(
+  (batchItem) => batchItem.gasFunding?.rawTransaction
+).length;
+if (signedGasFundingTransactionCount > 0) {
+  console.log(
+    `Signed ${signedGasFundingTransactionCount} BNB gas funding transaction(s).`
+  );
+}
 for (const batchItem of signedBatch.items) {
   console.log(
     `  order ${batchItem.orderId}: index ${batchItem.derivationIndex} `

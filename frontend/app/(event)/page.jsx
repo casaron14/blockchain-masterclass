@@ -113,6 +113,10 @@ export default function MasterHomePage() {
                     {String(agendaIndex + 1).padStart(2, '0')}
                   </span>
                   <div className="programme-row__body">
+                    <p className="programme-row__meta">
+                      {agendaItem.time}
+                      {agendaItem.speaker ? ` · ${agendaItem.speaker}` : ''}
+                    </p>
                     <h3 className="programme-row__title">{agendaItem.title}</h3>
                     <p className="programme-row__description">{agendaItem.description}</p>
                   </div>

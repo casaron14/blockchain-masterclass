@@ -8,6 +8,7 @@ import ticketRouter from './ticketRouter.js';
 import adminRouter from './adminRouter.js';
 import referrerRouter from './referrerRouter.js';
 import cronRouter from './cronRouter.js';
+import alchemyWebhookRouter from './alchemyWebhookRouter.js';
 
 const apiRouter = express.Router();
 
@@ -19,5 +20,10 @@ apiRouter.use('/tickets', ticketRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/referrals', referrerRouter);
 apiRouter.use('/cron', cronRouter);
+
+// Deposit detection fast path. It lives under /api so the Vercel catch-all
+// (frontend/pages/api/[...all].js) serves it exactly like the other endpoints;
+// the polling listener keeps running as the backfill.
+apiRouter.use('/webhook/alchemy', alchemyWebhookRouter);
 
 export default apiRouter;

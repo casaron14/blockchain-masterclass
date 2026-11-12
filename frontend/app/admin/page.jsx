@@ -459,25 +459,22 @@ export default function AdminDashboardPage() {
                         <>
                           <span
                             className={`status-chip ${
-                              bookingRow.ticket_sent_at ? 'confirmed' : 'pending'
+                              bookingRow.ticket_last_sent_at ? 'confirmed' : 'pending'
                             }`}
                           >
-                            {bookingRow.ticket_sent_at ? 'Sent' : 'Not sent'}
+                            {bookingRow.ticket_last_sent_at ? 'Sent' : 'Not sent'}
                           </span>
-                          {bookingRow.ticket_sent_at && (
+                          {bookingRow.ticket_last_sent_at && (
                             <>
                               <br />
                               <span className="muted">
                                 Last sent{' '}
-                                {formatAdminTimestamp(
-                                  bookingRow.ticket_last_sent_at ||
-                                    bookingRow.ticket_sent_at
-                                )}
+                                {formatAdminTimestamp(bookingRow.ticket_last_sent_at)}
                               </span>
                             </>
                           )}
                           {bookingRow.ticket_delivery_status === 'failed' &&
-                            bookingRow.ticket_sent_at && (
+                            bookingRow.ticket_last_sent_at && (
                               <>
                                 <br />
                                 <span

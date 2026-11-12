@@ -142,15 +142,19 @@ export async function recordObservedUsdtTransfer(
   { depositAddressRecord, parsedTransfer },
   client = pool
 ) {
+  // The identity of a deposit is the transaction and the Transfer log inside
+  // it. Keying on the hash alone dropped every transfer after the first when a
+  // single transaction paid more than one deposit address.
   const result = await client.query(
     `INSERT INTO deposits_observed
-       (address, tx_hash, from_address, amount, amount_wei, block_number, block_hash, order_id, confirmations)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
-     ON CONFLICT (tx_hash) DO NOTHING
+       (address, tx_hash, log_index, from_address, amount, amount_wei, block_number, block_hash, order_id, confirmations)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
+     ON CONFLICT (tx_hash, log_index) DO NOTHING
      RETURNING *`,
     [
       depositAddressRecord.address,
       parsedTransfer.txHash,
+      parsedTransfer.logIndex ?? 0,
       parsedTransfer.fromAddress,
       parsedTransfer.amountUsdt,
       parsedTransfer.amountWei.toString(),

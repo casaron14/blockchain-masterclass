@@ -17,6 +17,7 @@ import { fetchActiveOrderDepositAddressForBooking } from './orderService.js';
 import { fetchPaymentReceiptByBookingId } from './paymentReceiptService.js';
 
 import { PAYMENT_METHOD_USDT_BEP20 } from './eventConfigService.js';
+import { canAttendeeAccessTicketForBooking } from './bookingPaymentLifecycleRules.js';
 
 export class AmbiguousBookingLookupError extends Error {
   constructor(matchingBookingCount) {
@@ -86,7 +87,10 @@ export async function buildBookingLookupActions(lookupDetails) {
   const bookingStatus = bookingRecord.status;
   const paymentStatus = paymentRecord?.status ?? null;
 
-  const canDownloadTicket = bookingStatus === 'confirmed';
+  const canDownloadTicket = canAttendeeAccessTicketForBooking({
+    bookingStatus,
+    paymentStatus,
+  });
 
   const isPaymentSettled = paymentStatus === 'confirmed';
   const isPaymentStillInProgress = ['initiating', 'pending'].includes(paymentStatus);
@@ -103,7 +107,7 @@ export async function buildBookingLookupActions(lookupDetails) {
   return {
     canDownloadTicket,
     canPayNow: canPayNow && !availabilitySnapshot.isSoldOut,
-    canDownloadReceipt: bookingStatus === 'confirmed',
+    canDownloadReceipt: canDownloadTicket,
     isSoldOut: availabilitySnapshot.isSoldOut,
     paymentStatus,
     bookingStatus,

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { fetchBookingRecordById, fetchPaymentOverviewById } from '@/lib/api';
 import { fetchStoredBookingRecord } from '@/lib/bookingStorage';
+import { isPaymentStatusTerminal } from '@/lib/paymentStatus';
 
 const PAYMENT_OVERVIEW_POLL_INTERVAL_MS = 5000;
-const TERMINAL_PAYMENT_STATUSES = ['confirmed', 'failed', 'expired'];
 
 // Both payment steps need the same payment record, booking record and receipt
 // state, and both must notice an admin approval or an on-chain confirmation
@@ -37,7 +37,13 @@ export function usePaymentOverviewPolling({ paymentId, eventSlug }) {
         if (isCancelled) {
           return;
         }
-        setBookingRecord(fetchedBookingRecord ?? fetchStoredBookingRecord(eventSlug) ?? null);
+        // The stored record is only a fallback for a payment without a booking
+        // id. Falling back when the real fetch failed would show the countdown
+        // for a different booking than the one behind this payment.
+        const fallbackBookingRecord = loadedPaymentOverview.payment?.booking_id
+          ? null
+          : fetchStoredBookingRecord(eventSlug);
+        setBookingRecord(fetchedBookingRecord ?? fallbackBookingRecord ?? null);
       } catch (error) {
         if (!isCancelled) {
           setLoadError(error.message);
@@ -55,7 +61,7 @@ export function usePaymentOverviewPolling({ paymentId, eventSlug }) {
   const paymentStatus = paymentOverview?.payment?.status;
 
   useEffect(() => {
-    if (!paymentStatus || TERMINAL_PAYMENT_STATUSES.includes(paymentStatus)) {
+    if (!paymentStatus || isPaymentStatusTerminal(paymentStatus)) {
       return undefined;
     }
 

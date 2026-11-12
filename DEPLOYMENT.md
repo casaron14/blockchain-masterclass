@@ -332,22 +332,29 @@ material between environments:
 | Purpose | Production / mainnet | Test / local |
 | --- | --- | --- |
 | Deposit address derivation | `WALLET_ACCOUNT_XPUB` (watch-only) | `WALLET_MNEMONIC` or a testnet-only xpub |
-| Gas for sweeps | dedicated `GAS_WALLET_PRIVATE_KEY` | burner testnet key |
+| Gas for sweeps | `GAS_WALLET_ADDRESS` on the server, `GAS_WALLET_PRIVATE_KEY` only on the offline machine | burner testnet key |
 | Sweep destination | mainnet `TREASURY_WALLET_ADDRESS` | testnet treasury |
 | Token | mainnet USDT `USDT_CONTRACT_ADDRESS` | deployed mock/test token |
+| Deposit detection | `ALCHEMY_API_KEY` + Address Activity webhook; polling scan stays the backfill | public testnet RPC pool |
 
-Production startup refuses `WALLET_MNEMONIC` and refuses to start without
-`WALLET_ACCOUNT_XPUB` (`backend/config/productionSigningGuard.js`). The
-in-process sweep job is also refused there.
+Production startup refuses `WALLET_MNEMONIC`, refuses to start without
+`WALLET_ACCOUNT_XPUB`, and refuses a `GAS_WALLET_PRIVATE_KEY` on the web host
+(`backend/config/productionSigningGuard.js`). The in-process sweep job is also
+refused there: gas funding and the USDT transfer are both signed on the offline
+machine, so the server holds no key that can move funds.
 
 Required before enabling the rail:
 
 ```text
 CHAIN_ID=56
-BSC_RPC_URL=                      # blank uses the public mainnet pool; a dedicated provider is recommended
+BSC_RPC_URL=                      # blank uses Alchemy when ALCHEMY_API_KEY is set, then the public pool
+ALCHEMY_API_KEY=
+ALCHEMY_WEBHOOK_ID=
+ALCHEMY_WEBHOOK_AUTH_TOKEN=
+ALCHEMY_WEBHOOK_SIGNING_KEY=
 USDT_CONTRACT_ADDRESS=0x55d398326f99059fF775485246999027B3197955
 WALLET_ACCOUNT_XPUB=
-GAS_WALLET_PRIVATE_KEY=
+GAS_WALLET_ADDRESS=
 TREASURY_WALLET_ADDRESS=
 SETTLEMENT_FINALITY_MODE=finalized
 SETTLEMENT_MIN_CONFIRMATIONS=15
@@ -359,6 +366,12 @@ GAS_SPONSORSHIP_MAX_BNB_PER_DAY=0.2
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```
+
+The webhook URL to paste into the Alchemy dashboard is
+`https://<host>/api/webhook/alchemy`. Every delivery is rejected unless its
+`X-Alchemy-Signature` matches an HMAC-SHA256 of the raw body computed with
+`ALCHEMY_WEBHOOK_SIGNING_KEY`. A deposit that the webhook misses is still found
+by the polling scan, so the webhook is a latency win, not a dependency.
 
 Keep `ENABLE_PAYMENT_MONITOR_JOB`, `ENABLE_LISTENER_HEALTH_JOB`,
 `ENABLE_RECONCILIATION_JOB`, `ENABLE_GAS_WALLET_MONITOR_JOB` and

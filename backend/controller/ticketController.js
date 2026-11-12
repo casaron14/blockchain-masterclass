@@ -10,6 +10,8 @@ import {
   TICKET_EMAIL_SEND_IN_PROGRESS_REASON,
 } from '../services/ticketDeliveryService.js';
 import { fetchBookingRecordByReferenceCode } from '../services/bookingService.js';
+import { fetchPaymentRecordByBookingId } from '../services/paymentService.js';
+import { canAttendeeAccessTicketForBooking } from '../services/bookingPaymentLifecycleRules.js';
 import { generateTicketPdfBuffer } from '../services/ticketPdfService.js';
 import { fetchPaymentReceiptByBookingId } from '../services/paymentReceiptService.js';
 import { PRIMARY_EVENT_SLUG } from '../services/eventConfigService.js';
@@ -17,6 +19,17 @@ import { bookingNotFoundResponse } from '../utils/responseHelpers.js';
 
 function ticketNotFoundResponse() {
   return { message: 'Ticket not found' };
+}
+
+// A confirmed seat and a confirmed payment are one state for the attendee. The
+// booking lookup and the download would otherwise disagree: the lookup said the
+// ticket was not ready while this endpoint served it.
+async function isBookingClearedForAttendeeDocuments(bookingRecord) {
+  const paymentRecord = await fetchPaymentRecordByBookingId(bookingRecord.id);
+  return canAttendeeAccessTicketForBooking({
+    bookingStatus: bookingRecord.status,
+    paymentStatus: paymentRecord?.status ?? null,
+  });
 }
 
 async function resendTicketEmailToAttendeeEndpoint(req, res) {
@@ -81,8 +94,10 @@ async function downloadTicketPdfEndpoint(req, res) {
       return res.status(404).json(bookingNotFoundResponse());
     }
 
-    if (bookingRecord.status !== 'confirmed') {
-      return res.status(403).json({ message: 'Ticket is only available for confirmed bookings' });
+    if (!(await isBookingClearedForAttendeeDocuments(bookingRecord))) {
+      return res
+        .status(403)
+        .json({ message: 'Ticket is only available for a confirmed, paid booking' });
     }
 
     const pdfBuffer = await generateTicketPdfBuffer(bookingRecord);
@@ -114,10 +129,10 @@ async function downloadPaymentReceiptEndpoint(req, res) {
       return res.status(404).json(bookingNotFoundResponse());
     }
 
-    if (bookingRecord.status !== 'confirmed') {
+    if (!(await isBookingClearedForAttendeeDocuments(bookingRecord))) {
       return res
         .status(403)
-        .json({ message: 'Receipt is only available for confirmed bookings' });
+        .json({ message: 'Receipt is only available for a confirmed, paid booking' });
     }
 
     const receiptRecord = await fetchPaymentReceiptByBookingId(bookingRecord.id);

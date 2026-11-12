@@ -315,9 +315,7 @@ export default function AdminBookingDetailPage({ params }) {
           />
           <DetailItem
             label="Ticket last sent at"
-            value={formatAdminTimestamp(
-              ticketDelivery?.sent_at || booking.ticket_sent_at
-            )}
+            value={formatAdminTimestamp(ticketDelivery?.sent_at || null)}
           />
           <DetailItem
             label="Ticket delivery status"

@@ -4,7 +4,9 @@ import { createUsdtProvider, getTreasuryWalletAddress } from './usdtPaymentServi
 
 export const DEFAULT_SWEEP_ESTIMATED_GAS_UNITS = 65000;
 export const DEFAULT_SWEEP_GAS_BUFFER_PERCENT = 20;
-export const DEFAULT_SWEEP_MIN_THRESHOLD_USDT = 10;
+// Collection is manual, so each pass is an operator decision: sweep every
+// funded address instead of waiting for an accumulated threshold.
+export const DEFAULT_SWEEP_MIN_THRESHOLD_USDT = 0;
 export const DEFAULT_SWEEP_GAS_PRICE_BUMP_PERCENT = 20;
 export const DEFAULT_SWEEP_MAX_RETRIES = 2;
 export const DEFAULT_SWEEP_FALLBACK_GAS_PRICE_WEI = 3000000000n;
@@ -15,6 +17,35 @@ export function resolveGasWalletPrivateKey() {
     throw new Error('GAS_WALLET_PRIVATE_KEY is not configured');
   }
   return gasWalletPrivateKey;
+}
+
+// The web host only needs the gas wallet address: it builds an unsigned BNB
+// funding transaction and the offline machine signs it.
+export function resolveGasWalletAddress() {
+  const configuredGasWalletAddress = process.env.GAS_WALLET_ADDRESS;
+  if (!configuredGasWalletAddress) {
+    throw new Error('GAS_WALLET_ADDRESS is not configured');
+  }
+  return ethers.getAddress(configuredGasWalletAddress.trim());
+}
+
+export const GAS_FUNDING_TRANSACTION_GAS_LIMIT = 21000;
+
+export function buildUnsignedGasFundingTransactionForDepositAddress({
+  depositAddress,
+  amountWei,
+  nonce,
+  gasPriceWei,
+  chainId,
+}) {
+  return {
+    to: ethers.getAddress(depositAddress),
+    valueWei: BigInt(amountWei).toString(),
+    nonce: Number(nonce),
+    gasPriceWei: BigInt(gasPriceWei).toString(),
+    gasLimit: GAS_FUNDING_TRANSACTION_GAS_LIMIT,
+    chainId: Number(chainId),
+  };
 }
 
 export function getSweepEstimatedGasUnits() {
@@ -54,8 +85,13 @@ export function createGasWalletSigner(provider = createUsdtProvider()) {
   return new ethers.Wallet(resolveGasWalletPrivateKey(), provider);
 }
 
-export async function fetchGasWalletBnbBalance(signer = createGasWalletSigner()) {
-  return signer.provider.getBalance(signer.address);
+// Reading the balance needs the address, not the key: the key lives on the
+// offline machine, and a monitor on the web host must still see the float.
+export async function fetchGasWalletBnbBalance(
+  provider = createUsdtProvider(),
+  gasWalletAddress = resolveGasWalletAddress()
+) {
+  return provider.getBalance(gasWalletAddress);
 }
 
 export async function fetchUsdtBalanceAtDepositAddress(depositAddress, provider = createUsdtProvider()) {

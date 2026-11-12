@@ -435,3 +435,50 @@ test('fetchTransactionTrackingRecords returns one row per payment when a booking
   assert.equal(matchingTransactionRows[0].order_status, 'paid');
   assert.equal(matchingTransactionRows[0].deposit_address, paidOrder.deposit_address);
 });
+test('usdt stage timeline never shows an expired order beside a confirmed payment', () => {
+  const stages = buildTransactionStageTimeline(
+    createBaseTransactionRecord({
+      payment_method: 'usdt_bep20',
+      payment_status: 'confirmed',
+      payment_confirmed_at: '2026-09-01T10:10:00Z',
+      order_id: 22,
+      order_status: 'expired',
+      order_created_at: '2026-09-01T10:01:00Z',
+      order_expires_at: '2026-09-01T10:16:00Z',
+      deposit_address: '0xabcdef1234567890abcdef1234567890abcdef13',
+      deposit_address_created_at: '2026-09-01T10:01:30Z',
+    })
+  );
+
+  assert.equal(findStageByKey(stages, 'payment_confirmed').status, 'done');
+  assert.equal(findStageByKey(stages, 'order_expired'), undefined);
+});
+
+test('ticket stage stays delivered when a later resend failed', () => {
+  const stages = buildTransactionStageTimeline(
+    createBaseTransactionRecord({
+      payment_status: 'confirmed',
+      payment_confirmed_at: '2026-09-01T10:03:00Z',
+      ticket_delivery_status: 'failed',
+      ticket_sent_at: '2026-09-01T10:04:00Z',
+    })
+  );
+
+  const ticketStage = findStageByKey(stages, 'ticket_delivered');
+  assert.equal(ticketStage.status, 'done');
+  assert.equal(ticketStage.at, '2026-09-01T10:04:00Z');
+  assert.match(ticketStage.detail, /resend failed/i);
+});
+
+test('ticket stage is failed when the only send attempt failed', () => {
+  const stages = buildTransactionStageTimeline(
+    createBaseTransactionRecord({
+      payment_status: 'confirmed',
+      payment_confirmed_at: '2026-09-01T10:03:00Z',
+      ticket_delivery_status: 'failed',
+      ticket_sent_at: null,
+    })
+  );
+
+  assert.equal(findStageByKey(stages, 'ticket_delivered').status, 'failed');
+});

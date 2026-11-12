@@ -43,5 +43,13 @@ export function assertProductionSigningConfigurationIsSafe(
     );
   }
 
+  if (environment.GAS_WALLET_PRIVATE_KEY) {
+    throw new Error(
+      'REFUSING TO START: GAS_WALLET_PRIVATE_KEY is set in production. Gas funding '
+      + 'is signed on the offline machine together with the sweep. Keep only '
+      + 'GAS_WALLET_ADDRESS here and move the key to the offline environment.'
+    );
+  }
+
   return { status: PRODUCTION_SIGNING_GUARD_PASSED };
 }

@@ -9,6 +9,7 @@ import {
   expireAllExpiredSeatHolds,
   extendBookingSeatHoldForOfflinePaymentReview,
   fetchEventAvailabilitySnapshot,
+  updateBookingStatus,
   SoldOutError,
 } from '../services/bookingService.js';
 
@@ -185,4 +186,47 @@ test('extendBookingSeatHoldForOfflinePaymentReview reports failure when the even
   );
 
   assert.equal(isSeatHoldActive, false);
+});
+
+test('updateBookingStatus allows the documented booking transitions', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Transition User',
+    email: 'transition@example.com',
+    phone_number: '+255712345680',
+  });
+
+  const cancelledBooking = await updateBookingStatus(bookingRecord.id, 'cancelled');
+  assert.equal(cancelledBooking.status, 'cancelled');
+
+  const revivedBooking = await updateBookingStatus(bookingRecord.id, 'pending');
+  assert.equal(revivedBooking.status, 'pending');
+});
+
+test('updateBookingStatus refuses to release a confirmed seat by moving it back to pending', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Confirmed Seat User',
+    email: 'confirmedseat@example.com',
+    phone_number: '+255712345681',
+  });
+  await confirmBookingSeatWithinCapacity(bookingRecord.id);
+
+  await assert.rejects(
+    () => updateBookingStatus(bookingRecord.id, 'pending'),
+    (error) => error.code === 'BOOKING_STATUS_TRANSITION_NOT_ALLOWED'
+  );
+
+  const availabilitySnapshot = await fetchEventAvailabilitySnapshot();
+  assert.equal(availabilitySnapshot.confirmedCount, 1);
+});
+
+test('updateBookingStatus treats an unchanged status as a no-op', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Noop User',
+    email: 'noop@example.com',
+    phone_number: '+255712345682',
+  });
+
+  const unchangedBooking = await updateBookingStatus(bookingRecord.id, 'pending');
+  assert.equal(unchangedBooking.id, bookingRecord.id);
+  assert.equal(unchangedBooking.status, 'pending');
 });

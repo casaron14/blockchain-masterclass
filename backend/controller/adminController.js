@@ -34,6 +34,8 @@ import {
 
 import { BookingNotFoundError, SoldOutError } from '../services/bookingService.js';
 
+import { BookingStatusTransitionError } from '../services/bookingPaymentLifecycleRules.js';
+
 import { sendCsvFileDownloadResponse } from '../utils/csvDownloadResponse.js';
 
 import {
@@ -153,6 +155,19 @@ async function updateAdminBookingEndpoint(req, res) {
     }
     if (error instanceof InvalidAdminBookingStatusError) {
       return res.status(400).json(adminBookingStatusInvalidResponse(error.invalidStatus));
+    }
+    if (error instanceof BookingStatusTransitionError) {
+      return res.status(409).json({
+        message: error.message,
+        error: error.code,
+      });
+    }
+    if (error instanceof BookingNotConfirmableError) {
+      return res.status(409).json({
+        message:
+          'A cancelled booking cannot be confirmed. Set the booking status back to pending first.',
+        error: error.code,
+      });
     }
     console.error('Error updating admin booking', error);
     return res.status(500).json({ message: 'Error updating booking' });

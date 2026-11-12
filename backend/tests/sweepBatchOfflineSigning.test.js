@@ -33,12 +33,25 @@ const USDT_TRANSFER_INTERFACE = new ethers.Interface([
   'function transfer(address to, uint256 value)',
 ]);
 
+// The gas wallet key belongs to the offline machine, so the test stands in for
+// that machine: it holds the key while the preparation code only sees the
+// address.
+const OFFLINE_GAS_WALLET = ethers.Wallet.createRandom();
+
 async function resetDatabaseState() {
   await pool.query('TRUNCATE bookings CASCADE');
   await pool.query('UPDATE seat_capacity SET confirmed_count = 0 WHERE id = 1');
 }
 
-beforeEach(resetDatabaseState);
+function applyOfflineGasWalletEnvironment() {
+  process.env.GAS_WALLET_ADDRESS = OFFLINE_GAS_WALLET.address;
+  process.env.GAS_WALLET_PRIVATE_KEY = OFFLINE_GAS_WALLET.privateKey;
+}
+
+beforeEach(async () => {
+  applyOfflineGasWalletEnvironment();
+  await resetDatabaseState();
+});
 
 async function createSettledPaidOrder() {
   const bookingRecord = await createBookingRecordWithActiveSeatHold({
@@ -125,6 +138,19 @@ test('prepare -> sign -> submit collects an order and records the ledger once', 
   assert.equal(preparedBatch.items[0].nonce, 0);
   assert.ok(preparedBatch.items[0].attempts.length >= 1);
   assert.match(preparedBatch.items[0].attempts[0].unsignedTransaction, /^0x/);
+  assert.equal(
+    preparedBatch.network.gasWalletAddress.toLowerCase(),
+    OFFLINE_GAS_WALLET.address.toLowerCase()
+  );
+
+  // The deposit address holds no BNB, so the batch must carry a funding
+  // transaction signed by the gas wallet.
+  const preparedGasFunding = preparedBatch.items[0].gasFunding;
+  assert.ok(preparedGasFunding);
+  assert.equal(preparedGasFunding.to.toLowerCase(), createdOrder.deposit_address.toLowerCase());
+  assert.equal(preparedGasFunding.nonce, 0);
+  assert.equal(preparedGasFunding.gasLimit, 21000);
+  assert.ok(BigInt(preparedGasFunding.valueWei) > 0n);
 
   const preparedSweepRecord = await fetchSweepRecordByOrderId(createdOrder.id);
   assert.equal(preparedSweepRecord.status, 'funded');
@@ -140,13 +166,31 @@ test('prepare -> sign -> submit collects an order and records the ledger once', 
     );
   }
 
+  const signedGasFundingTransaction = ethers.Transaction.from(
+    signedBatch.items[0].gasFunding.rawTransaction
+  );
+  assert.equal(
+    signedGasFundingTransaction.from.toLowerCase(),
+    OFFLINE_GAS_WALLET.address.toLowerCase()
+  );
+  assert.equal(
+    signedGasFundingTransaction.to.toLowerCase(),
+    createdOrder.deposit_address.toLowerCase()
+  );
+
   const submissionSummary = await submitSignedSweepBatch(
     signedBatch,
     buildSubmissionDependencies(provider)
   );
 
   assert.equal(submissionSummary.results[0].status, 'SWEPT');
-  assert.equal(provider.broadcastRawTransactions.length, 1);
+  // Funding first, then the USDT sweep: the sweep is only valid once the
+  // deposit address holds BNB.
+  assert.equal(provider.broadcastRawTransactions.length, 2);
+  assert.equal(
+    ethers.Transaction.from(provider.broadcastRawTransactions[0]).hash,
+    signedBatch.items[0].gasFunding.transactionHash
+  );
 
   const orderRecord = await pool.query('SELECT status FROM orders WHERE id = $1', [
     createdOrder.id,
@@ -185,7 +229,8 @@ test('submitting the same signed batch twice does not move the balance twice', a
 
   assert.equal(firstSubmission.results[0].status, 'SWEPT');
   assert.equal(replaySubmission.results[0].status, 'ALREADY_COMPLETED');
-  assert.equal(provider.broadcastRawTransactions.length, 1);
+  // One funding transfer and one USDT transfer, both only once.
+  assert.equal(provider.broadcastRawTransactions.length, 2);
 
   const ledgerRows = await pool.query(
     'SELECT tx_hash FROM treasury_ledger WHERE order_id = $1',
@@ -206,6 +251,20 @@ test('signing with a key that does not match the deposit address is refused', as
         deriveWallet: () => ethers.Wallet.createRandom(),
       }),
     /do not belong to the same seed/
+  );
+});
+
+test('signing gas funding with a key that is not the batch gas wallet is refused', async () => {
+  await createSettledPaidOrder();
+  const preparedBatch = await prepareSweepBatchForOfflineSigning(
+    buildPreparationDependencies(buildStubProvider())
+  );
+
+  process.env.GAS_WALLET_PRIVATE_KEY = ethers.Wallet.createRandom().privateKey;
+
+  await assert.rejects(
+    () => signPreparedSweepBatchWithMasterMnemonic(preparedBatch),
+    /expects the gas wallet/
   );
 });
 

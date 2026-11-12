@@ -20,6 +20,8 @@ import {
   PAYMENT_METHOD_USDT_BEP20,
 } from './eventConfigService.js';
 
+import { PAYMENT_STATUS_PREVIOUS_STATUSES } from './bookingPaymentLifecycleRules.js';
+
 export {
   VALID_PAYMENT_METHODS,
   TICKET_PRICE_TZS,
@@ -49,6 +51,18 @@ export class PaymentMethodNotAvailableError extends Error {
     this.name = 'PaymentMethodNotAvailableError';
     this.code = 'PAYMENT_METHOD_NOT_AVAILABLE';
     this.paymentMethod = paymentMethod;
+  }
+}
+
+export class PaymentRecordAlreadyExistsError extends Error {
+  constructor(bookingId, existingPaymentMethod) {
+    super(
+      `Booking ${bookingId} already has a ${existingPaymentMethod} payment record`
+    );
+    this.name = 'PaymentRecordAlreadyExistsError';
+    this.code = 'PAYMENT_RECORD_ALREADY_EXISTS';
+    this.bookingId = bookingId;
+    this.existingPaymentMethod = existingPaymentMethod;
   }
 }
 
@@ -85,11 +99,30 @@ export async function createPendingPaymentRecordForBooking(bookingId, paymentMet
   const result = await pool.query(
     `INSERT INTO payments (booking_id, payment_method, amount_expected, status)
      VALUES ($1, $2, $3, 'pending')
+     ON CONFLICT (booking_id) DO NOTHING
      RETURNING *`,
     [bookingId, paymentMethod, amountExpected]
   );
 
-  return result.rows[0];
+  if (result.rows[0]) {
+    return result.rows[0];
+  }
+
+  // A retried request (the attendee pressing submit again after a dropped
+  // response) must reach the payment that already exists instead of failing on
+  // the one-payment-per-booking constraint.
+  const existingPaymentRecord = await fetchPaymentRecordByBookingId(bookingId);
+  if (!existingPaymentRecord) {
+    throw new Error(`Payment record for booking ${bookingId} could not be created`);
+  }
+  if (existingPaymentRecord.payment_method !== paymentMethod) {
+    throw new PaymentRecordAlreadyExistsError(
+      bookingId,
+      existingPaymentRecord.payment_method
+    );
+  }
+
+  return existingPaymentRecord;
 }
 
 export async function fetchPaymentRecordByBookingId(bookingId) {
@@ -102,16 +135,24 @@ export async function fetchPaymentRecordById(paymentId) {
   return result.rows[0] ?? null;
 }
 
+// The only writer for payment status. The UPDATE carries the statuses the new
+// status may come from, so a late or replayed AzamPay callback can no longer
+// downgrade a confirmed payment. A blocked transition returns null instead of
+// throwing: a duplicate success callback is normal and must stay silent.
 export async function updatePaymentRecordStatus(paymentId, newPaymentStatus) {
-  const confirmedAtClause =
-    newPaymentStatus === 'confirmed' ? "confirmed_at = now()" : "confirmed_at = NULL";
+  const previousStatuses = PAYMENT_STATUS_PREVIOUS_STATUSES[newPaymentStatus];
+  if (!previousStatuses) {
+    throw new Error(`Unknown payment status: ${newPaymentStatus}`);
+  }
 
   const result = await pool.query(
     `UPDATE payments
-        SET status = $1, ${confirmedAtClause}
+        SET status = $1,
+            confirmed_at = CASE WHEN $1::payment_status = 'confirmed' THEN now() ELSE NULL END
       WHERE id = $2
+        AND status = ANY($3::payment_status[])
       RETURNING *`,
-    [newPaymentStatus, paymentId]
+    [newPaymentStatus, paymentId, previousStatuses]
   );
 
   return result.rows[0] ?? null;

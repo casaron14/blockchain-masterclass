@@ -1,6 +1,9 @@
 import { ethers } from 'ethers';
 
 import { createDerivedWalletForDerivationIndex } from './signingService.js';
+import {
+  signGasFundingTransactionWithOfflineGasWalletKey,
+} from './offlineGasWalletSigningService.js';
 
 const USDT_TRANSFER_INTERFACE = new ethers.Interface([
   'function transfer(address to, uint256 value)',
@@ -110,7 +113,10 @@ function assertPreparedSweepBatchHasUsableShape(preparedBatch) {
  */
 export async function signPreparedSweepBatchWithMasterMnemonic(
   preparedBatch,
-  { deriveWallet = createDerivedWalletForDerivationIndex } = {}
+  {
+    deriveWallet = createDerivedWalletForDerivationIndex,
+    signGasFunding = signGasFundingTransactionWithOfflineGasWalletKey,
+  } = {}
 ) {
   assertPreparedSweepBatchHasUsableShape(preparedBatch);
 
@@ -154,6 +160,10 @@ export async function signPreparedSweepBatchWithMasterMnemonic(
 
     signedItems.push({
       ...batchItem,
+      gasFunding: await signGasFunding({
+        batchItem,
+        batchNetwork: preparedBatch.network,
+      }),
       attempts: signedAttempts,
     });
   }

@@ -99,10 +99,9 @@ CREATE TABLE IF NOT EXISTS bookings (
   email           TEXT NOT NULL,
   status          booking_status NOT NULL DEFAULT 'pending',
 
-  -- set only after the first ticket email has been accepted by the mail server.
-  -- A NULL value means no ticket has been delivered yet, so a confirmation
-  -- retry or a repeated webhook may still attempt delivery. Admin resends do
-  -- not change this value; ticket_deliveries.sent_at tracks the latest send.
+  -- Legacy column. Ticket delivery is recorded only in ticket_deliveries
+  -- (status, sent_at); nothing reads or writes this column any more. It is
+  -- kept so an existing deployment does not need a destructive migration.
   ticket_sent_at  TIMESTAMPTZ,
 
   -- which invite link / marketing channel this attendee arrived through
@@ -125,9 +124,10 @@ CREATE TABLE IF NOT EXISTS bookings (
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS utm_source TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_sent_at TIMESTAMPTZ;
 
-CREATE INDEX IF NOT EXISTS idx_bookings_ticket_sent_at
-  ON bookings (ticket_sent_at)
-  WHERE ticket_sent_at IS NULL;
+-- The ticket-sent partial index was built on the legacy bookings.ticket_sent_at
+-- column. Delivery state lives in ticket_deliveries now, so the index is dropped
+-- instead of being maintained for every booking write.
+DROP INDEX IF EXISTS idx_bookings_ticket_sent_at;
 
 CREATE INDEX IF NOT EXISTS idx_bookings_phone  ON bookings (phone_number);
 CREATE INDEX IF NOT EXISTS idx_bookings_email  ON bookings (email);
@@ -352,10 +352,10 @@ CREATE TABLE IF NOT EXISTS azampesa (
 -- ---------------------------------------------------------------------
 -- ticket_deliveries - outgoing ticket email delivery state (retry support)
 --
--- One row per booking. sent_at is updated after every successful send, so it
--- is the last time the ticket reached the attendee. bookings.ticket_sent_at is
--- the first successful send and the guard that keeps automatic confirmations
--- idempotent; admin resends deliberately bypass that guard.
+-- One row per booking. sent_at is set on every successful send and is never
+-- cleared by a later failure, so a non-null value means the ticket reached the
+-- attendee at least once and carries the last success time. status describes
+-- the most recent attempt; a failed resend on a delivered ticket keeps sent_at.
 -- ---------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS ticket_deliveries (
@@ -609,7 +609,14 @@ CREATE TABLE IF NOT EXISTS deposits_observed (
   id               BIGSERIAL PRIMARY KEY,
 
   address          TEXT NOT NULL,
-  tx_hash          TEXT NOT NULL UNIQUE,
+  tx_hash          TEXT NOT NULL,
+
+  -- One transaction can carry several USDT Transfer logs: a batch payout, a
+  -- router, or one payer paying two tickets from the same wallet. The log
+  -- index distinguishes them, so the pair is the identity of a deposit and a
+  -- single transfer is still recorded exactly once.
+  log_index        INTEGER NOT NULL DEFAULT 0,
+
   from_address     TEXT,
 
   amount           NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
@@ -654,6 +661,17 @@ ALTER TABLE deposits_observed
 
 ALTER TABLE deposits_observed
   ADD COLUMN IF NOT EXISTS finalized_block_number BIGINT;
+
+ALTER TABLE deposits_observed
+  ADD COLUMN IF NOT EXISTS log_index INTEGER NOT NULL DEFAULT 0;
+
+-- Databases created before this change carry a UNIQUE (tx_hash) constraint,
+-- which silently dropped the second transfer of a multi-transfer transaction.
+ALTER TABLE deposits_observed
+  DROP CONSTRAINT IF EXISTS deposits_observed_tx_hash_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_deposits_observed_tx_hash_log_index
+  ON deposits_observed (tx_hash, log_index);
 
 CREATE INDEX IF NOT EXISTS idx_deposits_observed_order_id
   ON deposits_observed (order_id);

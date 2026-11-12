@@ -18,7 +18,10 @@ import {
 
 import { InvalidBookingSearchValueError } from '../services/bookingSearchIdentifierService.js';
 
-import { createPendingPaymentRecordForBooking } from '../services/paymentService.js';
+import {
+  createPendingPaymentRecordForBooking,
+  updatePaymentRecordStatus,
+} from '../services/paymentService.js';
 import { SEAT_CAPACITY } from '../services/eventConfigService.js';
 
 async function resetDatabaseState() {
@@ -81,7 +84,11 @@ test('performBookingReferenceLookup allows ticket download for confirmed booking
     email: 'confirmed@example.com',
     phone_number: '+255712345694',
   });
-  await createPendingPaymentRecordForBooking(bookingRecord.id, 'lipanamba');
+  const paymentRecord = await createPendingPaymentRecordForBooking(
+    bookingRecord.id,
+    'lipanamba'
+  );
+  await updatePaymentRecordStatus(paymentRecord.id, 'confirmed');
   await confirmBookingSeatWithinCapacity(bookingRecord.id);
 
   const lookupResult = await performBookingReferenceLookup(bookingRecord.ref);
@@ -89,6 +96,22 @@ test('performBookingReferenceLookup allows ticket download for confirmed booking
   assert.equal(lookupResult.booking.status, 'confirmed');
   assert.equal(lookupResult.actions.canDownloadTicket, true);
   assert.equal(lookupResult.actions.canPayNow, false);
+});
+
+test('performBookingReferenceLookup withholds the ticket when the payment is still pending', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Unpaid Seat User',
+    email: 'unpaidseat@example.com',
+    phone_number: '+255712345694',
+  });
+  await createPendingPaymentRecordForBooking(bookingRecord.id, 'lipanamba');
+  await confirmBookingSeatWithinCapacity(bookingRecord.id);
+
+  const lookupResult = await performBookingReferenceLookup(bookingRecord.ref);
+
+  assert.equal(lookupResult.booking.status, 'confirmed');
+  assert.equal(lookupResult.actions.canDownloadTicket, false);
+  assert.equal(lookupResult.actions.canDownloadReceipt, false);
 });
 
 test('performBookingReferenceLookup returns null for an unknown reference', async () => {

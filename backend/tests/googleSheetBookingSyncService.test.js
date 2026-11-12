@@ -53,7 +53,7 @@ function buildBookingRow(overrides = {}) {
     amount_expected: '10000.00',
     referrer_name: 'neema',
     utm_source: null,
-    ticket_sent_at: new Date('2026-11-07T18:00:00.000Z'),
+    ticket_last_sent_at: new Date('2026-11-07T18:00:00.000Z'),
     created_at: new Date('2026-11-01T10:00:00.000Z'),
     ...overrides,
   };
@@ -96,7 +96,7 @@ test('buildBookingMirrorRecordForSheet labels a USDT payment with the crypto cur
       amount_expected: '5.50',
       referrer_name: null,
       utm_source: 'instagram',
-      ticket_sent_at: null,
+      ticket_last_sent_at: null,
     })
   );
 

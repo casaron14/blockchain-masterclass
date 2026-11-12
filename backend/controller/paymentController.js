@@ -147,6 +147,12 @@ async function createPaymentRecord(req, res) {
     if (error.code === 'PAYMENT_METHOD_NOT_AVAILABLE') {
       return res.status(409).json(paymentMethodNotAvailableResponse(error.paymentMethod));
     }
+    if (error.code === 'PAYMENT_RECORD_ALREADY_EXISTS') {
+      return res.status(409).json({
+        message: `This booking already has a ${error.existingPaymentMethod} payment`,
+        error: error.code,
+      });
+    }
     console.error('Error creating payment', error);
     return res.status(500).json({ message: 'Error creating payment' });
   }

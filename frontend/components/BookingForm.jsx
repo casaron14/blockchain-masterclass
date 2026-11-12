@@ -99,8 +99,7 @@ export default function BookingForm() {
 
   useEffect(() => {
     const storedBooking = fetchStoredBookingRecord(slug);
-    const storedPaymentId = fetchStoredPaymentId(slug);
-    if (!storedBooking || !storedPaymentId) {
+    if (!storedBooking) {
       return;
     }
     const storedBookingExpiresAt = storedBooking.expires_at
@@ -110,8 +109,11 @@ export default function BookingForm() {
       clearStoredBookingProgress(slug);
       return;
     }
+    // A booking can exist without a payment when payment creation failed after
+    // the seat was reserved. Keeping the booking id lets the resume panel finish
+    // that step instead of leaving a held seat nobody can pay for.
     setActiveBookingId(storedBooking.id);
-    setActivePaymentId(storedPaymentId);
+    setActivePaymentId(fetchStoredPaymentId(slug) ?? null);
   }, [slug]);
 
   function persistAttendeeDraft(nextAttendeeDetails, nextPaymentMethod) {
@@ -234,10 +236,19 @@ export default function BookingForm() {
       storeBookingRecordLocally(slug, createdBooking);
       clearStoredReferralSource(slug);
 
-      const createdPaymentResult = await createPaymentRecord({
-        bookingId: createdBooking.id,
-        paymentMethod: selectedPaymentMethod,
-      });
+      let createdPaymentResult;
+      try {
+        createdPaymentResult = await createPaymentRecord({
+          bookingId: createdBooking.id,
+          paymentMethod: selectedPaymentMethod,
+        });
+      } catch (paymentCreationError) {
+        // The seat is already held. Surface the booking so "Continue to
+        // payment" can finish this step instead of leaving an orphan hold.
+        setActiveBookingId(createdBooking.id);
+        setActivePaymentId(null);
+        throw paymentCreationError;
+      }
 
       storePaymentIdLocally(slug, createdPaymentResult.payment.id);
       clearStoredBookingDraft(slug);
@@ -273,7 +284,35 @@ export default function BookingForm() {
     setActivePaymentId(null);
   }
 
-  const hasActiveBooking = activeBookingId && activePaymentId;
+  // The payment record may be missing when the create call failed after the
+  // seat was reserved. The backend returns the existing record for a repeated
+  // request, so this retry can never create a second payment.
+  async function resumeActiveBookingPayment() {
+    if (activePaymentId) {
+      router.push(buildPaymentPageUrlForPaymentId(activePaymentId));
+      return;
+    }
+
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const createdPaymentResult = await createPaymentRecord({
+        bookingId: activeBookingId,
+        paymentMethod: selectedPaymentMethod,
+      });
+      storePaymentIdLocally(slug, createdPaymentResult.payment.id);
+      clearStoredBookingDraft(slug);
+      router.push(buildPaymentPageUrlForPaymentId(createdPaymentResult.payment.id));
+    } catch (error) {
+      setSubmitError(
+        error.responseBody?.message || error.message || t('booking.errors.generic')
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const hasActiveBooking = Boolean(activeBookingId);
 
   return (
     <>
@@ -286,7 +325,10 @@ export default function BookingForm() {
               type="button"
               className="btn btn-primary"
               spinnerColor="#f2ede3"
-              onClick={() => router.push(buildPaymentPageUrlForPaymentId(activePaymentId))}
+              autoLoading={false}
+              loading={isSubmitting}
+              loadingLabel={t('loadingStates.preparingPayment')}
+              onClick={resumeActiveBookingPayment}
             >
               {t('booking.resumePayment')}
             </LoadingButton>

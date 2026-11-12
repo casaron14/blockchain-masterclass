@@ -271,6 +271,57 @@ test('recording the same transfer twice keeps a single observed deposit row', as
   assert.equal(observedDepositResult.rows[0].block_hash, '0xblock55');
 });
 
+test('one transaction paying two deposit addresses records both transfers', async () => {
+  const firstOrder = await createOrderWithDepositAddressForTestBooking();
+  const secondOrder = await createOrderWithDepositAddressForTestBooking();
+
+  const depositAddressResult = await pool.query(
+    `SELECT id, order_id, address FROM deposit_addresses
+      WHERE order_id = ANY($1::bigint[])
+      ORDER BY id ASC`,
+    [[firstOrder.createdOrder.id, secondOrder.createdOrder.id]]
+  );
+  assert.equal(depositAddressResult.rows.length, 2);
+
+  const sharedTxHash = '0xsharedbatchtransfer';
+  const matchedTransfers = depositAddressResult.rows.map((depositAddressRecord, index) => ({
+    depositAddressRecord,
+    parsedTransfer: {
+      txHash: sharedTxHash,
+      blockNumber: 77,
+      blockHash: '0xblock77',
+      logIndex: index + 4,
+      fromAddress: PAYER_FROM_ADDRESS,
+      toAddress: depositAddressRecord.address,
+      amountWei: ethers.parseUnits('3.8', DEFAULT_USDT_DECIMALS),
+      amountUsdt: 3.8,
+    },
+  }));
+
+  for (const matchedTransfer of matchedTransfers) {
+    const recordedTransfer = await recordObservedUsdtTransfer(matchedTransfer);
+    assert.ok(recordedTransfer, 'both transfers of the same transaction are stored');
+  }
+
+  const observedDepositResult = await pool.query(
+    'SELECT address, log_index FROM deposits_observed WHERE tx_hash = $1 ORDER BY log_index ASC',
+    [sharedTxHash]
+  );
+  assert.equal(observedDepositResult.rows.length, 2);
+  assert.equal(observedDepositResult.rows[0].log_index, 4);
+  assert.equal(observedDepositResult.rows[1].log_index, 5);
+
+  // Re-reading the same transaction must not duplicate either transfer.
+  for (const matchedTransfer of matchedTransfers) {
+    assert.equal(await recordObservedUsdtTransfer(matchedTransfer), null);
+  }
+  const replayCountResult = await pool.query(
+    'SELECT count(*)::INT AS deposit_count FROM deposits_observed WHERE tx_hash = $1',
+    [sharedTxHash]
+  );
+  assert.equal(replayCountResult.rows[0].deposit_count, 2);
+});
+
 test('a deposit from a replaced block is dropped before it can be confirmed', async () => {
   const { createdOrder } = await createOrderWithDepositAddressForTestBooking();
   await pool.query(

@@ -155,12 +155,13 @@ test('deliverTicketForConfirmedBooking records a sent delivery on success', asyn
   assert.equal(deliveryRecord.attempt_count, 1);
   assert.equal(deliveryRecord.qr_payload, 'https://link.inkryptus.com/?referral=');
 
+  // The delivery ledger is the only record of the send: the booking row is not
+  // updated with a second copy of the timestamp.
   const refreshedBooking = await fetchBookingRecordById(confirmedBooking.id);
-  assert.ok(refreshedBooking.ticket_sent_at);
-  assert.equal(refreshedBooking.ticket_sent_at.getTime(), deliveryRecord.sent_at.getTime());
+  assert.equal(refreshedBooking.ticket_sent_at, null);
 });
 
-test('deliverTicketForConfirmedBooking records a failed delivery and leaves ticket_sent_at empty', async () => {
+test('deliverTicketForConfirmedBooking records a failed delivery with no sent time', async () => {
   const confirmedBooking = await createConfirmedBooking();
   const failingSender = async () => {
     throw new Error('SMTP refused connection');
@@ -175,9 +176,7 @@ test('deliverTicketForConfirmedBooking records a failed delivery and leaves tick
   assert.equal(deliveryRecord.status, 'failed');
   assert.equal(deliveryRecord.last_error, 'SMTP refused connection');
   assert.equal(deliveryRecord.attempt_count, 1);
-
-  const refreshedBooking = await fetchBookingRecordById(confirmedBooking.id);
-  assert.equal(refreshedBooking.ticket_sent_at, null);
+  assert.equal(deliveryRecord.sent_at, null);
 });
 
 test('deliverTicketForConfirmedBooking sends once when two confirmations race', async () => {
@@ -260,7 +259,6 @@ test('resendTicketEmailToAttendeeFromAdmin sends again after a successful delive
     stubSender
   );
   const firstDeliveryRecord = await fetchDeliveryRecordForBooking(confirmedBooking.id);
-  const firstBookingRecord = await fetchBookingRecordById(confirmedBooking.id);
 
   const resendResult = await resendTicketEmailToAttendeeFromAdmin(
     confirmedBooking.id,
@@ -278,12 +276,6 @@ test('resendTicketEmailToAttendeeFromAdmin sends again after a successful delive
   assert.ok(
     new Date(resentDeliveryRecord.sent_at).getTime() >=
       new Date(firstDeliveryRecord.sent_at).getTime()
-  );
-
-  const bookingAfterResend = await fetchBookingRecordById(confirmedBooking.id);
-  assert.equal(
-    new Date(bookingAfterResend.ticket_sent_at).getTime(),
-    new Date(firstBookingRecord.ticket_sent_at).getTime()
   );
 });
 
@@ -382,9 +374,7 @@ test('deliverTicketForConfirmedBooking stops at the configured hourly Gmail limi
     const secondDeliveryRecord = await fetchDeliveryRecordForBooking(secondBooking.id);
     assert.equal(secondDeliveryRecord.status, 'failed');
     assert.equal(secondDeliveryRecord.last_error, TICKET_EMAIL_HOURLY_LIMIT_REACHED_REASON);
-
-    const secondBookingAfterAttempt = await fetchBookingRecordById(secondBooking.id);
-    assert.equal(secondBookingAfterAttempt.ticket_sent_at, null);
+    assert.equal(secondDeliveryRecord.sent_at, null);
   } finally {
     if (previousHourlyLimit === undefined) {
       delete process.env.TICKET_EMAIL_HOURLY_LIMIT;
@@ -472,9 +462,7 @@ test('redeliverFailedTicketEmail flips a failed delivery to sent', async () => {
   assert.equal(redelivered.status, 'sent');
   assert.equal(redelivered.last_error, null);
   assert.equal(redelivered.attempt_count, 2);
-
-  const refreshedBooking = await fetchBookingRecordById(confirmedBooking.id);
-  assert.ok(refreshedBooking.ticket_sent_at);
+  assert.ok(redelivered.sent_at);
 });
 
 test('sendTicketEmailToAttendee attaches exactly the ticket PDF and playbook PDF to the email', async () => {

@@ -99,7 +99,7 @@ const BOOKING_EXPORT_COLUMNS = Object.freeze([
   },
   {
     headerLabel: 'Ticket last sent at',
-    readValue: (booking) => booking.ticket_last_sent_at || booking.ticket_sent_at,
+    readValue: (booking) => booking.ticket_last_sent_at,
   },
 ]);
 

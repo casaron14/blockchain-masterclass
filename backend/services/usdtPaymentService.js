@@ -367,6 +367,17 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
         toAddress: completingDeposit.address,
         amountUsdt: Number(completingDeposit.amount),
       });
+
+      // The money is real even though no seat was granted, so the order is
+      // settled rather than expired: that keeps the deposit in the sweep queue
+      // and stops the attendee timeline from showing a confirmed payment and
+      // an expired order at the same time. The refund case is the review flag
+      // recorded below.
+      await client.query('UPDATE orders SET status = $2 WHERE id = $1', [
+        orderId,
+        completedSweepRecord ? 'swept' : 'paid',
+      ]);
+
       await recordPaymentReviewFlag(
         {
           orderId,

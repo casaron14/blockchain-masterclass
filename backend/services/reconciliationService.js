@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 
 import { getTreasuryWalletAddress, DEFAULT_USDT_DECIMALS } from './usdtPaymentService.js';
 
-import { fetchGasWalletBnbBalance, getTreasuryUsdtBalanceWei, createGasWalletSigner } from './gasWalletService.js';
+import { fetchGasWalletBnbBalance, getTreasuryUsdtBalanceWei } from './gasWalletService.js';
 
 import { fetchPaidOrdersAwaitingSweep, fetchPendingOrderRecords, fetchPaidOrderRecords } from './orderService.js';
 
@@ -219,8 +219,7 @@ export async function generateAdminSummaryReport({
 
   let gasWalletBnbBalance;
   try {
-    const gasWalletSigner = createGasWalletSigner(provider);
-    gasWalletBnbBalance = Number(await fetchGatewayGasBalance(gasWalletSigner)) / 10 ** 18;
+    gasWalletBnbBalance = Number(await fetchGatewayGasBalance(provider)) / 10 ** 18;
   } catch (error) {
     gasWalletBnbBalance = null;
   }

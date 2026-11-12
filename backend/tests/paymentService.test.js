@@ -98,7 +98,7 @@ test('updatePaymentRecordStatus sets confirmed_at when status becomes confirmed'
   assert.equal(invalidUpdate, null);
 });
 
-test('updatePaymentRecordStatus clears confirmed_at when reverting from confirmed', async () => {
+test('updatePaymentRecordStatus refuses to move a confirmed payment backwards', async () => {
   const bookingRecord = await createBookingRecordWithActiveSeatHold({
     full_name: 'Revert User',
     email: 'revert@example.com',
@@ -109,6 +109,9 @@ test('updatePaymentRecordStatus clears confirmed_at when reverting from confirme
   await updatePaymentRecordStatus(paymentRecord.id, 'confirmed');
 
   const revertedPayment = await updatePaymentRecordStatus(paymentRecord.id, 'pending');
-  assert.equal(revertedPayment.status, 'pending');
-  assert.equal(revertedPayment.confirmed_at, null);
+  assert.equal(revertedPayment, null);
+
+  const refreshedPayment = await fetchPaymentRecordByBookingId(bookingRecord.id);
+  assert.equal(refreshedPayment.status, 'confirmed');
+  assert.ok(refreshedPayment.confirmed_at);
 });

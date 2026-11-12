@@ -13,6 +13,8 @@ import {
   prepareSweepRecordWithFundedGas,
 } from './sweepService.js';
 
+import { resolveGasWalletAddress } from './gasWalletService.js';
+
 import { sendTelegramAlertMessage } from './telegramAlertService.js';
 
 export const SWEEP_BATCH_ITEM_PREPARED = 'PREPARED_FOR_OFFLINE_SIGNING';
@@ -23,13 +25,13 @@ export const SWEEP_BATCH_ITEM_FAILED = 'FAILED';
 /**
  * Prepares every collectable order for signing on the air-gapped machine.
  *
- * Nothing is broadcast here. The output contains one unsigned transaction per
- * gas-price attempt (same nonce), so the offline machine can sign the whole
- * retry ladder in one visit and the online host can still bump the gas price
- * without a second signing round.
+ * Nothing is broadcast here and nothing is signed here. Each item carries two
+ * unsigned transactions: the BNB funding transfer from the gas wallet, and the
+ * USDT transfer to the treasury (one per gas-price attempt, same nonce, so the
+ * online host can bump the gas price without a second signing round).
  *
- * Funding already happened on this host because the gas wallet is a separate
- * hot key; the deposit seed is never used.
+ * Gas funding used to happen on this host with a hot gas wallet key. It is part
+ * of the batch now, because the offline machine holds the only gas wallet key.
  */
 export async function prepareSweepBatchForOfflineSigning({
   provider = createUsdtProvider(),
@@ -55,6 +57,17 @@ export async function prepareSweepBatchForOfflineSigning({
   let cycleSpentBnbWei = 0n;
   let chainId = null;
 
+  // Every funding transaction in one batch is sent from the same gas wallet, so
+  // the nonces have to be allocated here, one per item, instead of reading the
+  // chain once per order and handing out the same nonce twice.
+  // shortcut: gas-wallet nonces assume the batch is submitted in prepared order;
+  // if an early item fails, later funding transactions wait, so re-prepare.
+  const gasWalletAddress = resolveGasWalletAddress();
+  let gasWalletFundingNonce = await provider.getTransactionCount(
+    gasWalletAddress,
+    'pending'
+  );
+
   for (const orderRow of orderCandidatesByOrderId.values()) {
     try {
       const preparation = await prepareSweepRecordWithFundedGas(orderRow, {
@@ -62,6 +75,8 @@ export async function prepareSweepBatchForOfflineSigning({
         provider,
         triggeredBy,
         cycleSpentBnbWei,
+        unsignedGasFundingOnly: true,
+        gasWalletFundingNonce,
       });
 
       if (preparation.preparationStatus === SWEEP_PREPARATION_ALREADY_HANDLED) {
@@ -94,6 +109,9 @@ export async function prepareSweepBatchForOfflineSigning({
 
       chainId = unsignedAttempts.chainId ?? chainId;
       cycleSpentBnbWei += preparation.bnbFundedWei;
+      if (preparation.unsignedGasFunding) {
+        gasWalletFundingNonce += 1;
+      }
       items.push({
         orderId: orderRow.order_id,
         sweepId: preparation.sweepRecord.id,
@@ -103,6 +121,7 @@ export async function prepareSweepBatchForOfflineSigning({
         chainId: unsignedAttempts.chainId,
         nonce: unsignedAttempts.nonce,
         gasLimit: preparation.gasLimit,
+        gasFunding: preparation.unsignedGasFunding,
         attempts: unsignedAttempts.attempts,
       });
       results.push({
@@ -132,6 +151,7 @@ export async function prepareSweepBatchForOfflineSigning({
       chainId,
       usdtContractAddress: getUsdtContractAddress(),
       treasuryAddress: getTreasuryWalletAddress(),
+      gasWalletAddress,
     },
     items,
     results,
