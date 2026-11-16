@@ -351,9 +351,9 @@ function buildWebhookRequestBody(emailRequestOverrides = {}, topLevelOverrides =
       },
       event: {
         title: 'Blockchain Masterclass',
-        dateLabel: '7th November 2026',
+        dateLabel: '28th November 2026',
         timeLabel: '6:00 PM',
-        venue: 'Arusha, Tanzania',
+        venue: 'Dodoma, Tanzania',
       },
       ticket: {
         ticketTypeLabel: 'General Admission',
@@ -982,19 +982,19 @@ test('sendTwoDaysToGoReminderEmailsToConfirmedClients sends one reminder per uni
   assert.equal(sentReminder.to, 'attendee@example.com');
   assert.equal(
     sentReminder.subject,
-    '2 days to go: Blockchain Masterclass (Saturday, 7th November 2026)'
+    '2 days to go: Blockchain Masterclass (Saturday, 28th November 2026)'
   );
   assert.match(sentReminder.body, /Hi Reminder Attendee,/);
-  assert.match(sentReminder.body, /Saturday, 7th November 2026/);
+  assert.match(sentReminder.body, /Saturday, 28th November 2026/);
   assert.match(sentReminder.body, /attached the event playbook PDF/);
-  assert.match(sentReminder.body, /Village Hall Mafao House, Arusha, Tanzania/);
+  assert.match(sentReminder.body, /Mizengo Hall, Dodoma Hotel, Dodoma, Tanzania/);
   assert.match(
     sentReminder.htmlBody,
     /attached the event playbook PDF/
   );
   assert.match(
     sentReminder.htmlBody,
-    /Village Hall Mafao House, Arusha, Tanzania/
+    /Mizengo Hall, Dodoma Hotel, Dodoma, Tanzania/
   );
   assert.equal(sentReminder.attachments.length, 1);
   assert.equal(
@@ -1137,7 +1137,7 @@ test('sendTestTwoDaysToGoReminderEmailToScriptOwner sends the current reminder d
   assert.equal(appsScriptEnvironment.sentMessages[0].to, 'owner@example.com');
   assert.equal(
     appsScriptEnvironment.sentMessages[0].subject,
-    '2 days to go: Blockchain Masterclass (Saturday, 7th November 2026)'
+    '2 days to go: Blockchain Masterclass (Saturday, 28th November 2026)'
   );
   assert.match(appsScriptEnvironment.sentMessages[0].htmlBody, /Test Attendee/);
   assert.equal(

@@ -83,7 +83,7 @@ export const translations = {
       closing: {
         heading: 'Take your seat.',
         body: 'One day of practical teaching. A limited room of 150. Reserve your place in the next minute.',
-        meta: '7 November 2026 · Arusha, Tanzania',
+        meta: '28 November 2026 · Dodoma, Tanzania',
       },
       about: {
         sectionTitle: 'About this {name}',
@@ -455,7 +455,7 @@ export const translations = {
       closing: {
         heading: 'Chukua nafasi yako.',
         body: 'Siku moja ya mafunzo ya vitendo. Chumba kidogo cha watu 150. Hifadhi nafasi yako ndani ya dakika ijayo.',
-        meta: '7 Novemba 2026 · Arusha, Tanzania',
+        meta: '28 Novemba 2026 · Dodoma, Tanzania',
       },
       highlights: {
         title: 'Mafunzo ya vitendo kwa waanzilishi wenye azma',

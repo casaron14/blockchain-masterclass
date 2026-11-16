@@ -144,6 +144,23 @@ test('the payment path never needs an Alchemy key, and the old resolver still re
   );
 });
 
+test('a blank BSC_RPC_URL plus an Alchemy key makes Alchemy the first testnet endpoint', () => {
+  withEnvironment(
+    {
+      BSC_RPC_URL: undefined,
+      ALCHEMY_RPC_URL: undefined,
+      ALCHEMY_API_KEY: 'test-key',
+      ALCHEMY_NETWORK: undefined,
+      CHAIN_ID: '97',
+    },
+    () => {
+      const expectedAlchemyUrl = 'https://bnb-testnet.g.alchemy.com/v2/test-key';
+      assert.equal(resolveBscRpcUrl(), expectedAlchemyUrl);
+      assert.equal(resolvePublicBscRpcUrlCandidates()[0], expectedAlchemyUrl);
+    }
+  );
+});
+
 test('an Alchemy override is still honoured by the legacy resolver for the manual verify endpoint', () => {
   withEnvironment({ ALCHEMY_RPC_URL: 'https://bnb-testnet.g.alchemy.com/v2/legacy-key' }, () => {
     assert.equal(

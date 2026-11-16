@@ -131,10 +131,10 @@ test('generateTicketPdfBuffer omits the payment block when no payment summary is
 
   const drawnTicketText = readDrawnTextFromPdf(pdfBuffer);
   assert.ok(drawnTicketText.includes('BLOCKCHAINMASTERCLASS'));
-  assert.ok(drawnTicketText.includes('07/11/2026'));
+  assert.ok(drawnTicketText.includes('28/11/2026'));
   assert.ok(drawnTicketText.includes('JengamustakabalikwaBlockchain'));
-  assert.ok(drawnTicketText.includes('VillageHallMafaoHouse'));
-  assert.ok(drawnTicketText.includes('Arusha,Tanzania'));
+  assert.ok(drawnTicketText.includes('MizengoHall,DodomaHotel'));
+  assert.ok(drawnTicketText.includes('Dodoma,Tanzania'));
   assert.ok(drawnTicketText.includes('inkryptus.com'));
   assert.ok(drawnTicketText.includes('+255621745217'));
   assert.ok(drawnTicketText.includes(confirmedBooking.ref.replace('-', '')));

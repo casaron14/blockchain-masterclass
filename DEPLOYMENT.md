@@ -2,9 +2,9 @@
 
 > **Sweep removed.** The sweep job, treasury reconciliation, gas-wallet monitor
 > and `sweep:prepare` / `sweep:sign` / `sweep:submit` scripts no longer exist.
-> Ignore the sweep environment variables and offline collection steps later in
-> this document; a deposit address is created and the payment is confirmed, and
-> the USDT stays at that address.
+> A deposit address is created and the payment is confirmed, and the USDT stays
+> at that address. Collection is a separate system documented in
+> `SWEEP_SYSTEM.md`.
 
 The production architecture is **Vercel for the app and API, Supabase for
 Postgres and private object storage**. Supabase is not the host for this
@@ -227,6 +227,11 @@ Required for the current production setup:
   emails one scheduled retry run may send).
 - `TURNSTILE_SECRET_KEY` in production: booking and login are rejected without
   it.
+- `ALCHEMY_API_KEY` with `BSC_RPC_URL` left blank (required on Vercel; the
+  shared public BSC nodes rate-limit its serverless egress IPs). Use a Pay As
+  You Go key: Alchemy's free tier caps BNB `eth_getLogs` to 10 blocks, which
+  makes the listener's catch-up scan impractically slow. `ALCHEMY_NETWORK` is
+  derived from `CHAIN_ID` (`bnb-mainnet` for 56, `bnb-testnet` for 97).
 
 Ticket emails attach the same PDF ticket the attendee can download from the
 booking lookup, so the email and the download never show two different designs.
@@ -325,8 +330,8 @@ Behaviour:
 calls this API directly.
 
 Do **not** set `ENABLE_JOBS=true` on Vercel: the process is frozen between
-requests and has no timers. Leave `ENABLE_SWEEP_JOB=false` everywhere in
-production; use the offline `npm run sweep:prepare/sign/submit` flow.
+requests and has no timers. The website no longer collects funds; sweeping is a
+separate system documented in `SWEEP_SYSTEM.md`.
 
 ### USDT mainnet configuration (rail not enabled yet)
 
@@ -338,16 +343,15 @@ material between environments:
 | Purpose | Production / mainnet | Test / local |
 | --- | --- | --- |
 | Deposit address derivation | `WALLET_ACCOUNT_XPUB` (watch-only) | `WALLET_MNEMONIC` or a testnet-only xpub |
-| Gas for sweeps | `GAS_WALLET_ADDRESS` on the server, `GAS_WALLET_PRIVATE_KEY` only on the offline machine | burner testnet key |
-| Sweep destination | mainnet `TREASURY_WALLET_ADDRESS` | testnet treasury |
 | Token | mainnet USDT `USDT_CONTRACT_ADDRESS` | deployed mock/test token |
-| Deposit detection | `ALCHEMY_API_KEY` + Address Activity webhook; polling scan stays the backfill | public testnet RPC pool |
+| Deposit detection | `ALCHEMY_API_KEY` or a dedicated RPC + Address Activity webhook; polling scan stays the backfill | `ALCHEMY_API_KEY` or the public testnet RPC pool |
 
-Production startup refuses `WALLET_MNEMONIC`, refuses to start without
-`WALLET_ACCOUNT_XPUB`, and refuses a `GAS_WALLET_PRIVATE_KEY` on the web host
-(`backend/config/productionSigningGuard.js`). The in-process sweep job is also
-refused there: gas funding and the USDT transfer are both signed on the offline
-machine, so the server holds no key that can move funds.
+The website only derives deposit addresses and confirms payments. It holds no
+key that can move funds, and it never sweeps. Collection runs on a separate
+machine; see `SWEEP_SYSTEM.md`.
+
+Production startup refuses `WALLET_MNEMONIC` and refuses to start without
+`WALLET_ACCOUNT_XPUB` (`backend/config/productionSigningGuard.js`).
 
 Required before enabling the rail:
 
@@ -355,20 +359,14 @@ Required before enabling the rail:
 CHAIN_ID=56
 BSC_RPC_URL=                      # blank uses Alchemy when ALCHEMY_API_KEY is set, then the public pool
 ALCHEMY_API_KEY=
+ALCHEMY_NETWORK=                  # blank: derived from CHAIN_ID (bnb-mainnet for 56)
 ALCHEMY_WEBHOOK_ID=
 ALCHEMY_WEBHOOK_AUTH_TOKEN=
 ALCHEMY_WEBHOOK_SIGNING_KEY=
 USDT_CONTRACT_ADDRESS=0x55d398326f99059fF775485246999027B3197955
 WALLET_ACCOUNT_XPUB=
-GAS_WALLET_ADDRESS=
-TREASURY_WALLET_ADDRESS=
 SETTLEMENT_FINALITY_MODE=finalized
 SETTLEMENT_MIN_CONFIRMATIONS=15
-SWEEP_MINIMUM_AGE_HOURS=24
-SWEEP_RECOVERY_MINIMUM_USDT=0.5
-GAS_SPONSORSHIP_MAX_BNB_PER_SWEEP=0.005
-GAS_SPONSORSHIP_MAX_BNB_PER_CYCLE=0.05
-GAS_SPONSORSHIP_MAX_BNB_PER_DAY=0.2
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 ```
@@ -385,12 +383,9 @@ RPC, USDT contract, derivation source and webhook variables. Then run
 before the webhook existed is watched; new addresses are registered
 automatically when an order is created.
 
-Keep `ENABLE_PAYMENT_MONITOR_JOB`, `ENABLE_LISTENER_HEALTH_JOB`,
-`ENABLE_RECONCILIATION_JOB`, `ENABLE_GAS_WALLET_MONITOR_JOB` and
-`ENABLE_SWEEP_JOB` false until the keys, RPC, gas balance and alerts have been
-smoke-tested. `SWEEP_RECOVERY_MINIMUM_USDT` is the floor for collecting an
-underpaid balance on an expired order; below it the balance stays in place and
-is surfaced by the `underpayment_after_window` review flag.
+Keep `ENABLE_PAYMENT_MONITOR_JOB` and `ENABLE_LISTENER_HEALTH_JOB` false until
+the Alchemy RPC, `USDT_CONTRACT_ADDRESS`, `WALLET_ACCOUNT_XPUB` and alerts have
+been smoke-tested.
 
 ### Scheduled work on Vercel
 
@@ -407,9 +402,6 @@ ENABLE_SEAT_HOLDS_JOB=true
 ENABLE_ORDER_EXPIRY_JOB=true
 ENABLE_TICKET_DELIVERY_RETRY_JOB=true
 ENABLE_LISTENER_HEALTH_JOB=true
-ENABLE_GAS_WALLET_MONITOR_JOB=true
-ENABLE_RECONCILIATION_JOB=true
-ENABLE_SWEEP_JOB=false
 ENABLE_JOBS=false
 ```
 
@@ -437,24 +429,22 @@ payments**. On Hobby you must add an external scheduler:
    confirmation lag is still within the product promise. Avoid GitHub Actions
    schedules as the primary trigger: they are delayed, can be disabled after
    inactivity, and have a five-minute minimum.
-3. Keep the Vercel daily cron. It is a backstop for the daily reconciliation
-   job and for the always-due jobs (payment monitor, seat holds, order expiry).
+3. Keep the Vercel daily cron. It is a backstop for the always-due jobs
+   (payment monitor, seat holds, order expiry).
    It is not the payment confirmation mechanism. Hobby fires the daily cron
    somewhere inside the scheduled hour, so jobs that depend on an exact minute
-   (listener health, gas wallet monitor, ticket retries) are only reliable when
+   (listener health, ticket retries) are only reliable when
    the external scheduler is calling.
 4. Leave `ENABLE_JOBS=false`. `MONITOR_POLL_INTERVAL_MS` is ignored on the cron
    path; the external scheduler's frequency is the real poll interval.
-5. On a public RPC, set `MONITOR_LOG_SCAN_CHUNK_BLOCKS=5000` so a scheduler
-   outage does not produce one oversized `eth_getLogs` call when the listener
-   catches up.
+5. Set `MONITOR_LOG_SCAN_CHUNK_BLOCKS=5000` so a scheduler outage does not produce
+   one oversized `eth_getLogs` call when the listener catches up. Alchemy's free
+   tier caps BNB at a 10-block range: use Pay As You Go, or set this to 10 and
+   accept a slow backfill.
 
 The endpoint has one advisory lock per job, so overlapping scheduler calls,
 Vercel cron retries and rolling deploys cannot run the same job twice. A second
-call returns `SKIPPED_ALREADY_RUNNING` for the busy job. The reconciliation job
-also checks the durable `reconciliation_runs` history and skips when a run
-started less than 23 hours ago, so the daily Vercel cron and the minute
-scheduler cannot produce two audits in one day.
+call returns `SKIPPED_ALREADY_RUNNING` for the busy job.
 
 Because the external scheduler is the primary trigger, use a scheduler that
 sends failure notifications (cron-job.org does), or add an independent uptime
@@ -587,7 +577,7 @@ the PDF download use the same generator and the same event configuration.
   `409 PAYMENT_METHOD_NOT_AVAILABLE`, and `/webhook/azampay` is not mounted. The
   integration code remains for when it is completed.
 - **USDT (BEP20): muted / coming soon.** The checkout renders it as a muted card
-  and new bookings cannot select it. The listener, sweep and reconciliation
+  and new bookings cannot select it. The listener and payment confirmation
   services are unchanged, so USDT invoices created before the rail was muted
   still settle. `CONFIGURED_PAYMENT_METHODS` in `shared/eventConfig.js` therefore
   stays wider than `SELLABLE_PAYMENT_METHODS` on purpose.

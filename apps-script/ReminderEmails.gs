@@ -17,8 +17,8 @@ var REMINDER_DELIVERY_SHEET_HEADERS = [
 // Keep these event details in sync with shared/eventConfig.js. Apps Script
 // cannot import the repository module, so the reminder campaign owns its copy.
 var REMINDER_EVENT_NAME = 'Blockchain Masterclass';
-var REMINDER_EVENT_DATE_LABEL = 'Saturday, 7th November 2026';
-var REMINDER_EVENT_VENUE = 'Village Hall Mafao House, Arusha, Tanzania';
+var REMINDER_EVENT_DATE_LABEL = 'Saturday, 28th November 2026';
+var REMINDER_EVENT_VENUE = 'Mizengo Hall, Dodoma Hotel, Dodoma, Tanzania';
 var REMINDER_SUPPORT_PHONE_NUMBER = '+255 621 745 217';
 var REMINDER_SUPPORT_EMAIL_ADDRESS = 'support@dienacademy.com';
 var REMINDER_SENDER_DISPLAY_NAME = 'Charity from DienAcademy';

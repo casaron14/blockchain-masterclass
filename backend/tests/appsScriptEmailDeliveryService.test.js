@@ -80,9 +80,9 @@ function buildTicketDeliveryMetadata() {
     },
     event: {
       title: 'Blockchain Masterclass',
-      dateLabel: '7th November 2026',
+      dateLabel: '28th November 2026',
       timeLabel: '6:00 PM',
-      venue: 'Arusha, Tanzania',
+      venue: 'Dodoma, Tanzania',
     },
     ticket: {
       ticketTypeLabel: 'General Admission',

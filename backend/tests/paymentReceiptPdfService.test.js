@@ -9,8 +9,8 @@ const COMPLETING_TRANSACTION_HASH =
 
 const EVENT_DETAILS = {
   eventTitle: 'Blockchain Masterclass',
-  eventDate: '7th November 2026',
-  eventLocation: 'Arusha, Tanzania',
+  eventDate: '28th November 2026',
+  eventLocation: 'Dodoma, Tanzania',
 };
 
 function buildReceiptRenderInput() {

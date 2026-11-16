@@ -40,12 +40,12 @@ export const metadata = {
     template: '%s | Blockchain Masterclass',
   },
   description:
-    'A one-day, beginner-friendly blockchain masterclass in Arusha, Tanzania. 7 November 2026. 150 seats. TZS 10,000.',
+    'A one-day, beginner-friendly blockchain masterclass in Dodoma, Tanzania. 28 November 2026. 150 seats. TZS 10,000.',
   applicationName: 'Blockchain Masterclass',
   openGraph: {
     title: 'Blockchain Masterclass — DienAcademy',
     description:
-      'One day. Three sessions. A practical blockchain education in Arusha, Tanzania. 7 November 2026.',
+      'One day. Three sessions. A practical blockchain education in Dodoma, Tanzania. 28 November 2026.',
     url: './',
     siteName: 'DienAcademy',
     type: 'website',

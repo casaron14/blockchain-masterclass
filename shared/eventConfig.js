@@ -12,11 +12,11 @@ export const EVENT_CONFIGURATIONS = [
     name: 'Blockchain Masterclass',
     tagline: 'Book your seat for the Blockchain Masterclass event.',
     event: {
-      date: '7th November 2026',
+      date: '28th November 2026',
       // DD/MM/YYYY form printed on the event pass. Keep it in sync with `date`.
-      ticketDateLabel: '07/11/2026',
-      location: 'Arusha, Tanzania',
-      venueName: 'Village Hall Mafao House',
+      ticketDateLabel: '28/11/2026',
+      location: 'Dodoma, Tanzania',
+      venueName: 'Mizengo Hall, Dodoma Hotel',
       motto: 'Jenga mustakabali kwa Blockchain',
       brandName: 'Inkryptus',
       websiteAddress: 'inkryptus.com',
