@@ -9,6 +9,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import { getTranslation } from '@/lib/translations';
 import { formatCryptoAmount, formatLocalPrice } from '@/lib/eventFormat';
+import { PAYMENT_METHOD_USDT_BEP20 } from '@/lib/eventConfig';
 import { buildBookingPageUrl } from '@/lib/siteRoutes';
 
 export default function MasterHomePage() {
@@ -28,7 +29,12 @@ export default function MasterHomePage() {
     seatHoldMinutes,
     supportEmail,
     supportPhone,
+    paymentMethods,
   } = eventConfig;
+
+  const isCryptoPaymentMethodOffered = paymentMethods.some(
+    (paymentMethodOption) => paymentMethodOption.key === PAYMENT_METHOD_USDT_BEP20
+  );
 
   const statItems = getTranslation(language, 'site.stats.items');
   const highlightItems = getTranslation(language, 'site.highlights.items');
@@ -183,9 +189,11 @@ export default function MasterHomePage() {
               <strong className="admission-price__amount">
                 {currency} {formatLocalPrice(ticketPrice)}
               </strong>
-              <span className="admission-price__crypto">
-                {formatCryptoAmount(cryptoAmount)} {cryptoCurrency} · {cryptoNetwork}
-              </span>
+              {isCryptoPaymentMethodOffered && (
+                <span className="admission-price__crypto">
+                  {formatCryptoAmount(cryptoAmount)} {cryptoCurrency} · {cryptoNetwork}
+                </span>
+              )}
             </div>
 
             <h3 className="admission-includes__heading">

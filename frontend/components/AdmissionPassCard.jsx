@@ -3,6 +3,7 @@
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import { formatCryptoAmount, formatLocalPrice } from '@/lib/eventFormat';
+import { PAYMENT_METHOD_USDT_BEP20 } from '@/lib/eventConfig';
 
 const BARCODE_LINE_WIDTHS = [2, 1, 3, 1, 2, 4, 1, 1, 3, 2, 1, 4, 2, 1, 3, 1, 2, 3, 1, 2];
 
@@ -51,9 +52,13 @@ export default function AdmissionPassCard() {
     cryptoCurrency,
     cryptoNetwork,
     seatCapacity,
+    paymentMethods,
   } = useEvent().eventConfig;
 
   const hasRegularPrice = regularTicketPrice && regularTicketPrice > ticketPrice;
+  const isCryptoPaymentMethodOffered = paymentMethods.some(
+    (paymentMethodOption) => paymentMethodOption.key === PAYMENT_METHOD_USDT_BEP20
+  );
 
   return (
     <article className="admission-pass" aria-label={t('site.hero.passLabel')}>
@@ -91,12 +96,14 @@ export default function AdmissionPassCard() {
               )}
             </dd>
           </div>
-          <div>
-            <dt>{cryptoCurrency}</dt>
-            <dd>
-              {formatCryptoAmount(cryptoAmount)} {cryptoCurrency} · {cryptoNetwork}
-            </dd>
-          </div>
+          {isCryptoPaymentMethodOffered && (
+            <div>
+              <dt>{cryptoCurrency}</dt>
+              <dd>
+                {formatCryptoAmount(cryptoAmount)} {cryptoCurrency} · {cryptoNetwork}
+              </dd>
+            </div>
+          )}
         </dl>
 
         <div className="admission-pass__foot">

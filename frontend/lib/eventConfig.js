@@ -31,6 +31,18 @@ export const PAYMENT_METHOD_LABEL_KEYS = {
   lipanamba: 'payment.lipanamba',
 };
 
+// USDT/BEP20 is muted on the frontend until the rail is fixed. The backend
+// still accepts usdt_bep20 for invoices already issued, which is why
+// SUPPORTED_PAYMENT_METHODS keeps the full configured list.
+const MUTED_FRONTEND_PAYMENT_METHODS = Object.freeze([PAYMENT_METHOD_USDT_BEP20]);
+
+function removeMutedPaymentMethods(paymentMethodOptions) {
+  return paymentMethodOptions.filter(
+    (paymentMethodOption) =>
+      !MUTED_FRONTEND_PAYMENT_METHODS.includes(paymentMethodOption.key)
+  );
+}
+
 export const defaultEventConfig = {
   slug: primaryEventConfiguration.slug,
   name: primaryEventConfiguration.name,
@@ -54,10 +66,12 @@ export const defaultEventConfig = {
   platformName: primaryEventConfiguration.contact.platformName,
   lipaNambaNumber: primaryEventConfiguration.payment.lipaNambaNumber,
   lipaNambaAccountName: primaryEventConfiguration.payment.lipaNambaAccountName,
-  paymentMethods: primaryEventConfiguration.paymentMethods.map((paymentMethod) => ({
-    key: paymentMethod,
-    labelKey: PAYMENT_METHOD_LABEL_KEYS[paymentMethod] || `payment.${paymentMethod}`,
-  })),
+  paymentMethods: removeMutedPaymentMethods(
+    primaryEventConfiguration.paymentMethods.map((paymentMethod) => ({
+      key: paymentMethod,
+      labelKey: PAYMENT_METHOD_LABEL_KEYS[paymentMethod] || `payment.${paymentMethod}`,
+    }))
+  ),
   comingSoonPaymentMethods: primaryEventConfiguration.comingSoonPaymentMethods.map(
     (paymentMethod) => ({
       key: paymentMethod,
@@ -77,18 +91,20 @@ export function buildPaymentMethodOptions(
   fallbackPaymentMethodOptions = defaultEventConfig.paymentMethods
 ) {
   if (!Array.isArray(paymentMethods) || paymentMethods.length === 0) {
-    return fallbackPaymentMethodOptions;
+    return removeMutedPaymentMethods(fallbackPaymentMethodOptions);
   }
-  return paymentMethods.map((paymentMethod) => {
-    if (paymentMethod && typeof paymentMethod === 'object' && paymentMethod.key) {
-      return paymentMethod;
-    }
-    const methodKey = String(paymentMethod);
-    return {
-      key: methodKey,
-      labelKey: PAYMENT_METHOD_LABEL_KEYS[methodKey] || `payment.${methodKey}`,
-    };
-  });
+  return removeMutedPaymentMethods(
+    paymentMethods.map((paymentMethod) => {
+      if (paymentMethod && typeof paymentMethod === 'object' && paymentMethod.key) {
+        return paymentMethod;
+      }
+      const methodKey = String(paymentMethod);
+      return {
+        key: methodKey,
+        labelKey: PAYMENT_METHOD_LABEL_KEYS[methodKey] || `payment.${methodKey}`,
+      };
+    })
+  );
 }
 
 export function buildEventConfigFromPayload(payload) {

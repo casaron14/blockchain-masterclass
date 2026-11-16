@@ -5,6 +5,7 @@ import {
   buildEventConfigFromPayload,
   buildPaymentMethodOptions,
   defaultEventConfig,
+  SUPPORTED_PAYMENT_METHODS,
 } from '../lib/eventConfig.js';
 import { translations } from '../lib/translations.js';
 
@@ -21,11 +22,21 @@ function resolveTranslationValue(languageCode, translationKey) {
     );
 }
 
-test('Lipa Namba and USDT/BEP20 are sellable, so the booking form offers both', () => {
-  assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.paymentMethods), [
-    'lipanamba',
-    'usdt_bep20',
-  ]);
+test('Lipa Namba is the only selectable payment method while USDT/BEP20 stays muted', () => {
+  assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.paymentMethods), ['lipanamba']);
+});
+
+test('a muted USDT/BEP20 method is never selectable even when the backend payload still sells it', () => {
+  const eventConfigFromPayload = buildEventConfigFromPayload({
+    slug: 'blockchain-masterclass',
+    paymentMethods: ['lipanamba', 'usdt_bep20'],
+  });
+
+  assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.paymentMethods), ['lipanamba']);
+});
+
+test('the muted USDT/BEP20 method is still a supported method so existing invoices keep rendering', () => {
+  assert.equal(SUPPORTED_PAYMENT_METHODS.usdt_bep20, 'usdt_bep20');
 });
 
 test('AzamPay is advertised as coming soon instead of being selectable', () => {
@@ -42,13 +53,12 @@ test('the event payload keeps coming-soon methods out of the selectable payment 
   const eventConfigFromPayload = buildEventConfigFromPayload({
     slug: 'blockchain-masterclass',
     paymentMethods: ['lipanamba'],
-    comingSoonPaymentMethods: ['azampesa', 'usdt_bep20'],
+    comingSoonPaymentMethods: ['azampesa'],
   });
 
   assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.paymentMethods), ['lipanamba']);
   assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.comingSoonPaymentMethods), [
     'azampesa',
-    'usdt_bep20',
   ]);
 });
 
