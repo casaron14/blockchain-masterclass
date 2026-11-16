@@ -1,5 +1,11 @@
 # Blockchain Masterclass — Backend Handover
 
+> **Sweep removed.** The automatic collection, treasury reconciliation, gas
+> wallet and offline prepare/sign/submit flow were deleted. USDT payments now
+> stop at a confirmed payment: deposit addresses are still derived per order
+> and the listener still confirms incoming transfers, but funds stay at the
+> deposit address. Sections below that describe sweeping are historical.
+
 > **Deployment update.** The production target is Vercel plus a managed
 > PostgreSQL instance. Read `../DEPLOYMENT.md` first: it defines the single
 > Vercel project (the Next.js app serves `/api/*` through

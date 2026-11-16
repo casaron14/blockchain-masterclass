@@ -21,14 +21,16 @@ function resolveTranslationValue(languageCode, translationKey) {
     );
 }
 
-test('only Lipa Namba is sellable, so the booking form cannot create a crypto or AzamPay payment', () => {
-  assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.paymentMethods), ['lipanamba']);
+test('Lipa Namba and USDT/BEP20 are sellable, so the booking form offers both', () => {
+  assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.paymentMethods), [
+    'lipanamba',
+    'usdt_bep20',
+  ]);
 });
 
-test('crypto and AzamPay are advertised as coming soon instead of being selectable', () => {
+test('AzamPay is advertised as coming soon instead of being selectable', () => {
   assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.comingSoonPaymentMethods), [
     'azampesa',
-    'usdt_bep20',
   ]);
   assert.equal(
     defaultEventConfig.comingSoonPaymentMethods[0].labelKey,

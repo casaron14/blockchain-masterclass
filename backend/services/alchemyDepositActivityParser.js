@@ -86,7 +86,12 @@ function parseAlchemyActivityAsUsdtTransfer(activity, usdtContractAddress) {
     // deposit without one and the polling scan re-reads the same window, so the
     // record is still verified before it can confirm a payment.
     blockHash: null,
-    logIndex: Number(activity.log?.logIndex ?? 0),
+    // Null means "not reported", never 0: the deposit identity is
+    // (tx_hash, log_index), so a guessed 0 would collide with the real first
+    // log of the same transaction. The resolver reads it from the receipt.
+    logIndex: activity.log?.logIndex == null
+      ? null
+      : Number(activity.log.logIndex),
     fromAddress: activity.fromAddress ?? null,
     toAddress: activity.toAddress,
     amountWei,

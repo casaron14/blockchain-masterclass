@@ -119,22 +119,9 @@ export default function PaymentInstructionsFlow({ paymentId }) {
     let isCancelled = false;
 
     initiateUsdtPayment(paymentId)
-      .then(async (instructions) => {
-        if (isCancelled) {
-          return;
-        }
-        setUsdtInstructions(instructions);
-
-        // Loaded only when a USDT payment is actually shown, so the QR encoder
-        // stays out of the initial bundle for landing-page visits.
-        const { default: QRCode } = await import('qrcode');
-        const qrDataUrl = await QRCode.toDataURL(instructions.receivingWallet, {
-          margin: 1,
-          width: 260,
-          color: { dark: '#46352a', light: '#f6f0e4' },
-        });
+      .then((instructions) => {
         if (!isCancelled) {
-          setDepositQrDataUrl(qrDataUrl);
+          setUsdtInstructions(instructions);
         }
       })
       .catch((error) => {
@@ -153,7 +140,45 @@ export default function PaymentInstructionsFlow({ paymentId }) {
     return () => {
       isCancelled = true;
     };
-  }, [paymentRecord, paymentId, t, usdtInstructions]);
+  }, [paymentRecord, paymentId, t]);
+
+  // The QR encoder is loaded only when a USDT deposit address is on screen, so
+  // it stays out of the initial bundle for landing-page visits. It runs in its
+  // own effect because the first effect re-renders when the address arrives,
+  // and that re-render would cancel the QR work if it shared the effect.
+  const receivingWalletAddress = usdtInstructions?.receivingWallet;
+
+  useEffect(() => {
+    if (!receivingWalletAddress) {
+      return undefined;
+    }
+    let isCancelled = false;
+
+    import('qrcode')
+      .then((qrCodeModule) => {
+        const QRCode = qrCodeModule.default ?? qrCodeModule;
+        return QRCode.toDataURL(receivingWalletAddress, {
+          margin: 1,
+          width: 260,
+          color: { dark: '#46352a', light: '#f6f0e4' },
+        });
+      })
+      .then((qrDataUrl) => {
+        if (!isCancelled) {
+          setDepositQrDataUrl(qrDataUrl);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setStatusTone('error');
+          setStatusMessage(t('payment.genericError'));
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [receivingWalletAddress, t]);
 
   async function handleCopyDepositAddress() {
     const depositAddressToCopy = usdtInstructions?.receivingWallet;

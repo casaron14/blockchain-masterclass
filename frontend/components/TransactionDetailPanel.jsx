@@ -101,8 +101,6 @@ function renderUsdtRecords({
   observedDeposits,
   verifiedTransactions,
   verificationErrors,
-  sweeps,
-  treasuryLedgerEntries,
 }) {
   return (
     <>
@@ -113,6 +111,8 @@ function renderUsdtRecords({
         renderRecord={(deposit) => (
           <>
             <ShortRecord label="Tx hash" value={deposit.tx_hash} />
+            <ShortRecord label="Transfer log index" value={String(deposit.log_index ?? '')} />
+            <ShortRecord label="Deposit address" value={deposit.address} />
             <ShortRecord label="From" value={deposit.from_address} />
             <ShortRecord label="Amount" value={`${deposit.amount} ${cryptoCurrency}`} />
             <ShortRecord label="Block" value={deposit.block_number} />
@@ -150,34 +150,6 @@ function renderUsdtRecords({
             <ShortRecord label="Tx hash" value={verificationError.tx_hash} />
             <ShortRecord label="Error" value={verificationError.error_message} />
             <ShortRecord label="Received at" value={formatTimestamp(verificationError.received_at)} />
-          </>
-        )}
-      />
-
-      <RecordListSection
-        title="Sweeps"
-        records={sweeps}
-        emptyLabel="No sweep has been performed for this deposit."
-        renderRecord={(sweep) => (
-          <>
-            <ShortRecord label="Status" value={sweep.status} />
-            <ShortRecord label="Tx hash" value={sweep.tx_hash} />
-            <ShortRecord label="Amount" value={`${sweep.amount} ${cryptoCurrency}`} />
-            <ShortRecord label="Failure reason" value={sweep.failure_reason} />
-            <ShortRecord label="Updated at" value={formatTimestamp(sweep.updated_at)} />
-          </>
-        )}
-      />
-
-      <RecordListSection
-        title="Treasury ledger entries"
-        records={treasuryLedgerEntries}
-        emptyLabel="No treasury sweep has been recorded yet."
-        renderRecord={(ledgerEntry) => (
-          <>
-            <ShortRecord label="Tx hash" value={ledgerEntry.tx_hash} />
-            <ShortRecord label="Amount" value={`${ledgerEntry.amount} ${cryptoCurrency}`} />
-            <ShortRecord label="Recorded at" value={formatTimestamp(ledgerEntry.recorded_at)} />
           </>
         )}
       />
@@ -290,8 +262,6 @@ export default function TransactionDetailPanel({ transaction }) {
             observedDeposits: transaction.observed_deposits,
             verifiedTransactions: transaction.verified_transactions,
             verificationErrors: transaction.verification_errors,
-            sweeps: transaction.sweeps,
-            treasuryLedgerEntries: transaction.treasury_ledger_entries,
           })}
       </div>
     </div>

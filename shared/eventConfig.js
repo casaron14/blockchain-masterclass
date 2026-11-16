@@ -48,13 +48,12 @@ export const EVENT_CONFIGURATIONS = [
       lipaNambaAccountName: 'DienAcademy',
       offlineReviewHoldMinutes: 1440,
     },
-    // Only Lipa Namba is sold right now. The other rails are advertised in the
-    // checkout as "coming soon" but can never be selected for a new booking.
-    paymentMethods: ['lipanamba'],
-    // AzamPesa (STK push) is not integrated yet, and USDT/BEP20 is paused.
-    // These keys are display-only; historical rows stay readable through
+    // Lipa Namba (offline, admin-reviewed) and USDT/BEP20 are sold. AzamPesa
+    // remains advertised as "coming soon" and cannot be selected.
+    paymentMethods: ['lipanamba', 'usdt_bep20'],
+    // Display-only keys; historical rows stay readable through
     // VALID_PAYMENT_METHODS below.
-    comingSoonPaymentMethods: ['azampesa', 'usdt_bep20'],
+    comingSoonPaymentMethods: ['azampesa'],
   },
 ];
 
@@ -134,8 +133,8 @@ export const COMING_SOON_PAYMENT_METHODS = Object.freeze([
 
 // Methods the API still accepts when it creates a payment record. Kept wider
 // than SELLABLE_PAYMENT_METHODS on purpose: USDT invoices created before the
-// crypto rail was muted are still being settled by the listener, sweep and
-// reconciliation jobs, so those records must remain valid.
+// crypto rail was muted are still being settled by the listener, so those
+// records must remain valid.
 export const CONFIGURED_PAYMENT_METHODS = Object.freeze([
   PAYMENT_METHOD_USDT_BEP20,
   PAYMENT_METHOD_LIPANAMBA,

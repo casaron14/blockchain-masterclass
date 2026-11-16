@@ -21,6 +21,7 @@ import {
   computeAlchemyWebhookSignatureDigest,
   verifyAlchemyWebhookSignature,
 } from '../services/alchemyWebhookSignatureVerifier.js';
+import { resolveMissingAlchemyTransferLogIndexes } from '../services/alchemyDepositLogIndexResolver.js';
 
 const TEST_USDT_CONTRACT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const TEST_PAYER_ADDRESS = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
@@ -352,4 +353,206 @@ test('webhook endpoint ignores a transfer to an address that belongs to no order
   } finally {
     await testApplication.close();
   }
+});
+
+const USDT_TRANSFER_INTERFACE = new ethers.Interface([
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+]);
+
+function buildUsdtTransferReceiptLog({
+  fromAddress = TEST_PAYER_ADDRESS,
+  toAddress,
+  amountWei,
+  logIndex,
+  contractAddress = TEST_USDT_CONTRACT_ADDRESS,
+}) {
+  const encodedTransferLog = USDT_TRANSFER_INTERFACE.encodeEventLog('Transfer', [
+    fromAddress,
+    toAddress,
+    amountWei,
+  ]);
+  return {
+    address: contractAddress,
+    topics: encodedTransferLog.topics,
+    data: encodedTransferLog.data,
+    index: logIndex,
+  };
+}
+
+function buildStubReceiptProvider(transactionReceiptByTxHash) {
+  return {
+    async getTransactionReceipt(transactionHash) {
+      return transactionReceiptByTxHash.get(transactionHash) ?? null;
+    },
+  };
+}
+
+test('parser reports a missing transfer log index as null instead of guessing zero', () => {
+  applyEnvironment({
+    USDT_CONTRACT_ADDRESS: TEST_USDT_CONTRACT_ADDRESS,
+    CHAIN_ID: '56',
+  });
+
+  const activityWithoutLog = buildAlchemyTransferActivity({
+    depositAddress: '0x1111111111111111111111111111111111111111',
+    txHash: '0xccc1',
+    amountWei: 12n * 10n ** 18n,
+  });
+  delete activityWithoutLog.log;
+
+  const parsedWebhookActivity = buildObservedUsdtTransfersFromAlchemyActivityWebhookPayload(
+    buildAddressActivityWebhookPayload([activityWithoutLog])
+  );
+
+  assert.equal(parsedWebhookActivity.status, ALCHEMY_WEBHOOK_STATUS_ACCEPTED);
+  assert.equal(parsedWebhookActivity.parsedTransfers[0].logIndex, null);
+});
+
+test('log index resolver reads the matching Transfer log from the transaction receipt', async () => {
+  applyEnvironment({
+    USDT_CONTRACT_ADDRESS: TEST_USDT_CONTRACT_ADDRESS,
+    CHAIN_ID: '56',
+  });
+
+  const firstDepositAddress = '0x1111111111111111111111111111111111111111';
+  const secondDepositAddress = '0x2222222222222222222222222222222222222222';
+  const sharedTransactionHash = '0xddd1';
+  const amountPaidPerAddress = 12n * 10n ** 18n;
+
+  // One transaction paying two deposit addresses: the log index is the only
+  // thing that tells the two deposits apart.
+  const transactionReceipt = {
+    blockHash: '0xblockhash1',
+    blockNumber: 900,
+    logs: [
+      buildUsdtTransferReceiptLog({
+        toAddress: firstDepositAddress,
+        amountWei: amountPaidPerAddress,
+        logIndex: 4,
+      }),
+      buildUsdtTransferReceiptLog({
+        toAddress: secondDepositAddress,
+        amountWei: amountPaidPerAddress,
+        logIndex: 5,
+      }),
+    ],
+  };
+  const stubProvider = buildStubReceiptProvider(
+    new Map([[sharedTransactionHash, transactionReceipt]])
+  );
+
+  const resolvedTransfers = await resolveMissingAlchemyTransferLogIndexes(
+    [
+      {
+        txHash: sharedTransactionHash,
+        blockNumber: 900,
+        blockHash: null,
+        logIndex: null,
+        fromAddress: TEST_PAYER_ADDRESS,
+        toAddress: firstDepositAddress,
+        amountWei: amountPaidPerAddress,
+        amountUsdt: 12,
+      },
+      {
+        txHash: sharedTransactionHash,
+        blockNumber: 900,
+        blockHash: null,
+        logIndex: null,
+        fromAddress: TEST_PAYER_ADDRESS,
+        toAddress: secondDepositAddress,
+        amountWei: amountPaidPerAddress,
+        amountUsdt: 12,
+      },
+    ],
+    stubProvider
+  );
+
+  assert.equal(resolvedTransfers.length, 2);
+  assert.deepEqual(
+    resolvedTransfers.map((resolvedTransfer) => resolvedTransfer.logIndex),
+    [4, 5]
+  );
+  assert.equal(resolvedTransfers[0].blockHash, '0xblockhash1');
+});
+
+test('log index resolver drops a transfer the receipt cannot identify', async () => {
+  applyEnvironment({
+    USDT_CONTRACT_ADDRESS: TEST_USDT_CONTRACT_ADDRESS,
+    CHAIN_ID: '56',
+  });
+
+  const unresolvableTransfer = {
+    txHash: '0xddd2',
+    blockNumber: 900,
+    blockHash: null,
+    logIndex: null,
+    fromAddress: TEST_PAYER_ADDRESS,
+    toAddress: '0x3333333333333333333333333333333333333333',
+    amountWei: 12n * 10n ** 18n,
+    amountUsdt: 12,
+  };
+  const alreadyResolvedTransfer = {
+    ...unresolvableTransfer,
+    txHash: '0xddd3',
+    logIndex: 2,
+  };
+
+  // The receipt pays a different amount, so no log matches the webhook claim.
+  const stubProvider = buildStubReceiptProvider(
+    new Map([
+      [
+        '0xddd2',
+        {
+          blockHash: '0xblockhash2',
+          blockNumber: 900,
+          logs: [
+            buildUsdtTransferReceiptLog({
+              toAddress: '0x3333333333333333333333333333333333333333',
+              amountWei: 5n * 10n ** 18n,
+              logIndex: 1,
+            }),
+          ],
+        },
+      ],
+    ])
+  );
+
+  const resolvedTransfers = await resolveMissingAlchemyTransferLogIndexes(
+    [unresolvableTransfer, alreadyResolvedTransfer],
+    stubProvider
+  );
+
+  assert.equal(resolvedTransfers.length, 1);
+  assert.equal(resolvedTransfers[0].txHash, '0xddd3');
+});
+
+test('log index resolver keeps the webhook acknowledged when the receipt lookup fails', async () => {
+  applyEnvironment({
+    USDT_CONTRACT_ADDRESS: TEST_USDT_CONTRACT_ADDRESS,
+    CHAIN_ID: '56',
+  });
+
+  const stubProvider = {
+    async getTransactionReceipt() {
+      throw new Error('rpc unavailable');
+    },
+  };
+
+  const resolvedTransfers = await resolveMissingAlchemyTransferLogIndexes(
+    [
+      {
+        txHash: '0xeee1',
+        blockNumber: 900,
+        blockHash: null,
+        logIndex: null,
+        fromAddress: TEST_PAYER_ADDRESS,
+        toAddress: '0x4444444444444444444444444444444444444444',
+        amountWei: 12n * 10n ** 18n,
+        amountUsdt: 12,
+      },
+    ],
+    stubProvider
+  );
+
+  assert.equal(resolvedTransfers.length, 0);
 });

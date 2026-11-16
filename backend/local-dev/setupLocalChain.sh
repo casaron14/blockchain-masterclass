@@ -35,10 +35,9 @@ ANVIL_CHAIN_ID="${ANVIL_CHAIN_ID:-31337}"
 ANVIL_PORT="${ANVIL_PORT:-8545}"
 
 # Anvil's deterministic funded development accounts (mnemonic "test test ... junk").
-# account[0] = deployer+gas wallet, account[1] = treasury, payer = account[2].
+# account[0] = deployer and token payer, account[1] = receiving wallet, payer = account[2].
 DEPLOYER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-GAS_WALLET_PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY"
-TREASURY_WALLET_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+RECEIVING_WALLET_ADDRESS="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 
 if ! command -v anvil >/dev/null 2>&1 || ! command -v forge >/dev/null 2>&1; then
   echo "ERROR: anvil and forge (Foundry) are required. Install them from https://book.getfoundry.sh"
@@ -84,17 +83,13 @@ ALCHEMY_RPC_URL=$ANVIL_RPC_URL
 CHAIN_ID=31337
 USDT_CONTRACT_ADDRESS=$USDT_CONTRACT_ADDRESS
 USDT_MIN_CONFIRMATIONS=1
-GAS_WALLET_PRIVATE_KEY=$GAS_WALLET_PRIVATE_KEY
-TREASURY_WALLET_ADDRESS=$TREASURY_WALLET_ADDRESS
-USDT_RECEIVING_WALLET=$TREASURY_WALLET_ADDRESS
+USDT_RECEIVING_WALLET=$RECEIVING_WALLET_ADDRESS
 
 # Background jobs: poll fast so local demos complete quickly.
 ENABLE_JOBS=true
 ENABLE_PAYMENT_MONITOR_JOB=true
-ENABLE_SWEEP_JOB=true
 ENABLE_ORDER_EXPIRY_JOB=true
 MONITOR_POLL_INTERVAL_MS=3000
-SWEEP_POLL_INTERVAL_MS=5000
 # <<< local-dev managed block <<<
 EOF
 

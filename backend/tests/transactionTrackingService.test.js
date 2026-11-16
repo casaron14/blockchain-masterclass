@@ -56,8 +56,6 @@ function createBaseTransactionRecord(overrides = {}) {
     verified_transactions: [],
     verification_errors: [],
     azampesa_transactions: [],
-    sweeps: [],
-    treasury_ledger_entries: [],
     ...overrides,
   };
 }
@@ -200,10 +198,9 @@ test('usdt stage timeline waits for a deposit against a live deposit address', (
   assert.equal(findStageByKey(stages, 'deposit_address_assigned').status, 'done');
   assert.equal(findStageByKey(stages, 'deposit_observed').status, 'current');
   assert.equal(findStageByKey(stages, 'payment_confirmed').status, 'waiting');
-  assert.equal(findStageByKey(stages, 'funds_swept').status, 'waiting');
 });
 
-test('usdt stage timeline completes through confirmed deposit and sweep', () => {
+test('usdt stage timeline completes through a confirmed deposit', () => {
   const stages = buildTransactionStageTimeline(
     createBaseTransactionRecord({
       payment_method: 'usdt_bep20',
@@ -235,32 +232,11 @@ test('usdt stage timeline completes through confirmed deposit and sweep', () => 
           confirmed_at: '2026-09-01T10:10:00Z',
         },
       ],
-      sweeps: [
-        {
-          id: 1,
-          status: 'swept',
-          tx_hash: '0xswitch1',
-          amount: 12,
-          failure_reason: null,
-          created_at: '2026-09-01T10:20:00Z',
-          updated_at: '2026-09-01T10:21:00Z',
-        },
-      ],
-      treasury_ledger_entries: [
-        {
-          id: 1,
-          sweep_id: 1,
-          tx_hash: '0xswitch1',
-          amount: 12,
-          recorded_at: '2026-09-01T10:21:00Z',
-        },
-      ],
     })
   );
 
   assert.equal(findStageByKey(stages, 'deposit_observed').status, 'done');
   assert.equal(findStageByKey(stages, 'payment_confirmed').status, 'done');
-  assert.equal(findStageByKey(stages, 'funds_swept').status, 'done');
 });
 
 test('usdt stage timeline reports blockchain verification errors', () => {

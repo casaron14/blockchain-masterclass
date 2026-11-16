@@ -20,7 +20,7 @@ async function runScheduledJobTickEndpoint(req, res) {
   const configuredCronSecret = process.env.CRON_SECRET;
 
   // Failing closed is deliberate: an unauthenticated endpoint that triggers
-  // sweeps and mail would be worse than a scheduler that does not run.
+  // payments and mail would be worse than a scheduler that does not run.
   if (!configuredCronSecret) {
     return res.status(503).json({
       message: 'CRON_SECRET is not configured',

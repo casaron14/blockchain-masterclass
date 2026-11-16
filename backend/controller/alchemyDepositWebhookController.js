@@ -8,6 +8,7 @@ import {
   buildObservedUsdtTransfersFromAlchemyActivityWebhookPayload,
   ALCHEMY_WEBHOOK_STATUS_ACCEPTED,
 } from '../services/alchemyDepositActivityParser.js';
+import { resolveMissingAlchemyTransferLogIndexes } from '../services/alchemyDepositLogIndexResolver.js';
 import {
   ALCHEMY_WEBHOOK_SIGNATURE_HEADER_NAME,
   verifyAlchemyWebhookSignature,
@@ -67,8 +68,21 @@ export async function handleAlchemyDepositWebhook(req, res) {
   }
 
   try {
-    const matchedTransfers = await matchTransfersToWatchedDepositAddresses(
+    const resolvedTransfers = await resolveMissingAlchemyTransferLogIndexes(
       parsedWebhookActivity.parsedTransfers
+    );
+    if (resolvedTransfers.length === 0) {
+      // The receipt did not identify which Transfer log paid the address. The
+      // polling listener records it on its next pass, so acknowledging is safe.
+      return res.status(200).json({
+        ok: true,
+        matchedTransferCount: 0,
+        recordedTransferCount: 0,
+      });
+    }
+
+    const matchedTransfers = await matchTransfersToWatchedDepositAddresses(
+      resolvedTransfers
     );
 
     let recordedTransferCount = 0;

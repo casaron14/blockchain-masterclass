@@ -1,9 +1,6 @@
 import { runPaymentMonitorJob } from './paymentMonitorJob.js';
 import { runListenerHealthCheckJob } from './listenerHealthCheckJob.js';
 import { runOrderExpiryJob } from './expireOrdersJob.js';
-import { runSweepJob } from './sweepJob.js';
-import { runReconciliationJob } from './reconciliationJob.js';
-import { runGasWalletMonitorJob } from './gasWalletMonitorJob.js';
 import { runExpireSeatHoldsJob } from './expireSeatHoldsJob.js';
 import { runTicketDeliveryRetryJob } from './ticketDeliveryRetryJob.js';
 
@@ -29,18 +26,6 @@ export function startBlockchainBackgroundJobs() {
   const expiryIntervalMs = resolveJobIntervalMs(
     process.env.ORDER_EXPIRY_INTERVAL_MS,
     60000
-  );
-  const sweepIntervalMs = resolveJobIntervalMs(
-    process.env.SWEEP_POLL_INTERVAL_MS,
-    3600000
-  );
-  const reconciliationIntervalMs = resolveJobIntervalMs(
-    process.env.RECONCILIATION_INTERVAL_MS,
-    86400000
-  );
-  const gasMonitorIntervalMs = resolveJobIntervalMs(
-    process.env.GAS_WALLET_MONITOR_INTERVAL_MS,
-    3600000
   );
   const ticketDeliveryRetryIntervalMs = resolveJobIntervalMs(
     process.env.TICKET_DELIVERY_RETRY_INTERVAL_MS,
@@ -94,31 +79,6 @@ export function startBlockchainBackgroundJobs() {
         console.error('Order expiry job error', error)
       );
     }, expiryIntervalMs);
-    activeJobIntervals.push(intervalId);
-  }
-
-  if (isJobEnabled('SWEEP')) {
-    const intervalId = setInterval(() => {
-      runSweepJob().catch((error) => console.error('Sweep job error', error));
-    }, sweepIntervalMs);
-    activeJobIntervals.push(intervalId);
-  }
-
-  if (isJobEnabled('RECONCILIATION')) {
-    const intervalId = setInterval(() => {
-      runReconciliationJob().catch((error) =>
-        console.error('Reconciliation job error', error)
-      );
-    }, reconciliationIntervalMs);
-    activeJobIntervals.push(intervalId);
-  }
-
-  if (isJobEnabled('GAS_WALLET_MONITOR')) {
-    const intervalId = setInterval(() => {
-      runGasWalletMonitorJob().catch((error) =>
-        console.error('Gas wallet monitor job error', error)
-      );
-    }, gasMonitorIntervalMs);
     activeJobIntervals.push(intervalId);
   }
 

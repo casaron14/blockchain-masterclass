@@ -1,5 +1,9 @@
 # Blockchain Infrastructure Audit — Account Abstraction & Gas Sponsorship
 
+> **Historical audit.** The sweep, gas-sponsorship and treasury code audited
+> here has been deleted. The site now only creates deposit addresses and
+> confirms USDT payments; nothing collects the funds.
+
 **Scope:** the on-chain payment, collection and settlement code in `backend/`.
 **Question answered:** is account abstraction (ERC-4337 / EIP-7702) or gas sponsorship
 worth implementing here, and what is already there?

@@ -13,8 +13,8 @@ export const ORDER_DEFAULT_EXPIRY_MINUTES = SEAT_HOLD_DURATION_MINUTES;
 
 // An order whose status is in this list may still receive a transfer that has
 // to be attributed to somebody, so its deposit addresses stay in the listener's
-// watch set. A swept order whose treasury transfer is already recorded does not
-// need to be watched any more.
+// watch set. Historical swept orders had their funds already moved out, so they
+// do not need to be watched any more.
 export const WATCHABLE_ORDER_STATUSES = Object.freeze(['pending', 'paid', 'expired']);
 
 export class OrderNotFoundError extends Error {
@@ -306,10 +306,6 @@ export async function markOrderAsPaid(orderId) {
   return updateOrderStatus(orderId, 'paid');
 }
 
-export async function markOrderAsSwept(orderId) {
-  return updateOrderStatus(orderId, 'swept');
-}
-
 export async function revokeExpiredOrderHolds() {
   const result = await pool.query(
     `UPDATE orders
@@ -391,21 +387,3 @@ export async function markDepositAddressAsObserved(depositAddressRecordId, obser
   return normalizeDepositAddressRow(result.rows[0]);
 }
 
-export async function fetchPaidOrdersAwaitingSweep() {
-  const result = await pool.query(
-    `SELECT o.id AS order_id, o.customer_id, o.amount_usdt,
-            o.booking_id, o.expires_at,
-            da.address AS deposit_address, da.derivation_index
-       FROM orders o
-       JOIN deposit_addresses da ON da.order_id = o.id AND da.is_active = true
-      WHERE o.status = 'paid'
-      ORDER BY o.expires_at ASC`
-  );
-  return result.rows.map((row) => ({
-    ...row,
-    order_id: Number(row.order_id),
-    customer_id: Number(row.customer_id),
-    booking_id: Number(row.booking_id),
-    derivation_index: Number(row.derivation_index),
-  }));
-}

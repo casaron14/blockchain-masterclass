@@ -3,9 +3,6 @@ import pool from '../config/db.js';
 import { runPaymentMonitorJob } from './paymentMonitorJob.js';
 import { runListenerHealthCheckJob } from './listenerHealthCheckJob.js';
 import { runOrderExpiryJob } from './expireOrdersJob.js';
-import { runSweepJob } from './sweepJob.js';
-import { runReconciliationJob } from './reconciliationJob.js';
-import { runGasWalletMonitorJob } from './gasWalletMonitorJob.js';
 import { runExpireSeatHoldsJob } from './expireSeatHoldsJob.js';
 import { runTicketDeliveryRetryJob } from './ticketDeliveryRetryJob.js';
 
@@ -53,29 +50,6 @@ const SCHEDULED_JOB_DEFINITIONS = [
     shouldRunAt: (now) => now.getUTCMinutes() % 10 === 0,
     run: () => runListenerHealthCheckJob(),
   },
-  {
-    jobName: 'gasWalletMonitor',
-    environmentFlagName: 'ENABLE_GAS_WALLET_MONITOR_JOB',
-    advisoryLockKey: 764106,
-    shouldRunAt: (now) => now.getUTCMinutes() === 0,
-    run: () => runGasWalletMonitorJob(),
-  },
-  {
-    jobName: 'reconciliation',
-    environmentFlagName: 'ENABLE_RECONCILIATION_JOB',
-    advisoryLockKey: 764107,
-    // The job itself skips when a run happened in the last 23 hours. That makes
-    // the audit once-a-day without depending on Hobby's imprecise cron timing.
-    shouldRunAt: () => true,
-    run: () => runReconciliationJob(),
-  },
-  {
-    jobName: 'sweep',
-    environmentFlagName: 'ENABLE_SWEEP_JOB',
-    advisoryLockKey: 764108,
-    shouldRunAt: (now) => now.getUTCHours() === 3 && now.getUTCMinutes() === 0,
-    run: () => runSweepJob({ triggeredBy: 'scheduled' }),
-  },
 ];
 
 function isScheduledJobEnabled(jobDefinition) {
@@ -97,8 +71,8 @@ async function runScheduledJobUnderAdvisoryLock(jobDefinition) {
 
     try {
       const jobResult = await jobDefinition.run();
-      // A job that deliberately declined this tick (reconciliation already ran,
-      // sweep already ran today) is neither a success nor a failure.
+      // A job that deliberately declined this tick is neither a success nor a
+      // failure.
       if (jobResult && jobResult.skipped === true) {
         return {
           jobName: jobDefinition.jobName,

@@ -17,13 +17,10 @@ import { TICKET_PRICE_USDT, PAYMENT_METHOD_USDT_BEP20 } from './eventConfigServi
 
 import {
   evaluateOrderPaymentSettlement,
-  fetchCompletedSweepRecordForOrderId,
   fetchObservedDepositRecordsForOrderId,
   getExpectedPaymentAmountWei,
   markObservedDepositsAsFinalized,
 } from './usdtSettlementService.js';
-
-import { verifyPaymentAgainstSweepEvidence } from './sweepVerificationService.js';
 
 export const USDT_BEP20_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
@@ -48,10 +45,6 @@ export function getUsdtContractAddress() {
 
 export function getUsdtExpectedAmount() {
   return TICKET_PRICE_USDT;
-}
-
-export function getTreasuryWalletAddress() {
-  return process.env.TREASURY_WALLET_ADDRESS || getUsdtReceivingWalletAddress();
 }
 
 // A single transaction can carry several USDT Transfer logs: a batch payout, a
@@ -188,9 +181,9 @@ export function evaluateBookingHoldExpiryForConfirmation({
   };
 }
 
-// The three review reasons that a confirmation can produce. `overpayment` and
-// `swept_before_confirmation` are recorded even when no seat can be granted,
-// because the money fact is independent of the seat outcome.
+// The review reasons that a confirmation can produce. `overpayment` is
+// recorded even when no seat can be granted, because the money fact is
+// independent of the seat outcome.
 async function recordConfirmationReviewFlags({
   client,
   orderId,
@@ -201,7 +194,6 @@ async function recordConfirmationReviewFlags({
   settlementDecision,
   holdExpiryEvaluation,
   seatConfirmed,
-  completedSweepRecord,
 }) {
   const paymentTransactionHash = completingDeposit.tx_hash;
   const reviewFlagBase = {
@@ -246,24 +238,6 @@ async function recordConfirmationReviewFlags({
           bookingStatusAtConfirmation: holdExpiryEvaluation.bookingStatus,
           bookingExpiresAt: holdExpiryEvaluation.bookingExpiresAt,
           orderExpiresAt: holdExpiryEvaluation.orderExpiresAt,
-        },
-      },
-      client
-    );
-  }
-
-  if (completedSweepRecord) {
-    await recordPaymentReviewFlag(
-      {
-        ...reviewFlagBase,
-        txHash: completedSweepRecord.tx_hash,
-        amount: Number(completedSweepRecord.amount),
-        reason: 'swept_before_confirmation',
-        details: {
-          sweepId: Number(completedSweepRecord.id),
-          sweepTxHash: completedSweepRecord.tx_hash,
-          sweptAt: completedSweepRecord.confirmed_at,
-          paymentTxHash: paymentTransactionHash,
         },
       },
       client
@@ -341,7 +315,6 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
       bookingRecord,
       orderRecord: orderRecord.rows[0] ?? null,
     });
-    const completedSweepRecord = await fetchCompletedSweepRecordForOrderId(orderId, client);
 
     const seatConfirmation = await confirmBookingSeatWithinClientCapacity(client, bookingId);
 
@@ -369,13 +342,12 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
       });
 
       // The money is real even though no seat was granted, so the order is
-      // settled rather than expired: that keeps the deposit in the sweep queue
-      // and stops the attendee timeline from showing a confirmed payment and
-      // an expired order at the same time. The refund case is the review flag
-      // recorded below.
+      // settled rather than expired: that stops the attendee timeline from
+      // showing a confirmed payment and an expired order at the same time. The
+      // refund case is the review flag recorded below.
       await client.query('UPDATE orders SET status = $2 WHERE id = $1', [
         orderId,
-        completedSweepRecord ? 'swept' : 'paid',
+        'paid',
       ]);
 
       await recordPaymentReviewFlag(
@@ -403,7 +375,6 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
         settlementDecision,
         holdExpiryEvaluation,
         seatConfirmed: false,
-        completedSweepRecord,
       });
 
       if (ownsTransaction) {
@@ -440,12 +411,10 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
       amountUsdt: Number(completingDeposit.amount),
     });
 
-    // A collection that already ran before this confirmation leaves the order
-    // in the `swept` state instead of `paid`, so no later sweep pass treats it
-    // as still awaiting collection.
+    // A confirmed payment settles the order so no later expiry pass closes it.
     await client.query('UPDATE orders SET status = $2 WHERE id = $1', [
       orderId,
-      completedSweepRecord ? 'swept' : 'paid',
+      'paid',
     ]);
 
     receiptRecord = await createPaymentReceiptRecordForConfirmedPayment({
@@ -472,7 +441,6 @@ export async function confirmUsdtOrderPaymentFromObservedDeposits({
       settlementDecision,
       holdExpiryEvaluation,
       seatConfirmed: true,
-      completedSweepRecord,
     });
 
     if (ownsTransaction) {
@@ -561,9 +529,9 @@ export async function verifyUsdtCumulativeDepositBalanceOnChain(depositAddress, 
   return { valid: true, reason: 'OK', balanceWei: depositBalanceWei };
 }
 
-// Evidence-first verification: the recorded transfers and the sweep records
-// decide, and the live token balance is only a supporting signal. This is what
-// keeps a payment verifiable after a daily sweep has moved the funds onward.
+// Verification uses the recorded transfer evidence first; the live token
+// balance is only a supporting signal. Without sweeps the funds stay at the
+// deposit address, so observed deposits are the durable record to trust.
 export async function verifyUsdtPaymentFromRecordedEvidence({
   orderId,
   depositAddress,
@@ -578,22 +546,6 @@ export async function verifyUsdtPaymentFromRecordedEvidence({
 
   if (observedTotalWei >= expectedAmountWei) {
     return { valid: true, reason: 'OBSERVED_DEPOSITS', observedTotalWei, expectedAmountWei };
-  }
-
-  const sweepEvidence = await verifyPaymentAgainstSweepEvidence({
-    orderId,
-    depositAddress,
-    expectedAmountWei,
-  });
-
-  if (sweepEvidence.paid) {
-    return {
-      valid: true,
-      reason: 'SWEEP_EVIDENCE',
-      observedTotalWei,
-      expectedAmountWei,
-      sweepEvidence,
-    };
   }
 
   return { valid: false, reason: 'NO_SETTLED_EVIDENCE', observedTotalWei, expectedAmountWei };

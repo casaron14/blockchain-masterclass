@@ -26,11 +26,9 @@ const SETTLEMENT_FRONTIER = {
   finalizedBlockNumber: 1000,
   settledBy: 'finalized',
 };
-const SWEPT_BEFORE_CONFIRMATION_TX_HASH = '0xsweepbeforeconfirm0001';
 const CHANGE_WITHOUT_SEAT_REVIEW_REASONS = [
   'overpayment',
   'hold_expired_with_seat',
-  'swept_before_confirmation',
 ];
 
 let reviewFlagBookingCounter = 0;
@@ -189,52 +187,6 @@ test('a payment confirmed after the hold expired still records that the seat was
   assert.ok(lateHoldFlag, 'the late seat grant is preserved as a review fact');
   assert.equal(lateHoldFlag.auto_action, 'review_required');
   assert.equal(lateHoldFlag.details.bookingStatusAtConfirmation, 'pending');
-});
-
-test('a payment confirmed after a completed sweep records the sweep and marks the order swept', async () => {
-  const { bookingRecord, createdOrder, activeDepositAddress } = await createPendingCryptoBooking();
-  await pool.query(
-    `INSERT INTO sweeps
-       (address, order_id, tx_hash, amount, amount_wei, treasury_address, triggered_by, confirmed_at, status)
-     VALUES ($1, $2, $3, $4, $5, $6, 'offline-batch', now() - INTERVAL '1 hour', 'swept')`,
-    [
-      activeDepositAddress.address,
-      createdOrder.id,
-      SWEPT_BEFORE_CONFIRMATION_TX_HASH,
-      TICKET_PRICE_USDT,
-      ethers.parseUnits(String(TICKET_PRICE_USDT), DEFAULT_USDT_DECIMALS).toString(),
-      '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
-    ]
-  );
-
-  const { confirmationResult } = await confirmObservedDepositPayment({
-    bookingRecord,
-    createdOrder,
-    activeDepositAddress,
-    txHash: '0xdepositconfirmingafterthesweep01',
-  });
-
-  assert.equal(confirmationResult.confirmed, true);
-  assert.equal(confirmationResult.seatConfirmed, true);
-
-  const reviewFlags = await fetchReviewFlagsForOrder(createdOrder.id);
-  const sweptBeforeConfirmationFlag = reviewFlags.find(
-    (flagRow) => flagRow.reason === 'swept_before_confirmation'
-  );
-  assert.ok(sweptBeforeConfirmationFlag, 'the treasury already holds the funds');
-  assert.equal(sweptBeforeConfirmationFlag.tx_hash, SWEPT_BEFORE_CONFIRMATION_TX_HASH);
-  assert.equal(
-    sweptBeforeConfirmationFlag.details.paymentTxHash,
-    '0xdepositconfirmingafterthesweep01'
-  );
-
-  const orderResult = await pool.query('SELECT status FROM orders WHERE id = $1', [
-    createdOrder.id,
-  ]);
-  assert.equal(orderResult.rows[0].status, 'swept');
-
-  const receiptRecord = await fetchPaymentReceiptByBookingId(bookingRecord.id);
-  assert.ok(receiptRecord, 'a ticket receipt is still issued');
 });
 
 test('a normal on-time exact payment produces none of the confirmation review flags', async () => {

@@ -1,4 +1,4 @@
-import { generateAdminSummaryReport } from '../services/reconciliationService.js';
+import { generateAdminSummaryReport } from '../services/adminSummaryReportService.js';
 
 import {
   fetchAdminBookingList,

@@ -233,10 +233,10 @@ test('a finalized claimed transaction confirms the payment through the shared se
     depositAddressRecords[0].address.toLowerCase()
   );
 
-  const sweepCandidateRows = await pool.query('SELECT status FROM orders WHERE id = $1', [
+  const settledOrderStatusRows = await pool.query('SELECT status FROM orders WHERE id = $1', [
     createdOrder.id,
   ]);
-  assert.equal(sweepCandidateRows.rows[0].status, 'paid');
+  assert.equal(settledOrderStatusRows.rows[0].status, 'paid');
 });
 
 test('a second claim for an already confirmed booking reports that the payment is already confirmed', async () => {

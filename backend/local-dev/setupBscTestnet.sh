@@ -12,10 +12,9 @@ set -euo pipefail
 # The testnet RPC is public, so no API key is needed. Note that
 # Binance's own seed endpoint (data-seed-prebsc-*) answers basic RPC
 # calls but rejects every eth_getLogs request, which the payment
-# monitor needs, so it is never used. The endpoint below served a
-# recent eth_getLogs range on every attempt when it was chosen; if it
-# starts throttling, the listener rotates to the other built-in testnet
-# endpoints on its own.
+# monitor needs, so it is never used. publicnode serves eth_getLogs; if
+# it starts throttling, the listener rotates to the fallback endpoint.
+# Override with BSC_TESTNET_RPC_URL when you have a dedicated provider.
 #
 # Usage:
 #   bash local-dev/setupBscTestnet.sh [payerPrivateKey] [deployedUsdtAddress]
@@ -42,7 +41,7 @@ replace_managed_env_local_block() {
 }
 BSC_TESTNET_PAYER_KEY_FILE="$LOCAL_DEV_DIR/bsc-testnet-payer.key"
 
-BSC_TESTNET_RPC_URL="${BSC_TESTNET_RPC_URL:-https://bnb-testnet.api.onfinality.io/public}"
+BSC_TESTNET_RPC_URL="${BSC_TESTNET_RPC_URL:-https://bsc-testnet.publicnode.com}"
 BSC_TESTNET_CHAIN_ID="${BSC_TESTNET_CHAIN_ID:-97}"
 BSC_TESTNET_FAUCET_URL="https://www.bnbchain.org/faucet"
 # When set, this mock USDT contract is used as-is instead of deploying a new one.
@@ -95,8 +94,8 @@ echo "Payer $BSC_TESTNET_PAYER_ADDRESS holds $(cast from-wei "$BSC_TESTNET_PAYER
 if [ "$BSC_TESTNET_PAYER_BALANCE_WEI" = "0" ] && [ -n "$PRE_DEPLOYED_USDT_CONTRACT_ADDRESS" ]; then
   echo ""
   echo "NOTE: payer $BSC_TESTNET_PAYER_ADDRESS has no testnet BNB."
-  echo "      That is fine when you mint and send the token yourself; the"
-  echo "      backend still needs it for gas when it sweeps a confirmed deposit:"
+  echo "      That is fine when you mint and send the token yourself, but the"
+  echo "      backend still needs BNB when it deploys or mints test USDT:"
   echo "        $BSC_TESTNET_FAUCET_URL"
 elif [ "$BSC_TESTNET_PAYER_BALANCE_WEI" = "0" ]; then
   echo ""
@@ -138,9 +137,9 @@ BSC_RPC_URL=$BSC_TESTNET_RPC_URL
 ALCHEMY_RPC_URL=$BSC_TESTNET_RPC_URL
 CHAIN_ID=97
 # Extra public testnet endpoints for the listener to rotate onto. A public node
-# throttles per IP and this one polls every few seconds, so a rate-limited
+# throttles per IP and the listener polls every few seconds, so a rate-limited
 # endpoint is parked for a cool-down and the next one is used instead.
-BSC_RPC_URL_FALLBACK_URLS=https://bsc-testnet.publicnode.com,https://bsc-testnet-rpc.publicnode.com
+BSC_RPC_URL_FALLBACK_URLS=https://bsc-testnet-rpc.publicnode.com
 # The listener needs no provider-specific indexing API: transfers are read with
 # eth_getLogs and settled against the "finalized" block tag.
 SETTLEMENT_FINALITY_MODE=finalized
@@ -150,20 +149,13 @@ USDT_CONTRACT_ADDRESS=$USDT_CONTRACT_ADDRESS
 USDT_MIN_CONFIRMATIONS=1
 # Testnet-only payer: holds the testnet BNB for gas and mints the test USDT.
 BSC_TESTNET_PAYER_PRIVATE_KEY=$BSC_TESTNET_PAYER_PRIVATE_KEY
-GAS_WALLET_PRIVATE_KEY=$BSC_TESTNET_PAYER_PRIVATE_KEY
-TREASURY_WALLET_ADDRESS=$BSC_TESTNET_PAYER_ADDRESS
 USDT_RECEIVING_WALLET=$BSC_TESTNET_PAYER_ADDRESS
 
 # Background jobs: poll fast so a testnet payment is noticed within seconds.
 ENABLE_JOBS=true
 ENABLE_PAYMENT_MONITOR_JOB=true
-ENABLE_SWEEP_JOB=true
 ENABLE_ORDER_EXPIRY_JOB=true
-MONITOR_POLL_INTERVAL_MS=5000
-# Collection is a daily, deliberate job, never immediate.
-SWEEP_INTERVAL_HOURS=24
-SWEEP_MINIMUM_AGE_HOURS=24
-SWEEP_POLL_INTERVAL_MS=3600000
+MONITOR_POLL_INTERVAL_MS=15000
 ENABLE_TICKET_DELIVERY_RETRY_JOB=true
 TICKET_DELIVERY_RETRY_INTERVAL_MS=60000
 # <<< local-dev managed block <<<

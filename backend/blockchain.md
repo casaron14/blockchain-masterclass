@@ -1,5 +1,10 @@
 # Implementation Prompt: USDT (BEP20) Payment Collection System via BIP44 HD Derivation
 
+> **Historical design prompt.** The sweep, treasury and offline-signing parts of
+> this prompt were removed from the product. The current system derives a
+> deposit address per order online from the xpub and confirms incoming USDT
+> payments; it does not move the funds out of the deposit address.
+
 Use this as a prompt for a coding assistant (Claude Code, Cursor, etc.) or as an engineering spec for your team. It's written to be handed over as-is.
 
 ---

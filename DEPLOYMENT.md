@@ -1,5 +1,11 @@
 # Deployment
 
+> **Sweep removed.** The sweep job, treasury reconciliation, gas-wallet monitor
+> and `sweep:prepare` / `sweep:sign` / `sweep:submit` scripts no longer exist.
+> Ignore the sweep environment variables and offline collection steps later in
+> this document; a deposit address is created and the payment is confirmed, and
+> the USDT stays at that address.
+
 The production architecture is **Vercel for the app and API, Supabase for
 Postgres and private object storage**. Supabase is not the host for this
 Next.js/Express application. The repository ships as one Vercel project: the
@@ -372,6 +378,12 @@ The webhook URL to paste into the Alchemy dashboard is
 `X-Alchemy-Signature` matches an HMAC-SHA256 of the raw body computed with
 `ALCHEMY_WEBHOOK_SIGNING_KEY`. A deposit that the webhook misses is still found
 by the polling scan, so the webhook is a latency win, not a dependency.
+
+Before going live, run `npm run alchemy:verify` from `backend/` to check the
+RPC, USDT contract, derivation source and webhook variables. Then run
+`npm run alchemy:register-addresses` once so every deposit address created
+before the webhook existed is watched; new addresses are registered
+automatically when an order is created.
 
 Keep `ENABLE_PAYMENT_MONITOR_JOB`, `ENABLE_LISTENER_HEALTH_JOB`,
 `ENABLE_RECONCILIATION_JOB`, `ENABLE_GAS_WALLET_MONITOR_JOB` and

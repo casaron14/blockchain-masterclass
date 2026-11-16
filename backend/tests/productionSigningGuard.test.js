@@ -36,41 +36,16 @@ test('production requires WALLET_ACCOUNT_XPUB', () => {
   assert.throws(
     () => assertProductionSigningConfigurationIsSafe({
       NODE_ENV: 'production',
-      ENABLE_SWEEP_JOB: 'false',
     }),
     /WALLET_ACCOUNT_XPUB is not configured/
   );
 });
 
-test('production refuses the in-process sweep job', () => {
-  assert.throws(
-    () => assertProductionSigningConfigurationIsSafe({
-      NODE_ENV: 'production',
-      WALLET_ACCOUNT_XPUB: VALID_XPUB,
-      ENABLE_SWEEP_JOB: 'true',
-    }),
-    /ENABLE_SWEEP_JOB is enabled in production/
-  );
-});
-
-test('production refuses a gas wallet private key on the web host', () => {
-  assert.throws(
-    () => assertProductionSigningConfigurationIsSafe({
-      NODE_ENV: 'production',
-      WALLET_ACCOUNT_XPUB: VALID_XPUB,
-      ENABLE_SWEEP_JOB: 'false',
-      GAS_WALLET_PRIVATE_KEY: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
-    }),
-    /GAS_WALLET_PRIVATE_KEY is set in production/
-  );
-});
-
-test('a production server with an xpub and offline sweeps passes', () => {
+test('a production server with an xpub passes', () => {
   assert.equal(
     assertProductionSigningConfigurationIsSafe({
       NODE_ENV: 'production',
       WALLET_ACCOUNT_XPUB: VALID_XPUB,
-      ENABLE_SWEEP_JOB: 'false',
     }).status,
     PRODUCTION_SIGNING_GUARD_PASSED
   );

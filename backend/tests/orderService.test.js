@@ -8,7 +8,6 @@ import {
   fetchDepositAddressByOrderId,
   updateOrderStatus,
   revokeExpiredOrderHolds,
-  fetchPaidOrdersAwaitingSweep,
   OrderAlreadyExistsError,
 } from '../services/orderService.js';
 
@@ -112,17 +111,4 @@ test('revokeExpiredOrderHolds marks only overdue pending orders as expired', asy
 
   const secondExpiredCount = await revokeExpiredOrderHolds();
   assert.equal(secondExpiredCount, 0);
-});
-
-test('fetchPaidOrdersAwaitingSweep returns only paid orders with their deposit addresses', async () => {
-  const bookingRecord = await createBookingForOrderTest();
-  const createdOrder = await createOrderWithDepositAddressForBooking(bookingRecord.id);
-  await updateOrderStatus(createdOrder.id, 'paid');
-
-  const awaitingSweepOrders = await fetchPaidOrdersAwaitingSweep();
-
-  assert.equal(awaitingSweepOrders.length, 1);
-  assert.equal(awaitingSweepOrders[0].order_id, createdOrder.id);
-  assert.equal(awaitingSweepOrders[0].deposit_address, createdOrder.deposit_address);
-  assert.equal(awaitingSweepOrders[0].derivation_index, createdOrder.customer_id);
 });

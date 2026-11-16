@@ -51,24 +51,6 @@ export async function fetchObservedDepositRecordById(depositId) {
   return result.rows[0] ? normalizeObservedDepositRecord(result.rows[0]) : null;
 }
 
-// A completed collection that happened before the payment was confirmed is
-// evidence that must be handed to a human: the money is safe in the treasury,
-// but the booking was never settled through the normal path. The caller uses
-// this to record a `swept_before_confirmation` review flag.
-export async function fetchCompletedSweepRecordForOrderId(orderId, client = pool) {
-  const result = await client.query(
-    `SELECT *
-       FROM sweeps
-      WHERE order_id = $1
-        AND status = 'swept'
-        AND tx_hash IS NOT NULL
-      ORDER BY confirmed_at DESC NULLS LAST, id DESC
-      LIMIT 1`,
-    [orderId]
-  );
-  return result.rows[0] ?? null;
-}
-
 export function sumObservedDepositAmountWei(observedDeposits) {
   return observedDeposits.reduce(
     (runningTotal, observedDeposit) => runningTotal + BigInt(observedDeposit.amount_wei),

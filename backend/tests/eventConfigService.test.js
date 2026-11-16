@@ -43,11 +43,8 @@ test('fetchEventConfigurationBySlug returns the masterclass configuration for a 
   assert.equal(eventConfiguration.seatCapacity, 150);
   assert.equal(eventConfiguration.seatHoldMinutes, 60);
   assert.equal(eventConfiguration.durationDays, 1);
-  assert.deepEqual(eventConfiguration.paymentMethods, ['lipanamba']);
-  assert.deepEqual(eventConfiguration.comingSoonPaymentMethods, [
-    'azampesa',
-    'usdt_bep20',
-  ]);
+  assert.deepEqual(eventConfiguration.paymentMethods, ['lipanamba', 'usdt_bep20']);
+  assert.deepEqual(eventConfiguration.comingSoonPaymentMethods, ['azampesa']);
 });
 
 test('fetchEventConfigurationBySlug returns null for an unknown slug', () => {
@@ -101,7 +98,6 @@ test('derived constants match the primary event configuration', () => {
   assert.deepEqual(SELLABLE_PAYMENT_METHODS, primaryConfiguration.paymentMethods);
   assert.deepEqual(COMING_SOON_PAYMENT_METHODS, [
     PAYMENT_METHOD_AZAMPESA,
-    PAYMENT_METHOD_USDT_BEP20,
   ]);
   assert.deepEqual(CONFIGURED_PAYMENT_METHODS, [
     PAYMENT_METHOD_USDT_BEP20,

@@ -96,6 +96,8 @@ SELECT
   COALESCE(
     (SELECT jsonb_agg(jsonb_build_object(
         'tx_hash', d.tx_hash,
+        'log_index', d.log_index,
+        'address', d.address,
         'from_address', d.from_address,
         'amount', d.amount,
         'block_number', d.block_number,
@@ -140,33 +142,7 @@ SELECT
         'confirmed_at', az.confirmed_at))
       FROM azampesa az
       WHERE az.payment_id = p.id),
-    '[]'::jsonb) AS azampesa_transactions,
-  COALESCE(
-    (SELECT jsonb_agg(jsonb_build_object(
-        'id', sw.id,
-        'status', sw.status,
-        'tx_hash', sw.tx_hash,
-        'amount', sw.amount,
-        'failure_reason', sw.failure_reason,
-        'created_at', sw.created_at,
-        'updated_at', sw.updated_at))
-      FROM sweeps sw
-      WHERE sw.order_id IN (
-        SELECT booking_order.id FROM orders booking_order WHERE booking_order.booking_id = b.id
-      )),
-    '[]'::jsonb) AS sweeps,
-  COALESCE(
-    (SELECT jsonb_agg(jsonb_build_object(
-        'id', tl.id,
-        'sweep_id', tl.sweep_id,
-        'tx_hash', tl.tx_hash,
-        'amount', tl.amount,
-        'recorded_at', tl.recorded_at))
-      FROM treasury_ledger tl
-      WHERE tl.order_id IN (
-        SELECT booking_order.id FROM orders booking_order WHERE booking_order.booking_id = b.id
-      )),
-    '[]'::jsonb) AS treasury_ledger_entries
+    '[]'::jsonb) AS azampesa_transactions
 FROM bookings b
 JOIN payments p ON p.booking_id = b.id
 -- A booking is meant to own a single deposit order, but historical rows can
@@ -240,8 +216,6 @@ export async function fetchTransactionTrackingRecords({
       verified_transactions: row.verified_transactions || [],
       verification_errors: row.verification_errors || [],
       azampesa_transactions: row.azampesa_transactions || [],
-      sweeps: row.sweeps || [],
-      treasury_ledger_entries: row.treasury_ledger_entries || [],
     };
     return {
       ...normalizedRecord,
@@ -461,21 +435,6 @@ function buildUsdtStageTimeline(stages, transactionRecord) {
     pushStage(stages, 'payment_confirmed', 'Payment confirmed', 'waiting');
   }
 
-  const latestSweptTimestamp = findLatestTimestamp(
-    transactionRecord.treasury_ledger_entries.map((ledgerEntry) => ledgerEntry.recorded_at)
-  );
-  const fundsSwept =
-    transactionRecord.sweeps.some((sweep) => sweep.status === 'swept') ||
-    transactionRecord.treasury_ledger_entries.length > 0;
-
-  pushStage(
-    stages,
-    'funds_swept',
-    'Funds swept to treasury',
-    fundsSwept ? 'done' : 'waiting',
-    latestSweptTimestamp
-  );
-
   // A confirmed payment settles the order even when the deposit arrived after
   // the hold lapsed, so an expired order on a confirmed payment would show two
   // contradictory stages on the attendee timeline.
@@ -483,16 +442,12 @@ function buildUsdtStageTimeline(stages, transactionRecord) {
     transactionRecord.order_status === 'expired' &&
     transactionRecord.payment_status !== 'confirmed'
   ) {
-    const latestFailedSweep = transactionRecord.sweeps.find(
-      (sweep) => sweep.status === 'failed'
-    );
     pushStage(
       stages,
       'order_expired',
       'Deposit order expired',
       'failed',
-      transactionRecord.order_expires_at,
-      latestFailedSweep?.failure_reason ?? null
+      transactionRecord.order_expires_at
     );
   }
 }
