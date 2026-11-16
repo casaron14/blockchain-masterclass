@@ -22,31 +22,59 @@ function resolveTranslationValue(languageCode, translationKey) {
     );
 }
 
-test('Lipa Namba is the only selectable payment method while USDT/BEP20 stays muted', () => {
+test('Lipa Namba is the only selectable payment method while USDT/BEP20 is advertised as coming soon', () => {
   assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.paymentMethods), ['lipanamba']);
+  assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.comingSoonPaymentMethods), [
+    'azampesa',
+    'usdt_bep20',
+  ]);
 });
 
-test('a muted USDT/BEP20 method is never selectable even when the backend payload still sells it', () => {
+test('the muted USDT/BEP20 card keeps the crypto label on its coming-soon entry', () => {
+  const comingSoonUsdtOption = defaultEventConfig.comingSoonPaymentMethods.find(
+    (paymentMethodOption) => paymentMethodOption.key === 'usdt_bep20'
+  );
+
+  assert.equal(comingSoonUsdtOption.labelKey, 'payment.usdt');
+});
+
+test('a backend payload that still sells USDT/BEP20 moves it to coming soon instead of rendering it as selectable', () => {
   const eventConfigFromPayload = buildEventConfigFromPayload({
     slug: 'blockchain-masterclass',
     paymentMethods: ['lipanamba', 'usdt_bep20'],
   });
 
   assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.paymentMethods), ['lipanamba']);
+  assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.comingSoonPaymentMethods), [
+    'azampesa',
+    'usdt_bep20',
+  ]);
 });
 
-test('the muted USDT/BEP20 method is still a supported method so existing invoices keep rendering', () => {
+test('a payload that already advertises USDT/BEP20 as coming soon does not duplicate the card', () => {
+  const eventConfigFromPayload = buildEventConfigFromPayload({
+    slug: 'blockchain-masterclass',
+    paymentMethods: ['lipanamba'],
+    comingSoonPaymentMethods: ['azampesa', 'usdt_bep20'],
+  });
+
+  assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.paymentMethods), ['lipanamba']);
+  assert.deepEqual(fetchPaymentMethodKeys(eventConfigFromPayload.comingSoonPaymentMethods), [
+    'azampesa',
+    'usdt_bep20',
+  ]);
+});
+
+test('USDT/BEP20 stays a supported method so existing crypto invoices keep settling', () => {
   assert.equal(SUPPORTED_PAYMENT_METHODS.usdt_bep20, 'usdt_bep20');
 });
 
-test('AzamPay is advertised as coming soon instead of being selectable', () => {
-  assert.deepEqual(fetchPaymentMethodKeys(defaultEventConfig.comingSoonPaymentMethods), [
-    'azampesa',
-  ]);
-  assert.equal(
-    defaultEventConfig.comingSoonPaymentMethods[0].labelKey,
-    'payment.instantPayment'
+test('AzamPay stays advertised as coming soon with its own label', () => {
+  const comingSoonAzampesaOption = defaultEventConfig.comingSoonPaymentMethods.find(
+    (paymentMethodOption) => paymentMethodOption.key === 'azampesa'
   );
+
+  assert.equal(comingSoonAzampesaOption.labelKey, 'payment.instantPayment');
 });
 
 test('the event payload keeps coming-soon methods out of the selectable payment methods', () => {
@@ -62,27 +90,16 @@ test('the event payload keeps coming-soon methods out of the selectable payment 
   ]);
 });
 
-test('a payload without coming-soon methods still shows the default coming-soon cards', () => {
-  const eventConfigFromPayload = buildEventConfigFromPayload({
-    slug: 'blockchain-masterclass',
-    paymentMethods: ['lipanamba'],
-  });
-
-  assert.deepEqual(
-    fetchPaymentMethodKeys(eventConfigFromPayload.comingSoonPaymentMethods),
-    fetchPaymentMethodKeys(defaultEventConfig.comingSoonPaymentMethods)
-  );
-});
-
 test('buildPaymentMethodOptions returns the caller fallback for an empty list', () => {
   const fallbackPaymentMethodOptions = [{ key: 'lipanamba', labelKey: 'payment.lipanamba' }];
   assert.deepEqual(buildPaymentMethodOptions([], fallbackPaymentMethodOptions), fallbackPaymentMethodOptions);
 });
 
-test('both languages label the muted methods as Instant Payment and Coming soon', () => {
+test('both languages label the coming-soon cards as Coming soon', () => {
   for (const languageCode of ['en', 'sw']) {
     assert.equal(resolveTranslationValue(languageCode, 'payment.instantPayment')?.length > 0, true);
     assert.equal(resolveTranslationValue(languageCode, 'payment.comingSoon')?.length > 0, true);
+    assert.equal(resolveTranslationValue(languageCode, 'payment.usdt')?.length > 0, true);
   }
   assert.equal(resolveTranslationValue('en', 'payment.instantPayment'), 'Instant Payment');
 });

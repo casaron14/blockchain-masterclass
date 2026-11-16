@@ -31,17 +31,52 @@ export const PAYMENT_METHOD_LABEL_KEYS = {
   lipanamba: 'payment.lipanamba',
 };
 
-// USDT/BEP20 is muted on the frontend until the rail is fixed. The backend
-// still accepts usdt_bep20 for invoices already issued, which is why
+// USDT/BEP20 is advertised as "coming soon" on the frontend until the rail is
+// fixed. The backend still sells and settles it, which is why
 // SUPPORTED_PAYMENT_METHODS keeps the full configured list.
-const MUTED_FRONTEND_PAYMENT_METHODS = Object.freeze([PAYMENT_METHOD_USDT_BEP20]);
+const FRONTEND_COMING_SOON_PAYMENT_METHODS = Object.freeze([PAYMENT_METHOD_USDT_BEP20]);
 
-function removeMutedPaymentMethods(paymentMethodOptions) {
-  return paymentMethodOptions.filter(
-    (paymentMethodOption) =>
-      !MUTED_FRONTEND_PAYMENT_METHODS.includes(paymentMethodOption.key)
-  );
+function buildPaymentMethodLabelOption(paymentMethod) {
+  return {
+    key: paymentMethod,
+    labelKey: PAYMENT_METHOD_LABEL_KEYS[paymentMethod] || `payment.${paymentMethod}`,
+  };
 }
+
+function movePaymentMethodsToComingSoonOnFrontend(
+  selectablePaymentMethodOptions,
+  comingSoonPaymentMethodOptions
+) {
+  const movedPaymentMethodOptions = selectablePaymentMethodOptions.filter(
+    (paymentMethodOption) =>
+      FRONTEND_COMING_SOON_PAYMENT_METHODS.includes(paymentMethodOption.key)
+  );
+  const remainingSelectablePaymentMethodOptions = selectablePaymentMethodOptions.filter(
+    (paymentMethodOption) =>
+      !FRONTEND_COMING_SOON_PAYMENT_METHODS.includes(paymentMethodOption.key)
+  );
+  const mergedComingSoonPaymentMethodOptions = [...comingSoonPaymentMethodOptions];
+
+  movedPaymentMethodOptions.forEach((movedPaymentMethodOption) => {
+    const isAlreadyAdvertisedAsComingSoon = mergedComingSoonPaymentMethodOptions.some(
+      (comingSoonPaymentMethodOption) =>
+        comingSoonPaymentMethodOption.key === movedPaymentMethodOption.key
+    );
+    if (!isAlreadyAdvertisedAsComingSoon) {
+      mergedComingSoonPaymentMethodOptions.push(movedPaymentMethodOption);
+    }
+  });
+
+  return {
+    selectablePaymentMethodOptions: remainingSelectablePaymentMethodOptions,
+    comingSoonPaymentMethodOptions: mergedComingSoonPaymentMethodOptions,
+  };
+}
+
+const defaultPaymentMethodAvailability = movePaymentMethodsToComingSoonOnFrontend(
+  primaryEventConfiguration.paymentMethods.map(buildPaymentMethodLabelOption),
+  primaryEventConfiguration.comingSoonPaymentMethods.map(buildPaymentMethodLabelOption)
+);
 
 export const defaultEventConfig = {
   slug: primaryEventConfiguration.slug,
@@ -66,18 +101,8 @@ export const defaultEventConfig = {
   platformName: primaryEventConfiguration.contact.platformName,
   lipaNambaNumber: primaryEventConfiguration.payment.lipaNambaNumber,
   lipaNambaAccountName: primaryEventConfiguration.payment.lipaNambaAccountName,
-  paymentMethods: removeMutedPaymentMethods(
-    primaryEventConfiguration.paymentMethods.map((paymentMethod) => ({
-      key: paymentMethod,
-      labelKey: PAYMENT_METHOD_LABEL_KEYS[paymentMethod] || `payment.${paymentMethod}`,
-    }))
-  ),
-  comingSoonPaymentMethods: primaryEventConfiguration.comingSoonPaymentMethods.map(
-    (paymentMethod) => ({
-      key: paymentMethod,
-      labelKey: PAYMENT_METHOD_LABEL_KEYS[paymentMethod] || `payment.${paymentMethod}`,
-    })
-  ),
+  paymentMethods: defaultPaymentMethodAvailability.selectablePaymentMethodOptions,
+  comingSoonPaymentMethods: defaultPaymentMethodAvailability.comingSoonPaymentMethodOptions,
 };
 
 export function checkEventSlugExistsInConfiguration(eventSlug) {
@@ -91,20 +116,14 @@ export function buildPaymentMethodOptions(
   fallbackPaymentMethodOptions = defaultEventConfig.paymentMethods
 ) {
   if (!Array.isArray(paymentMethods) || paymentMethods.length === 0) {
-    return removeMutedPaymentMethods(fallbackPaymentMethodOptions);
+    return fallbackPaymentMethodOptions;
   }
-  return removeMutedPaymentMethods(
-    paymentMethods.map((paymentMethod) => {
-      if (paymentMethod && typeof paymentMethod === 'object' && paymentMethod.key) {
-        return paymentMethod;
-      }
-      const methodKey = String(paymentMethod);
-      return {
-        key: methodKey,
-        labelKey: PAYMENT_METHOD_LABEL_KEYS[methodKey] || `payment.${methodKey}`,
-      };
-    })
-  );
+  return paymentMethods.map((paymentMethod) => {
+    if (paymentMethod && typeof paymentMethod === 'object' && paymentMethod.key) {
+      return paymentMethod;
+    }
+    return buildPaymentMethodLabelOption(String(paymentMethod));
+  });
 }
 
 export function buildEventConfigFromPayload(payload) {
@@ -116,6 +135,14 @@ export function buildEventConfigFromPayload(payload) {
   const priceDetails = payload.price || {};
   const contactDetails = payload.contact || {};
   const paymentDetails = payload.payment || {};
+
+  const paymentMethodAvailability = movePaymentMethodsToComingSoonOnFrontend(
+    buildPaymentMethodOptions(payload.paymentMethods),
+    buildPaymentMethodOptions(
+      payload.comingSoonPaymentMethods,
+      defaultEventConfig.comingSoonPaymentMethods
+    )
+  );
 
   return {
     slug: payload.slug || defaultEventConfig.slug,
@@ -190,10 +217,7 @@ export function buildEventConfigFromPayload(payload) {
       paymentDetails.lipaNambaAccountName ||
       payload.lipaNambaAccountName ||
       defaultEventConfig.lipaNambaAccountName,
-    paymentMethods: buildPaymentMethodOptions(payload.paymentMethods),
-    comingSoonPaymentMethods: buildPaymentMethodOptions(
-      payload.comingSoonPaymentMethods,
-      defaultEventConfig.comingSoonPaymentMethods
-    ),
+    paymentMethods: paymentMethodAvailability.selectablePaymentMethodOptions,
+    comingSoonPaymentMethods: paymentMethodAvailability.comingSoonPaymentMethodOptions,
   };
 }
