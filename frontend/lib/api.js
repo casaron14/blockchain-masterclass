@@ -81,32 +81,23 @@ export async function reactivateExpiredBooking(bookingId, bookingReferenceCode) 
   return responseBody.booking;
 }
 
-export async function fetchBookingRecordById(bookingId) {
-  const responseBody = await request(`/api/bookings/${bookingId}`);
-  return responseBody.booking;
-}
-
-export function createPaymentRecord({ bookingId, paymentMethod }) {
+export function createPaymentRecord({ bookingId, bookingReferenceCode, paymentMethod }) {
   return request('/api/payments', {
     method: 'POST',
     body: JSON.stringify({
       booking_id: bookingId,
+      booking_ref: bookingReferenceCode,
       payment_method: paymentMethod,
     }),
   });
 }
 
-export async function fetchPaymentRecordById(paymentId) {
-  const responseBody = await request(`/api/payments/${paymentId}`);
-  return responseBody.payment;
-}
-
-export function fetchPaymentOverviewById(paymentId) {
-  return request(`/api/payments/${paymentId}`);
+export function fetchPaymentOverviewByPublicToken(paymentPublicToken) {
+  return request(`/api/payments/${encodeURIComponent(paymentPublicToken)}`);
 }
 
 export async function uploadLipaNambaPaymentReceipt(
-  paymentId,
+  paymentPublicToken,
   receiptFile,
   bookingReferenceCode
 ) {
@@ -114,10 +105,13 @@ export async function uploadLipaNambaPaymentReceipt(
   formData.append('booking_ref', bookingReferenceCode || '');
   formData.append('receipt', receiptFile);
 
-  const response = await fetch(`${API_BASE_URL}/api/payments/${paymentId}/lipanamba-receipt`, {
-    method: 'POST',
-    body: formData,
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/payments/${encodeURIComponent(paymentPublicToken)}/lipanamba-receipt`,
+    {
+      method: 'POST',
+      body: formData,
+    }
+  );
   const responseBody = await readResponseJson(response);
 
   if (!response.ok) {
@@ -132,10 +126,13 @@ export async function uploadLipaNambaPaymentReceipt(
   return responseBody;
 }
 
-export function initiateUsdtPayment(paymentId) {
-  return request(`/api/payments/${paymentId}/initiate-usdt`, {
-    method: 'POST',
-  });
+export function initiateUsdtPayment(paymentPublicToken) {
+  return request(
+    `/api/payments/${encodeURIComponent(paymentPublicToken)}/initiate-usdt`,
+    {
+      method: 'POST',
+    }
+  );
 }
 
 export function registerReferrerInvite(referrerDetails) {

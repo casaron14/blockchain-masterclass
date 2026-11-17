@@ -10,12 +10,12 @@ import {
 } from '@/lib/api';
 import {
   storeBookingRecordLocally,
-  storePaymentIdLocally,
+  storePaymentPublicTokenLocally,
 } from '@/lib/bookingStorage';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LoadingButton from '@/components/LoadingButton';
-import { buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
+import { buildPaymentPageUrlForPaymentPublicToken } from '@/lib/siteRoutes';
 
 const MINIMUM_BOOKING_SEARCH_VALUE_LENGTH = 2;
 const MAXIMUM_BOOKING_SEARCH_VALUE_LENGTH = 120;
@@ -94,14 +94,15 @@ export default function BookingSearchLookup() {
       setPaymentMethodError(t('lookup.errors.paymentMethodRequired'));
       return null;
     }
-    if (lookupResult.payment?.id) {
-      return lookupResult.payment.id;
+    if (lookupResult.payment?.public_token) {
+      return lookupResult.payment.public_token;
     }
     const createdPaymentResult = await createPaymentRecord({
       bookingId: bookingRecord.id,
+      bookingReferenceCode: bookingRecord.ref,
       paymentMethod,
     });
-    return createdPaymentResult.payment.id;
+    return createdPaymentResult.payment.public_token;
   }
 
   async function handlePayNow() {
@@ -139,9 +140,9 @@ export default function BookingSearchLookup() {
       }
 
       storeBookingRecordLocally(slug, activeBookingRecord);
-      storePaymentIdLocally(slug, paymentToken);
+      storePaymentPublicTokenLocally(slug, paymentToken);
 
-      router.push(buildPaymentPageUrlForPaymentId(paymentToken));
+      router.push(buildPaymentPageUrlForPaymentPublicToken(paymentToken));
     } catch (error) {
       setActionTone('error');
       setActionMessage(error.message || t('lookup.errors.paymentPreparationFailed'));
@@ -199,7 +200,7 @@ export default function BookingSearchLookup() {
 
         {actions.canPayNow && !actions.isSoldOut && (
           <div className="lookup-pay-now">
-            {!lookupResult.payment?.id && (
+            {!lookupResult.payment?.public_token && (
               <div className="method-list" role="radiogroup" aria-label={t('booking.paymentMethod')}>
                 {paymentMethods.map((paymentMethodOption) => {
                   const methodKey = paymentMethodOption.key;

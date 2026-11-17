@@ -56,7 +56,7 @@ test('uploadLipaNambaPaymentReceiptEndpoint requires the booking reference', asy
 
   await offlinePaymentController.uploadLipaNambaPaymentReceiptEndpoint(
     {
-      params: { id: String(paymentRecord.id) },
+      params: { paymentPublicToken: paymentRecord.public_token },
       body: {},
       file: {
         buffer: VALID_PNG_RECEIPT_BUFFER,
@@ -78,7 +78,7 @@ test('uploadLipaNambaPaymentReceiptEndpoint rejects a mismatched booking referen
 
   await offlinePaymentController.uploadLipaNambaPaymentReceiptEndpoint(
     {
-      params: { id: String(paymentRecord.id) },
+      params: { paymentPublicToken: paymentRecord.public_token },
       body: { booking_ref: 'WRONG1' },
       file: {
         buffer: VALID_PNG_RECEIPT_BUFFER,
@@ -99,7 +99,7 @@ test('uploadLipaNambaPaymentReceiptEndpoint stores a valid receipt for admin rev
 
   await offlinePaymentController.uploadLipaNambaPaymentReceiptEndpoint(
     {
-      params: { id: String(paymentRecord.id) },
+      params: { paymentPublicToken: paymentRecord.public_token },
       body: { booking_ref: bookingRecord.ref },
       file: {
         buffer: VALID_PNG_RECEIPT_BUFFER,

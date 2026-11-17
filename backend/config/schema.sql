@@ -176,6 +176,11 @@ CREATE INDEX IF NOT EXISTS idx_referrers_code ON referrers (referrer_code);
 CREATE TABLE IF NOT EXISTS payments (
   id               BIGSERIAL PRIMARY KEY,
 
+  -- Public, unguessable identifier used in attendee-facing URLs. The numeric
+  -- primary key stays internal: there are no attendee accounts, so this token
+  -- is the capability that authorises the payment page for its own booking.
+  public_token     UUID NOT NULL DEFAULT gen_random_uuid(),
+
   booking_id       BIGINT NOT NULL UNIQUE
                      REFERENCES bookings (id) ON DELETE CASCADE,
 
@@ -234,6 +239,17 @@ DO $$ BEGIN
     ALTER TABLE payments ALTER COLUMN payment_method SET NOT NULL;
   END IF;
 END $$;
+
+-- Existing deployments get public_token here; the bootstrap schema is replayed
+-- before migrations, so the column and the backfill must both be idempotent.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS public_token UUID;
+UPDATE payments SET public_token = gen_random_uuid() WHERE public_token IS NULL;
+ALTER TABLE payments ALTER COLUMN public_token SET DEFAULT gen_random_uuid();
+ALTER TABLE payments ALTER COLUMN public_token SET NOT NULL;
+
+-- The token is a capability, not a label, so duplicates must be impossible.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_public_token
+  ON payments (public_token);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_tx_hash
   ON payments (tx_hash) WHERE tx_hash IS NOT NULL;

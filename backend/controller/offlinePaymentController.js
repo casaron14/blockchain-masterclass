@@ -1,4 +1,4 @@
-import { fetchPaymentRecordById } from '../services/paymentService.js';
+import { fetchPaymentRecordByPublicToken } from '../services/paymentService.js';
 import {
   extendBookingSeatHoldForOfflinePaymentReview,
   fetchBookingRecordById,
@@ -30,10 +30,10 @@ function buildSafeReceiptDownloadFileName(receiptRecord) {
 }
 
 async function uploadLipaNambaPaymentReceiptEndpoint(req, res) {
-  const paymentId = parseInt(req.params.id, 10);
+  const paymentPublicToken = String(req.params.paymentPublicToken || '');
 
   try {
-    const paymentRecord = await fetchPaymentRecordById(paymentId);
+    const paymentRecord = await fetchPaymentRecordByPublicToken(paymentPublicToken);
     if (!paymentRecord) {
       return res.status(404).json(paymentNotFoundResponse());
     }

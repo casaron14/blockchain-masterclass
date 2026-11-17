@@ -2,7 +2,7 @@ import Joi from 'joi';
 
 import {
   createBookingRecordWithActiveSeatHold,
-  fetchBookingRecordById,
+  fetchBookingRecordByIdAndReferenceCode,
   fetchBookingRecordByReferenceCode,
   fetchEventAvailabilitySnapshot,
   reactivateExpiredBookingSeatHold,
@@ -74,36 +74,6 @@ async function fetchEventAvailability(req, res) {
     return res.status(200).json(availabilitySnapshot);
   } catch (error) {
     console.error('Error fetching event availability', error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}
-
-// The numeric booking id is sequential, so it is not proof of ownership. Only
-// the reference code is. Status polling therefore exposes the fields the
-// payment page needs and never the attendee's name, email or phone number.
-function buildPublicBookingStatusProjection(bookingRecord) {
-  return {
-    id: bookingRecord.id,
-    ref: bookingRecord.ref,
-    status: bookingRecord.status,
-    expires_at: bookingRecord.expires_at,
-  };
-}
-
-async function getBookingRecordById(req, res) {
-  const bookingId = parseInt(req.params.id, 10);
-
-  try {
-    const bookingRecord = await fetchBookingRecordById(bookingId);
-    if (!bookingRecord) {
-      throw new BookingNotFoundError(bookingId);
-    }
-    return res.status(200).json({ booking: buildPublicBookingStatusProjection(bookingRecord) });
-  } catch (error) {
-    if (error instanceof BookingNotFoundError) {
-      return res.status(404).json(bookingNotFoundResponse());
-    }
-    console.error('Error fetching booking by id', error);
     return res.status(500).json({ message: 'Server error' });
   }
 }
@@ -184,11 +154,11 @@ async function reactivateBookingHold(req, res) {
   try {
     // Reactivation mutates seat state, so knowing the sequential id is not
     // enough: the caller must also present the booking's secret reference code.
-    const existingBookingRecord = await fetchBookingRecordById(bookingId);
-    if (
-      !existingBookingRecord ||
-      String(existingBookingRecord.ref).toUpperCase() !== providedBookingReferenceCode
-    ) {
+    const existingBookingRecord = await fetchBookingRecordByIdAndReferenceCode(
+      bookingId,
+      providedBookingReferenceCode
+    );
+    if (!existingBookingRecord) {
       throw new BookingNotFoundError(bookingId);
     }
 
@@ -215,7 +185,6 @@ async function reactivateBookingHold(req, res) {
 export default {
   createBookingRecord,
   fetchEventAvailability,
-  getBookingRecordById,
   getBookingRecordByReferenceCode,
   getBookingDetailsForReferenceLookup,
   getBookingDetailsForSearchLookup,

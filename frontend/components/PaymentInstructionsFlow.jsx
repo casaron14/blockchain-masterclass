@@ -11,7 +11,7 @@ import { SUPPORTED_PAYMENT_METHODS } from '@/lib/eventConfig';
 import { formatLocalPrice } from '@/lib/eventFormat';
 import { usePaymentOverviewPolling } from '@/lib/usePaymentOverviewPolling';
 import { isPaymentStatusTerminal } from '@/lib/paymentStatus';
-import { buildPaymentConfirmationPageUrlForPaymentId } from '@/lib/siteRoutes';
+import { buildPaymentConfirmationPageUrlForPaymentPublicToken } from '@/lib/siteRoutes';
 import LoadingButton from '@/components/LoadingButton';
 import PaymentHoldCountdown from '@/components/PaymentHoldCountdown';
 import HairlineLoadingIndicator from '@/components/HairlineLoadingIndicator';
@@ -54,11 +54,10 @@ function AddressCopiedIcon() {
   );
 }
 
-export default function PaymentInstructionsFlow({ paymentId }) {
+export default function PaymentInstructionsFlow({ paymentPublicToken }) {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
   const {
-    slug,
     currency,
     ticketPrice,
     cryptoAmount,
@@ -70,8 +69,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
   const router = useRouter();
 
   const { paymentOverview, bookingRecord, loadError } = usePaymentOverviewPolling({
-    paymentId,
-    eventSlug: slug,
+    paymentPublicToken,
   });
   const paymentRecord = paymentOverview?.payment ?? null;
 
@@ -118,7 +116,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
 
     let isCancelled = false;
 
-    initiateUsdtPayment(paymentId)
+    initiateUsdtPayment(paymentPublicToken)
       .then((instructions) => {
         if (!isCancelled) {
           setUsdtInstructions(instructions);
@@ -140,7 +138,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
     return () => {
       isCancelled = true;
     };
-  }, [paymentRecord, paymentId, t]);
+  }, [paymentRecord, paymentPublicToken, t]);
 
   // The QR encoder is loaded only when a USDT deposit address is on screen, so
   // it stays out of the initial bundle for landing-page visits. It runs in its
@@ -211,7 +209,7 @@ export default function PaymentInstructionsFlow({ paymentId }) {
   }
 
   function handleContinueToPaymentConfirmation() {
-    router.push(buildPaymentConfirmationPageUrlForPaymentId(paymentId));
+    router.push(buildPaymentConfirmationPageUrlForPaymentPublicToken(paymentPublicToken));
   }
 
   const paymentStatusIsTerminal = isPaymentStatusTerminal(paymentStatusValue);

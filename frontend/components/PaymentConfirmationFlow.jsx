@@ -12,7 +12,10 @@ import { SUPPORTED_PAYMENT_METHODS } from '@/lib/eventConfig';
 import { formatLocalPrice } from '@/lib/eventFormat';
 import { usePaymentOverviewPolling } from '@/lib/usePaymentOverviewPolling';
 import { isPaymentStatusTerminal } from '@/lib/paymentStatus';
-import { buildBookingPageUrl, buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
+import {
+  buildBookingPageUrl,
+  buildPaymentPageUrlForPaymentPublicToken,
+} from '@/lib/siteRoutes';
 import LoadingButton from '@/components/LoadingButton';
 import PaymentHoldCountdown from '@/components/PaymentHoldCountdown';
 import PaymentLoadingSkeleton from '@/components/PaymentLoadingSkeleton';
@@ -29,10 +32,10 @@ const SUPPORTED_RECEIPT_MIME_TYPES = [
   'image/webp',
 ];
 
-export default function PaymentConfirmationFlow({ paymentId }) {
+export default function PaymentConfirmationFlow({ paymentPublicToken }) {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
-  const { slug, currency, ticketPrice, cryptoCurrency, cryptoNetwork } = eventConfig;
+  const { currency, ticketPrice, cryptoCurrency, cryptoNetwork } = eventConfig;
 
   const {
     paymentOverview,
@@ -40,7 +43,7 @@ export default function PaymentConfirmationFlow({ paymentId }) {
     loadError,
     refreshPaymentOverview,
     refreshBookingRecord,
-  } = usePaymentOverviewPolling({ paymentId, eventSlug: slug });
+  } = usePaymentOverviewPolling({ paymentPublicToken });
 
   const [selectedReceiptFile, setSelectedReceiptFile] = useState(null);
   const [receiptUploadError, setReceiptUploadError] = useState(null);
@@ -121,7 +124,7 @@ export default function PaymentConfirmationFlow({ paymentId }) {
 
     try {
       const uploadResult = await uploadLipaNambaPaymentReceipt(
-        paymentId,
+        paymentPublicToken,
         selectedReceiptFile,
         bookingReferenceCode
       );
@@ -314,7 +317,7 @@ export default function PaymentConfirmationFlow({ paymentId }) {
 
       <div className="payment-next-step">
         <Link
-          href={buildPaymentPageUrlForPaymentId(paymentId)}
+          href={buildPaymentPageUrlForPaymentPublicToken(paymentPublicToken)}
           className="btn btn-secondary"
         >
           {t('payment.backToPaymentInstructions')}

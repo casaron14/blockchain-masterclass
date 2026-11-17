@@ -6,7 +6,7 @@ import SeatAvailabilityBanner from '@/components/SeatAvailabilityBanner';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 
-export default function PaymentConfirmationPageContent({ paymentId }) {
+export default function PaymentConfirmationPageContent({ paymentPublicToken }) {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
 
@@ -23,7 +23,7 @@ export default function PaymentConfirmationPageContent({ paymentId }) {
 
         <div className="payment-layout">
           <div className="payment-main">
-            <PaymentConfirmationFlow paymentId={paymentId} />
+            <PaymentConfirmationFlow paymentPublicToken={paymentPublicToken} />
           </div>
 
           <aside className="booking-aside">

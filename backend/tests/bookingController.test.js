@@ -80,29 +80,6 @@ test('createBookingRecord rejects invalid attendee details before writing to the
   assert.equal(response.capturedResponse.body.message, 'Validation failed');
 });
 
-test('getBookingRecordById exposes only the status fields the payment page needs', async () => {
-  const createdBooking = await createBookingRecordWithActiveSeatHold({
-    full_name: 'Private Attendee',
-    email: 'private@example.com',
-    phone_number: '+255712345681',
-  });
-  const response = createMockResponse();
-
-  await bookingController.getBookingRecordById(
-    { params: { id: String(createdBooking.id) } },
-    response
-  );
-
-  assert.equal(response.capturedResponse.statusCode, 200);
-  assert.deepEqual(
-    Object.keys(response.capturedResponse.body.booking).sort(),
-    ['expires_at', 'id', 'ref', 'status']
-  );
-  assert.equal(response.capturedResponse.body.booking.email, undefined);
-  assert.equal(response.capturedResponse.body.booking.phone_number, undefined);
-  assert.equal(response.capturedResponse.body.booking.full_name, undefined);
-});
-
 test('reactivateBookingHold refuses an id-only request without the booking reference', async () => {
   const createdBooking = await createBookingRecordWithActiveSeatHold({
     full_name: 'Reference Required Attendee',

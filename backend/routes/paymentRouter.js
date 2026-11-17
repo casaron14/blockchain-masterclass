@@ -6,9 +6,11 @@ import {
   createStrictPaymentInitiationRateLimiter,
   createGeneralRequestRateLimiter,
 } from "../middleware/rateLimiter.js";
-import { validatePositiveIntegerRouteParam } from "../middleware/requestValidators.js";
+import { preventSensitiveResponseCaching } from "../middleware/httpSecurityMiddleware.js";
 
 const router = express.Router();
+
+router.use(preventSensitiveResponseCaching);
 
 router.post(
   "/",
@@ -22,38 +24,35 @@ router.get(
   paymentController.fetchPaymentStatusByExternalId
 );
 
+// The URL segment is payments.public_token, never the sequential payments.id.
+// A numeric segment therefore resolves to nothing and returns 404.
 router.get(
-  "/:id",
+  "/:paymentPublicToken",
   createGeneralRequestRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
-  paymentController.getPaymentRecordById
+  paymentController.getPaymentRecordByPublicToken
 );
 
 router.post(
-  "/:id/initiate-azampesa",
+  "/:paymentPublicToken/initiate-azampesa",
   createStrictPaymentInitiationRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
   paymentController.initiateAzamPesaPaymentEndpoint
 );
 
 router.post(
-  "/:id/verify-usdt",
+  "/:paymentPublicToken/verify-usdt",
   createStrictPaymentInitiationRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
   paymentController.verifyUsdtPaymentEndpoint
 );
 
 router.post(
-  "/:id/initiate-usdt",
+  "/:paymentPublicToken/initiate-usdt",
   createStrictPaymentInitiationRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
   paymentController.initiateUsdtPaymentEndpoint
 );
 
 router.post(
-  "/:id/lipanamba-receipt",
+  "/:paymentPublicToken/lipanamba-receipt",
   createStrictPaymentInitiationRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
   receiveSingleOfflinePaymentReceiptFile,
   offlinePaymentController.uploadLipaNambaPaymentReceiptEndpoint
 );

@@ -3,7 +3,7 @@ import pool from '../config/db.js';
 
 import {
   createPendingPaymentRecordForBooking,
-  fetchPaymentRecordById,
+  fetchPaymentRecordByPublicToken,
   PaymentNotFoundError,
   initiateAzamPesaPayment,
   findAzamPayPaymentRecordByExternalId,
@@ -11,6 +11,7 @@ import {
 
 import {
   fetchBookingRecordById,
+  fetchBookingRecordByIdAndReferenceCode,
   reactivateExpiredBookingSeatHold,
 } from '../services/bookingService.js';
 
@@ -39,6 +40,7 @@ import {
 } from '../services/eventConfigService.js';
 
 import {
+  bookingNotFoundResponse,
   invalidPaymentMethodResponse,
   paymentMethodNotAvailableResponse,
   missingRequiredFieldResponse,
@@ -94,14 +96,42 @@ async function buildPaymentSettlementSummaryForClient(paymentRecord) {
   };
 }
 
-async function getPaymentRecordById(req, res) {
-  const paymentId = parseInt(req.params.id, 10);
+// The payment page only needs the rail, the amount, the status and the booking
+// it belongs to. Internal ids, provider references and wallet fields stay in
+// the database: none of them are needed to render the page.
+function buildPublicPaymentProjectionForAttendee(paymentRecord) {
+  return {
+    payment_method: paymentRecord.payment_method,
+    amount_expected: paymentRecord.amount_expected,
+    status: paymentRecord.status,
+    initiated_at: paymentRecord.initiated_at,
+    confirmed_at: paymentRecord.confirmed_at,
+  };
+}
+
+function buildPublicBookingProjectionForPaymentPage(bookingRecord) {
+  return {
+    ref: bookingRecord.ref,
+    full_name: bookingRecord.full_name,
+    status: bookingRecord.status,
+    expires_at: bookingRecord.expires_at,
+  };
+}
+
+async function getPaymentRecordByPublicToken(req, res) {
+  const paymentPublicToken = String(req.params.paymentPublicToken || '');
 
   try {
-    const paymentRecord = await fetchPaymentRecordById(paymentId);
+    const paymentRecord = await fetchPaymentRecordByPublicToken(paymentPublicToken);
     if (!paymentRecord) {
-      throw new PaymentNotFoundError(paymentId);
+      throw new PaymentNotFoundError(paymentPublicToken);
     }
+
+    const bookingRecord = await fetchBookingRecordById(paymentRecord.booking_id);
+    if (!bookingRecord) {
+      throw new PaymentNotFoundError(paymentPublicToken);
+    }
+
     // Settlement evidence only exists for on-chain payments. Skipping it for
     // AzamPesa keeps the polling endpoint at one query per request.
     const settlementSummary =
@@ -115,30 +145,54 @@ async function getPaymentRecordById(req, res) {
         : null;
 
     return res.status(200).json({
-      payment: paymentRecord,
+      payment: buildPublicPaymentProjectionForAttendee(paymentRecord),
+      booking: buildPublicBookingProjectionForPaymentPage(bookingRecord),
       settlement: settlementSummary,
-      offlineReceipt,
+      offlineReceipt: offlineReceipt ? { status: offlineReceipt.status } : null,
     });
   } catch (error) {
     if (error instanceof PaymentNotFoundError) {
       return res.status(404).json(paymentNotFoundResponse());
     }
-    console.error('Error fetching payment by id', error);
+    console.error('Error fetching payment by public token', error);
     return res.status(500).json({ message: 'Server error' });
   }
 }
 
 async function createPaymentRecord(req, res) {
-  const { booking_id: bookingId, payment_method: paymentMethod } = req.body;
+  const {
+    booking_id: bookingId,
+    booking_ref: bookingReferenceCode,
+    payment_method: paymentMethod,
+  } = req.body;
 
-  if (!bookingId || !paymentMethod) {
+  if (!bookingId || !bookingReferenceCode || !paymentMethod) {
     return res
       .status(400)
-      .json(missingRequiredFieldResponse('booking_id, payment_method'));
+      .json(missingRequiredFieldResponse('booking_id, booking_ref, payment_method'));
+  }
+
+  const parsedBookingId = Number(bookingId);
+  if (!Number.isInteger(parsedBookingId) || parsedBookingId <= 0) {
+    return res.status(400).json(missingRequiredFieldResponse('booking_id'));
   }
 
   try {
-    const paymentRecord = await createPendingPaymentRecordForBooking(bookingId, paymentMethod);
+    // A sequential booking id is not proof of ownership. The caller must also
+    // present the booking reference, otherwise any id creates a payment for
+    // somebody else's seat.
+    const bookingRecord = await fetchBookingRecordByIdAndReferenceCode(
+      parsedBookingId,
+      bookingReferenceCode
+    );
+    if (!bookingRecord) {
+      return res.status(404).json(bookingNotFoundResponse());
+    }
+
+    const paymentRecord = await createPendingPaymentRecordForBooking(
+      bookingRecord.id,
+      paymentMethod
+    );
     return res.status(201).json({ payment: paymentRecord });
   } catch (error) {
     if (error.code === 'INVALID_PAYMENT_METHOD') {
@@ -167,7 +221,7 @@ async function initiateAzamPesaPaymentEndpoint(req, res) {
       .json(paymentMethodNotAvailableResponse(PAYMENT_METHOD_AZAMPESA));
   }
 
-  const paymentId = parseInt(req.params.id, 10);
+  const paymentPublicToken = String(req.params.paymentPublicToken || '');
   const { phone_number: stkPhoneNumber } = req.body;
 
   if (stkPhoneNumber && !/^\+?[0-9]{9,15}$/.test(String(stkPhoneNumber))) {
@@ -175,14 +229,14 @@ async function initiateAzamPesaPaymentEndpoint(req, res) {
   }
 
   try {
-    const paymentRecord = await fetchPaymentRecordById(paymentId);
+    const paymentRecord = await fetchPaymentRecordByPublicToken(paymentPublicToken);
     if (!paymentRecord) {
-      throw new PaymentNotFoundError(paymentId);
+      throw new PaymentNotFoundError(paymentPublicToken);
     }
 
     const bookingRecord = await fetchBookingRecordById(paymentRecord.booking_id);
     if (!bookingRecord) {
-      throw new PaymentNotFoundError(paymentId);
+      throw new PaymentNotFoundError(paymentPublicToken);
     }
 
     const initiationResult = await initiateAzamPesaPayment(
@@ -286,12 +340,12 @@ async function resolveDepositAddressForUsdtInitiation(paymentRecord) {
 }
 
 async function initiateUsdtPaymentEndpoint(req, res) {
-  const paymentId = parseInt(req.params.id, 10);
+  const paymentPublicToken = String(req.params.paymentPublicToken || '');
 
   try {
-    const paymentRecord = await fetchPaymentRecordById(paymentId);
+    const paymentRecord = await fetchPaymentRecordByPublicToken(paymentPublicToken);
     if (!paymentRecord) {
-      throw new PaymentNotFoundError(paymentId);
+      throw new PaymentNotFoundError(paymentPublicToken);
     }
     if (paymentRecord.payment_method !== PAYMENT_METHOD_USDT_BEP20) {
       return res
@@ -302,14 +356,12 @@ async function initiateUsdtPaymentEndpoint(req, res) {
       return res.status(200).json({
         message: 'This payment is already confirmed',
         alreadyConfirmed: true,
-        bookingId: paymentRecord.booking_id,
-        paymentId: paymentRecord.id,
       });
     }
 
     const bookingRecord = await fetchBookingRecordById(paymentRecord.booking_id);
     if (!bookingRecord) {
-      throw new PaymentNotFoundError(paymentId);
+      throw new PaymentNotFoundError(paymentPublicToken);
     }
     if (bookingRecord.status === 'cancelled') {
       return res.status(409).json({ message: 'This booking was cancelled' });
@@ -321,8 +373,6 @@ async function initiateUsdtPaymentEndpoint(req, res) {
       message: 'Transfer USDT to your unique deposit address',
       receivingWallet: orderDeposit.depositAddress,
       expectedAmountUsdt: paymentRecord.amount_expected ?? getUsdtExpectedAmount(),
-      bookingId: paymentRecord.booking_id,
-      orderId: orderDeposit.order.id,
       holdRenewed: orderDeposit.renewed === true,
     });
   } catch (error) {
@@ -357,7 +407,7 @@ function buildUsdtClaimPendingMessage(pendingReason) {
 // Serverless deployments cannot run the five-second listener, so USDT
 // observation is driven by the scheduled cron tick and the payment monitor job.
 async function verifyUsdtPaymentEndpoint(req, res) {
-  const paymentId = parseInt(req.params.id, 10);
+  const paymentPublicToken = String(req.params.paymentPublicToken || '');
   const { tx_hash: txHash } = req.body;
 
   if (!txHash) {
@@ -367,9 +417,9 @@ async function verifyUsdtPaymentEndpoint(req, res) {
   }
 
   try {
-    const paymentRecord = await fetchPaymentRecordById(paymentId);
+    const paymentRecord = await fetchPaymentRecordByPublicToken(paymentPublicToken);
     if (!paymentRecord) {
-      throw new PaymentNotFoundError(paymentId);
+      throw new PaymentNotFoundError(paymentPublicToken);
     }
 
     const confirmationResult = await verifyClaimedUsdtTransferForBooking(
@@ -406,7 +456,7 @@ async function verifyUsdtPaymentEndpoint(req, res) {
 }
 
 export default {
-  getPaymentRecordById,
+  getPaymentRecordByPublicToken,
   createPaymentRecord,
   initiateAzamPesaPaymentEndpoint,
   fetchPaymentStatusByExternalId,

@@ -154,6 +154,19 @@ export async function fetchBookingRecordByReferenceCode(bookingReferenceCode) {
   return result.rows[0] ?? null;
 }
 
+// The attendee has no account, so the booking reference is the ownership
+// proof. A write addressed by the sequential booking id must present it.
+export async function fetchBookingRecordByIdAndReferenceCode(
+  bookingId,
+  bookingReferenceCode
+) {
+  const result = await pool.query(
+    'SELECT * FROM bookings WHERE id = $1 AND ref = $2',
+    [bookingId, String(bookingReferenceCode ?? '').trim().toUpperCase()]
+  );
+  return result.rows[0] ?? null;
+}
+
 // Attendees can book more than once with the same contact details, so the
 // contact searches return every candidate and let the caller decide whether a
 // single booking can be resolved safely.

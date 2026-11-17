@@ -9,8 +9,8 @@ import {
   buildBookingPageUrl,
   buildEventHomeSectionUrlForSectionId,
   buildEventHomeUrl,
-  buildPaymentConfirmationPageUrlForPaymentId,
-  buildPaymentPageUrlForPaymentId,
+  buildPaymentConfirmationPageUrlForPaymentPublicToken,
+  buildPaymentPageUrlForPaymentPublicToken,
   buildSuccessPageUrlForReferenceCode,
 } from '../lib/siteRoutes.js';
 
@@ -20,8 +20,8 @@ test('the public event URLs live on the apex domain and never repeat the event s
   const publicUrls = [
     buildEventHomeUrl(),
     buildBookingPageUrl(),
-    buildPaymentPageUrlForPaymentId('payment-123'),
-    buildPaymentConfirmationPageUrlForPaymentId('payment-123'),
+    buildPaymentPageUrlForPaymentPublicToken('payment-123'),
+    buildPaymentConfirmationPageUrlForPaymentPublicToken('payment-123'),
     buildSuccessPageUrlForReferenceCode('ABC123'),
     buildEventHomeSectionUrlForSectionId('programme'),
   ];
@@ -50,13 +50,13 @@ test('the back office link stays at /admin', () => {
   assert.equal(BACK_OFFICE_HOME_URL, '/admin');
 });
 
-test('a payment page URL carries the payment id below the root', () => {
-  assert.equal(buildPaymentPageUrlForPaymentId('9f2c1a7b'), '/pay/9f2c1a7b');
+test('a payment page URL carries the payment public token below the root', () => {
+  assert.equal(buildPaymentPageUrlForPaymentPublicToken('9f2c1a7b'), '/pay/9f2c1a7b');
 });
 
-test('the payment confirmation step lives below its payment id', () => {
+test('the payment confirmation step lives below its payment public token', () => {
   assert.equal(
-    buildPaymentConfirmationPageUrlForPaymentId('9f2c1a7b'),
+    buildPaymentConfirmationPageUrlForPaymentPublicToken('9f2c1a7b'),
     '/pay/9f2c1a7b/confirm'
   );
 });
@@ -70,9 +70,9 @@ test('an event section link targets a hash on the root page', () => {
 });
 
 test('dynamic URL segments are encoded instead of injected verbatim', () => {
-  assert.equal(buildPaymentPageUrlForPaymentId('id/with space'), '/pay/id%2Fwith%20space');
+  assert.equal(buildPaymentPageUrlForPaymentPublicToken('id/with space'), '/pay/id%2Fwith%20space');
   assert.equal(
-    buildPaymentConfirmationPageUrlForPaymentId('id/with space'),
+    buildPaymentConfirmationPageUrlForPaymentPublicToken('id/with space'),
     '/pay/id%2Fwith%20space/confirm'
   );
   assert.equal(

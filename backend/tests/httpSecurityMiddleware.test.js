@@ -6,6 +6,7 @@ import Joi from 'joi';
 import {
   buildSecurityHeaders,
   buildCorsPolicy,
+  preventSensitiveResponseCaching,
 } from '../middleware/httpSecurityMiddleware.js';
 import handleApplicationError, { handleNotFoundRoute } from '../middleware/errorHandler.js';
 import { validatePositiveIntegerRouteParam } from '../middleware/requestValidators.js';
@@ -184,4 +185,21 @@ test('validatePositiveIntegerRouteParam rejects non-numeric, zero, negative, and
     assert.equal(responseStatus, 400);
     assert.equal(responseBody.error, 'INVALID_ROUTE_PARAM');
   }
+});
+test('preventSensitiveResponseCaching stops payment and booking responses being stored', () => {
+  const appliedHeaders = {};
+  const responseMock = {
+    set(headers) {
+      Object.assign(appliedHeaders, headers);
+    },
+  };
+  let nextCalled = false;
+
+  preventSensitiveResponseCaching({}, responseMock, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, true);
+  assert.match(appliedHeaders['Cache-Control'], /no-store/);
+  assert.equal(appliedHeaders['X-Robots-Tag'], 'noindex, nofollow');
 });

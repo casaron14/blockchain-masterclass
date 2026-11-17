@@ -15,12 +15,12 @@ export function buildBookingPageUrl() {
   return BOOKING_PAGE_URL;
 }
 
-export function buildPaymentPageUrlForPaymentId(paymentId) {
-  return `/pay/${encodeURIComponent(paymentId)}`;
+export function buildPaymentPageUrlForPaymentPublicToken(paymentPublicToken) {
+  return `/pay/${encodeURIComponent(paymentPublicToken)}`;
 }
 
-export function buildPaymentConfirmationPageUrlForPaymentId(paymentId) {
-  return `/pay/${encodeURIComponent(paymentId)}/confirm`;
+export function buildPaymentConfirmationPageUrlForPaymentPublicToken(paymentPublicToken) {
+  return `/pay/${encodeURIComponent(paymentPublicToken)}/confirm`;
 }
 
 export function buildSuccessPageUrlForReferenceCode(bookingReferenceCode) {

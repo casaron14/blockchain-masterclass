@@ -135,6 +135,27 @@ export async function fetchPaymentRecordById(paymentId) {
   return result.rows[0] ?? null;
 }
 
+// Accepts the UUID shape only. A legacy numeric id must be rejected before it
+// reaches Postgres, otherwise the uuid comparison raises a 22P02 instead of
+// producing the 404 that hides whether the record exists.
+const PAYMENT_PUBLIC_TOKEN_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidPaymentPublicTokenFormat(paymentPublicToken) {
+  return PAYMENT_PUBLIC_TOKEN_PATTERN.test(String(paymentPublicToken ?? ''));
+}
+
+export async function fetchPaymentRecordByPublicToken(paymentPublicToken) {
+  if (!isValidPaymentPublicTokenFormat(paymentPublicToken)) {
+    return null;
+  }
+  const result = await pool.query(
+    'SELECT * FROM payments WHERE public_token = $1',
+    [paymentPublicToken]
+  );
+  return result.rows[0] ?? null;
+}
+
 // The only writer for payment status. The UPDATE carries the statuses the new
 // status may come from, so a late or replayed AzamPay callback can no longer
 // downgrade a confirmed payment. A blocked transition returns null instead of

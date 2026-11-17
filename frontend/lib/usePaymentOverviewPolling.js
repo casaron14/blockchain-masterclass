@@ -2,48 +2,32 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchBookingRecordById, fetchPaymentOverviewById } from '@/lib/api';
-import { fetchStoredBookingRecord } from '@/lib/bookingStorage';
+import { fetchPaymentOverviewByPublicToken } from '@/lib/api';
 import { isPaymentStatusTerminal } from '@/lib/paymentStatus';
 
 const PAYMENT_OVERVIEW_POLL_INTERVAL_MS = 5000;
 
 // Both payment steps need the same payment record, booking record and receipt
 // state, and both must notice an admin approval or an on-chain confirmation
-// without the attendee reloading. Keeping the fetch and the polling here stops
-// the two screens from drifting apart.
-export function usePaymentOverviewPolling({ paymentId, eventSlug }) {
+// without the attendee reloading. The public token is the only credential the
+// page has, so the booking projection arrives with the payment overview
+// instead of a second lookup by the internal booking id.
+export function usePaymentOverviewPolling({ paymentPublicToken }) {
   const [paymentOverview, setPaymentOverview] = useState(null);
-  const [bookingRecord, setBookingRecord] = useState(null);
   const [loadError, setLoadError] = useState(null);
+
+  const bookingRecord = paymentOverview?.booking ?? null;
 
   useEffect(() => {
     let isCancelled = false;
 
-    async function loadPaymentOverviewAndBooking() {
+    async function loadPaymentOverview() {
       try {
-        const loadedPaymentOverview = await fetchPaymentOverviewById(paymentId);
-        if (isCancelled) {
-          return;
+        const loadedPaymentOverview =
+          await fetchPaymentOverviewByPublicToken(paymentPublicToken);
+        if (!isCancelled) {
+          setPaymentOverview(loadedPaymentOverview);
         }
-        setPaymentOverview(loadedPaymentOverview);
-
-        let fetchedBookingRecord = null;
-        if (loadedPaymentOverview.payment?.booking_id) {
-          fetchedBookingRecord = await fetchBookingRecordById(
-            loadedPaymentOverview.payment.booking_id
-          ).catch(() => null);
-        }
-        if (isCancelled) {
-          return;
-        }
-        // The stored record is only a fallback for a payment without a booking
-        // id. Falling back when the real fetch failed would show the countdown
-        // for a different booking than the one behind this payment.
-        const fallbackBookingRecord = loadedPaymentOverview.payment?.booking_id
-          ? null
-          : fetchStoredBookingRecord(eventSlug);
-        setBookingRecord(fetchedBookingRecord ?? fallbackBookingRecord ?? null);
       } catch (error) {
         if (!isCancelled) {
           setLoadError(error.message);
@@ -51,12 +35,12 @@ export function usePaymentOverviewPolling({ paymentId, eventSlug }) {
       }
     }
 
-    loadPaymentOverviewAndBooking();
+    loadPaymentOverview();
 
     return () => {
       isCancelled = true;
     };
-  }, [paymentId, eventSlug]);
+  }, [paymentPublicToken]);
 
   const paymentStatus = paymentOverview?.payment?.status;
 
@@ -66,7 +50,7 @@ export function usePaymentOverviewPolling({ paymentId, eventSlug }) {
     }
 
     const pollTimer = setInterval(() => {
-      fetchPaymentOverviewById(paymentId)
+      fetchPaymentOverviewByPublicToken(paymentPublicToken)
         .then((polledPaymentOverview) => setPaymentOverview(polledPaymentOverview))
         .catch(() => {
           // A failed poll must not replace the screen the attendee is reading;
@@ -75,27 +59,25 @@ export function usePaymentOverviewPolling({ paymentId, eventSlug }) {
     }, PAYMENT_OVERVIEW_POLL_INTERVAL_MS);
 
     return () => clearInterval(pollTimer);
-  }, [paymentId, paymentStatus]);
+  }, [paymentPublicToken, paymentStatus]);
 
   const refreshPaymentOverview = useCallback(async () => {
-    const refreshedPaymentOverview = await fetchPaymentOverviewById(paymentId);
+    const refreshedPaymentOverview =
+      await fetchPaymentOverviewByPublicToken(paymentPublicToken);
     setPaymentOverview(refreshedPaymentOverview);
     return refreshedPaymentOverview;
-  }, [paymentId]);
+  }, [paymentPublicToken]);
 
   // Uploading a receipt can extend the seat hold, so the countdown needs the
-  // booking record refreshed as well as the payment record.
+  // booking projection refreshed as well as the payment record.
   const refreshBookingRecord = useCallback(async () => {
-    const bookingId = paymentOverview?.payment?.booking_id;
-    if (!bookingId) {
-      return null;
+    const refreshedPaymentOverview =
+      await fetchPaymentOverviewByPublicToken(paymentPublicToken).catch(() => null);
+    if (refreshedPaymentOverview) {
+      setPaymentOverview(refreshedPaymentOverview);
     }
-    const refreshedBookingRecord = await fetchBookingRecordById(bookingId).catch(() => null);
-    if (refreshedBookingRecord) {
-      setBookingRecord(refreshedBookingRecord);
-    }
-    return refreshedBookingRecord;
-  }, [paymentOverview?.payment?.booking_id]);
+    return refreshedPaymentOverview?.booking ?? null;
+  }, [paymentPublicToken]);
 
   return {
     paymentOverview,

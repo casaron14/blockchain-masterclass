@@ -17,6 +17,18 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
+// Any response that carries an order, payment or attendee record must never be
+// stored by a shared cache, a proxy or the browser history cache.
+export function preventSensitiveResponseCaching(req, res, next) {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'X-Robots-Tag': 'noindex, nofollow',
+  });
+  next();
+}
+
 export function buildSecurityHeaders(disableHsts = false) {
   return (req, res, next) => {
     const securityHeaders = {

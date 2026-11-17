@@ -9,11 +9,11 @@ import {
   fetchStoredAttendeeProfile,
   fetchStoredBookingDraft,
   fetchStoredBookingRecord,
-  fetchStoredPaymentId,
+  fetchStoredPaymentPublicToken,
   storeAttendeeProfileLocally,
   storeBookingDraftLocally,
   storeBookingRecordLocally,
-  storePaymentIdLocally,
+  storePaymentPublicTokenLocally,
 } from '@/lib/bookingStorage';
 import {
   clearStoredReferralSource,
@@ -23,7 +23,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LoadingButton from '@/components/LoadingButton';
 import TurnstileWidget, { isTurnstileEnabled } from '@/components/TurnstileWidget';
-import { buildPaymentPageUrlForPaymentId } from '@/lib/siteRoutes';
+import { buildPaymentPageUrlForPaymentPublicToken } from '@/lib/siteRoutes';
 import {
   buildSanitizedAttendeePayload,
   normalizeFullNameForBooking,
@@ -55,7 +55,7 @@ export default function BookingForm() {
   });
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const [activeBookingId, setActiveBookingId] = useState(null);
-  const [activePaymentId, setActivePaymentId] = useState(null);
+  const [activePaymentPublicToken, setActivePaymentPublicToken] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -113,7 +113,7 @@ export default function BookingForm() {
     // the seat was reserved. Keeping the booking id lets the resume panel finish
     // that step instead of leaving a held seat nobody can pay for.
     setActiveBookingId(storedBooking.id);
-    setActivePaymentId(fetchStoredPaymentId(slug) ?? null);
+    setActivePaymentPublicToken(fetchStoredPaymentPublicToken(slug) ?? null);
   }, [slug]);
 
   function persistAttendeeDraft(nextAttendeeDetails, nextPaymentMethod) {
@@ -240,21 +240,24 @@ export default function BookingForm() {
       try {
         createdPaymentResult = await createPaymentRecord({
           bookingId: createdBooking.id,
+          bookingReferenceCode: createdBooking.ref,
           paymentMethod: selectedPaymentMethod,
         });
       } catch (paymentCreationError) {
         // The seat is already held. Surface the booking so "Continue to
         // payment" can finish this step instead of leaving an orphan hold.
         setActiveBookingId(createdBooking.id);
-        setActivePaymentId(null);
+        setActivePaymentPublicToken(null);
         throw paymentCreationError;
       }
 
-      storePaymentIdLocally(slug, createdPaymentResult.payment.id);
+      storePaymentPublicTokenLocally(slug, createdPaymentResult.payment.public_token);
       clearStoredBookingDraft(slug);
       storeAttendeeProfileLocally(sanitizedAttendeePayload);
 
-      router.push(buildPaymentPageUrlForPaymentId(createdPaymentResult.payment.id));
+      router.push(
+        buildPaymentPageUrlForPaymentPublicToken(createdPaymentResult.payment.public_token)
+      );
     } catch (error) {
       if (isTurnstileEnabled()) {
         turnstileWidgetRef.current?.resetChallengeWidget();
@@ -281,28 +284,32 @@ export default function BookingForm() {
   function handleDiscardActiveBooking() {
     clearStoredBookingProgress(slug);
     setActiveBookingId(null);
-    setActivePaymentId(null);
+    setActivePaymentPublicToken(null);
   }
 
   // The payment record may be missing when the create call failed after the
   // seat was reserved. The backend returns the existing record for a repeated
   // request, so this retry can never create a second payment.
   async function resumeActiveBookingPayment() {
-    if (activePaymentId) {
-      router.push(buildPaymentPageUrlForPaymentId(activePaymentId));
+    if (activePaymentPublicToken) {
+      router.push(buildPaymentPageUrlForPaymentPublicToken(activePaymentPublicToken));
       return;
     }
 
     setSubmitError(null);
     setIsSubmitting(true);
     try {
+      const storedBookingRecord = fetchStoredBookingRecord(slug);
       const createdPaymentResult = await createPaymentRecord({
         bookingId: activeBookingId,
+        bookingReferenceCode: storedBookingRecord?.ref,
         paymentMethod: selectedPaymentMethod,
       });
-      storePaymentIdLocally(slug, createdPaymentResult.payment.id);
+      storePaymentPublicTokenLocally(slug, createdPaymentResult.payment.public_token);
       clearStoredBookingDraft(slug);
-      router.push(buildPaymentPageUrlForPaymentId(createdPaymentResult.payment.id));
+      router.push(
+        buildPaymentPageUrlForPaymentPublicToken(createdPaymentResult.payment.public_token)
+      );
     } catch (error) {
       setSubmitError(
         error.responseBody?.message || error.message || t('booking.errors.generic')

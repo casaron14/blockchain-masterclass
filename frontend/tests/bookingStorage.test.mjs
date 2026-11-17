@@ -7,11 +7,11 @@ import {
   fetchStoredAttendeeProfile,
   fetchStoredBookingDraft,
   fetchStoredBookingRecord,
-  fetchStoredPaymentId,
+  fetchStoredPaymentPublicToken,
   storeAttendeeProfileLocally,
   storeBookingDraftLocally,
   storeBookingRecordLocally,
-  storePaymentIdLocally,
+  storePaymentPublicTokenLocally,
 } from '../lib/bookingStorage.js';
 
 function createInMemoryLocalStorage() {
@@ -116,15 +116,18 @@ test('clears the stored attendee profile', () => {
   }
 });
 
-test('stores and retrieves a booking record with payment id', () => {
+test('stores and retrieves a booking record with a payment public token', () => {
   const restoreWindow = installBrowserWindowWith(createInMemoryLocalStorage());
   try {
     const bookingRecord = { id: 42, expires_at: '2099-01-01T00:00:00Z' };
     storeBookingRecordLocally('blockchain-summit', bookingRecord);
-    storePaymentIdLocally('blockchain-summit', 7);
+    storePaymentPublicTokenLocally('blockchain-summit', '9f2c1a7b-3d4e-4f5a-8b6c-7d8e9f0a1b2c');
 
     assert.deepEqual(fetchStoredBookingRecord('blockchain-summit'), bookingRecord);
-    assert.equal(fetchStoredPaymentId('blockchain-summit'), 7);
+    assert.equal(
+      fetchStoredPaymentPublicToken('blockchain-summit'),
+      '9f2c1a7b-3d4e-4f5a-8b6c-7d8e9f0a1b2c'
+    );
   } finally {
     restoreWindow();
   }

@@ -3,8 +3,13 @@ function buildBookingKey(eventSlug) {
 }
 
 function buildPaymentKey(eventSlug) {
-  return `paymentId:${eventSlug}`;
+  return `paymentPublicToken:${eventSlug}`;
 }
+
+// A stored numeric id from before the token migration must not be reused as a
+// URL segment: that URL now correctly returns 404.
+const PAYMENT_PUBLIC_TOKEN_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function buildBookingDraftKey(eventSlug) {
   return `bookingDraft:${eventSlug}`;
@@ -59,13 +64,13 @@ export function fetchStoredBookingRecord(eventSlug) {
   }
 }
 
-export function storePaymentIdLocally(eventSlug, paymentId) {
-  writeLocalStorageValue(buildPaymentKey(eventSlug), String(paymentId));
+export function storePaymentPublicTokenLocally(eventSlug, paymentPublicToken) {
+  writeLocalStorageValue(buildPaymentKey(eventSlug), String(paymentPublicToken));
 }
 
-export function fetchStoredPaymentId(eventSlug) {
+export function fetchStoredPaymentPublicToken(eventSlug) {
   const rawValue = readLocalStorageValue(buildPaymentKey(eventSlug));
-  return rawValue ? Number(rawValue) : null;
+  return PAYMENT_PUBLIC_TOKEN_PATTERN.test(rawValue ?? '') ? rawValue : null;
 }
 
 export function clearStoredBookingProgress(eventSlug) {

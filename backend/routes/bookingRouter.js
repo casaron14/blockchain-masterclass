@@ -7,8 +7,11 @@ import {
   createGeneralRequestRateLimiter,
 } from "../middleware/rateLimiter.js";
 import { validatePositiveIntegerRouteParam } from "../middleware/requestValidators.js";
+import { preventSensitiveResponseCaching } from "../middleware/httpSecurityMiddleware.js";
 
 const router = express.Router();
+
+router.use(preventSensitiveResponseCaching);
 
 router.post(
   "/",
@@ -48,11 +51,8 @@ router.get(
   bookingController.getBookingRecordByReferenceCode
 );
 
-router.get(
-  "/:id",
-  createGeneralRequestRateLimiter(),
-  validatePositiveIntegerRouteParam("id"),
-  bookingController.getBookingRecordById
-);
+// A lookup by sequential booking id was removed: it handed the booking ref
+// (the ownership credential) to anyone who guessed the id. The payment page
+// now receives the safe booking projection from the payment's public token.
 
 export default router;
