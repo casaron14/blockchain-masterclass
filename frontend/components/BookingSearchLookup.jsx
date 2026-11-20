@@ -16,6 +16,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LoadingButton from '@/components/LoadingButton';
 import { buildPaymentPageUrlForPaymentPublicToken } from '@/lib/siteRoutes';
+import { resolveBookingLookupPaymentPreparationStep } from '@/lib/bookingLookupPaymentPreparation';
 
 const MINIMUM_BOOKING_SEARCH_VALUE_LENGTH = 2;
 const MAXIMUM_BOOKING_SEARCH_VALUE_LENGTH = 120;
@@ -89,18 +90,23 @@ export default function BookingSearchLookup() {
   }
 
   async function preparePayment(bookingRecord) {
-    const paymentMethod = selectedPaymentMethod;
-    if (!paymentMethod) {
+    const preparationStep = resolveBookingLookupPaymentPreparationStep(
+      lookupResult,
+      selectedPaymentMethod
+    );
+
+    if (preparationStep.existingPaymentPublicToken) {
+      return preparationStep.existingPaymentPublicToken;
+    }
+    if (preparationStep.requiresPaymentMethodSelection) {
       setPaymentMethodError(t('lookup.errors.paymentMethodRequired'));
       return null;
     }
-    if (lookupResult.payment?.public_token) {
-      return lookupResult.payment.public_token;
-    }
+
     const createdPaymentResult = await createPaymentRecord({
       bookingId: bookingRecord.id,
       bookingReferenceCode: bookingRecord.ref,
-      paymentMethod,
+      paymentMethod: preparationStep.paymentMethodToCreatePayment,
     });
     return createdPaymentResult.payment.public_token;
   }
