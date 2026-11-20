@@ -176,11 +176,28 @@ export async function markObservedDepositsAsFinalized(depositIds, finalizedBlock
   return result.rowCount;
 }
 
+export async function markSettledObservedDepositsAsFinalized(
+  finalizedBlockNumber,
+  client = pool
+) {
+  const result = await client.query(
+    `UPDATE deposits_observed
+        SET is_finalized = true,
+            finality_confirmed_at = COALESCE(finality_confirmed_at, now()),
+            finalized_block_number = GREATEST(COALESCE(finalized_block_number, 0), $1)
+      WHERE is_finalized = false
+        AND block_number <= $1`,
+    [finalizedBlockNumber]
+  );
+  return result.rowCount;
+}
+
 export async function refreshObservedDepositConfirmations(latestBlockNumber, client = pool) {
   const result = await client.query(
     `UPDATE deposits_observed
         SET confirmations = GREATEST(0, $1::bigint - block_number + 1)
-      WHERE confirmations <> GREATEST(0, $1::bigint - block_number + 1)`,
+      WHERE is_finalized = false
+        AND confirmations <> GREATEST(0, $1::bigint - block_number + 1)`,
     [latestBlockNumber]
   );
   return result.rowCount;

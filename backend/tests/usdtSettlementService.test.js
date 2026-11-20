@@ -12,6 +12,7 @@ import {
   fetchObservedDepositRecordsForOrderId,
   fetchCumulativeObservedDepositSummaryForOrder,
   markObservedDepositsAsFinalized,
+  markSettledObservedDepositsAsFinalized,
   fetchUnfinalizedObservedDepositRecords,
   refreshObservedDepositConfirmations,
 } from '../services/usdtSettlementService.js';
@@ -200,6 +201,16 @@ test('observed deposits can be read back, finalized, and re-counted for confirma
   const unfinalizedBefore = await fetchUnfinalizedObservedDepositRecords();
   assert.ok(unfinalizedBefore.length >= 2);
 
+  await refreshObservedDepositConfirmations(600);
+  const confirmationsResult = await pool.query(
+    'SELECT confirmations FROM deposits_observed WHERE order_id = $1 ORDER BY block_number',
+    [createdOrder.id]
+  );
+  assert.deepEqual(
+    confirmationsResult.rows.map((row) => Number(row.confirmations)),
+    [101, 96]
+  );
+
   const finalizedCount = await markObservedDepositsAsFinalized(
     observedDeposits.map((deposit) => deposit.id),
     510
@@ -209,14 +220,48 @@ test('observed deposits can be read back, finalized, and re-counted for confirma
   const cumulativeSummary = await fetchCumulativeObservedDepositSummaryForOrder(createdOrder.id);
   assert.equal(cumulativeSummary.totalAmountUsdt, 3.8);
   assert.equal(cumulativeSummary.latestObservedBlockNumber, 505);
+});
 
-  await refreshObservedDepositConfirmations(600);
-  const confirmationsResult = await pool.query(
-    'SELECT confirmations FROM deposits_observed WHERE order_id = $1 ORDER BY block_number',
+test('a deposit at or below the settled head is finalized without waiting for payment confirmation', async () => {
+  const bookingRecord = await createBookingRecordWithActiveSeatHold({
+    full_name: 'Settlement Finality Attendee',
+    email: `settlement-finality-${Date.now()}@example.com`,
+    phone_number: '+255712345112',
+  });
+  await createPendingPaymentRecordForBooking(bookingRecord.id, 'usdt_bep20');
+  const createdOrder = await createOrderWithDepositAddressForBooking(bookingRecord.id);
+
+  await pool.query(
+    `INSERT INTO deposits_observed
+       (address, tx_hash, from_address, amount, amount_wei, block_number, block_hash, order_id, confirmations)
+     VALUES
+       ($1, '0xsettledfirst', $2, 1.90, $3, 500, '0xblock500', $4, 1),
+       ($1, '0xsettledsecond', $2, 1.90, $3, 510, '0xblock510', $4, 1)`,
+    [
+      createdOrder.deposit_address,
+      PAYER_ADDRESS,
+      ethers.parseUnits('1.9', DEFAULT_USDT_DECIMALS).toString(),
+      createdOrder.id,
+    ]
+  );
+
+  const finalizedCount = await markSettledObservedDepositsAsFinalized(505);
+  assert.equal(finalizedCount, 1);
+
+  const observedDepositResult = await pool.query(
+    `SELECT tx_hash, is_finalized, finalized_block_number
+       FROM deposits_observed
+      WHERE order_id = $1
+      ORDER BY block_number ASC`,
     [createdOrder.id]
   );
+  assert.equal(observedDepositResult.rows[0].is_finalized, true);
+  assert.equal(Number(observedDepositResult.rows[0].finalized_block_number), 505);
+  assert.equal(observedDepositResult.rows[1].is_finalized, false);
+
+  const unfinalizedDeposits = await fetchUnfinalizedObservedDepositRecords();
   assert.deepEqual(
-    confirmationsResult.rows.map((row) => Number(row.confirmations)),
-    [101, 96]
+    unfinalizedDeposits.map((unfinalizedDeposit) => unfinalizedDeposit.tx_hash),
+    ['0xsettledsecond']
   );
 });

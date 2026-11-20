@@ -210,6 +210,12 @@ export default function BookingForm() {
     event.preventDefault();
     setSubmitError(null);
 
+    // A seat is already held for this browser. Creating another booking here
+    // would take a second seat and orphan the first hold.
+    if (activeBookingId) {
+      return;
+    }
+
     const errors = validateForm();
     setValidationErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -488,6 +494,7 @@ export default function BookingForm() {
           spinnerColor="#f2ede3"
           autoLoading={false}
           loading={isSubmitting}
+          disabled={hasActiveBooking}
           loadingLabel={t('loadingStates.creatingBooking')}
         >
           {t('booking.submit')}

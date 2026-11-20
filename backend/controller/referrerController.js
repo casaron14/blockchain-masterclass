@@ -37,28 +37,6 @@ function validateReferrerRegistrationBody(requestBody) {
   return referrerRegistrationSchema.validate(requestBody ?? {});
 }
 
-async function registerReferrerInviteLink(req, res) {
-  const { error: validationError, value: validatedReferrerDetails } =
-    validateReferrerRegistrationBody(req.body);
-
-  if (validationError) {
-    return res
-      .status(400)
-      .json({ message: 'Validation failed', error: validationError.details[0].message });
-  }
-
-  try {
-    const referrerRecord = await registerReferrerInviteIdentity(
-      validatedReferrerDetails.full_name,
-      validatedReferrerDetails.phone_number
-    );
-    return res.status(201).json({ referrer: referrerRecord });
-  } catch (error) {
-    console.error('Error registering referrer invite identity', error);
-    return res.status(500).json({ message: 'Server error while creating your invite link' });
-  }
-}
-
 async function createReferrerInviteRecordEndpoint(req, res) {
   const { error: validationError, value: validatedReferrerDetails } =
     validateReferrerRegistrationBody(req.body);
@@ -163,7 +141,6 @@ async function exportReferralSummaryAsCsvEndpoint(req, res) {
 }
 
 export default {
-  registerReferrerInviteLink,
   createReferrerInviteRecordEndpoint,
   fetchReferralTrackingSummary,
   fetchReferredClientsEndpoint,

@@ -11,12 +11,39 @@ export function extractBearerTokenFromRequest(req) {
   return null;
 }
 
+export function extractJwtCookieFromRequest(req) {
+  const cookieHeader = req.headers['cookie'];
+  if (typeof cookieHeader !== 'string' || cookieHeader.length === 0) {
+    return null;
+  }
+
+  const jwtCookie = cookieHeader
+    .split(';')
+    .map((cookieSegment) => cookieSegment.trim())
+    .find((cookieSegment) => cookieSegment.startsWith('jwt='));
+
+  if (!jwtCookie) {
+    return null;
+  }
+
+  const jwtCookieValue = jwtCookie.slice('jwt='.length);
+  try {
+    return decodeURIComponent(jwtCookieValue);
+  } catch {
+    return jwtCookieValue;
+  }
+}
+
+export function extractAdminAccessTokenFromRequest(req) {
+  return extractBearerTokenFromRequest(req) ?? extractJwtCookieFromRequest(req);
+}
+
 export function createTokenVerificationMiddleware({
   requireAdmin = false,
   requireTotpVerified = false,
 } = {}) {
   return async (req, res, next) => {
-    const token = extractBearerTokenFromRequest(req);
+    const token = extractAdminAccessTokenFromRequest(req);
     if (!token) {
       return res.status(401).json({ message: 'Authorization token missing' });
     }

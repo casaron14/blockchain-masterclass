@@ -61,7 +61,7 @@ async function createBookingRecord(req, res) {
     if (error.code === '23505') {
       return res
         .status(409)
-        .json({ message: 'A booking for this phone number already exists' });
+        .json({ message: 'A booking with this reference already exists. Please retry.' });
     }
     console.error('Error creating booking', error);
     return res.status(500).json({ message: 'Server error while creating booking' });

@@ -6,7 +6,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3001',
   'http://127.0.0.1:3001',
   'https://masterclass.dienacademy.com',
-  'https://blockchain-masterclass.vercel.app/'
+  'https://blockchain-masterclass.vercel.app'
 ];
 
 const SECURITY_HEADERS = {
@@ -53,8 +53,22 @@ function readConfiguredCorsOriginsFromEnvironment() {
     .filter((origin) => origin.length > 0);
 }
 
+function readVercelDeploymentOriginsFromEnvironment() {
+  return ['VERCEL_URL', 'VERCEL_PROJECT_PRODUCTION_URL']
+    .map((variableName) => process.env[variableName]?.trim())
+    .filter(Boolean)
+    .map((deploymentHost) => `https://${deploymentHost}`);
+}
+
 export function buildCorsPolicy() {
-  const allowedOrigins = readConfiguredCorsOriginsFromEnvironment() ?? DEFAULT_ALLOWED_ORIGINS;
+  const configuredOrigins =
+    readConfiguredCorsOriginsFromEnvironment() ?? DEFAULT_ALLOWED_ORIGINS;
+  const allowedOrigins = [
+    ...new Set([
+      ...configuredOrigins,
+      ...readVercelDeploymentOriginsFromEnvironment(),
+    ]),
+  ];
 
   return cors({
     origin(origin, callback) {

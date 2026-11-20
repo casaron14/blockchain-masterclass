@@ -49,13 +49,18 @@ export function sumClaimedTransferValuesWei(claimedTransfers) {
   );
 }
 
-function findReceivingDepositAddressRecord(depositAddressRecords, claimedTransfers) {
-  const claimedAddressesInLowercase = new Set(
-    claimedTransfers.map((claimedTransfer) => String(claimedTransfer.toAddress).toLowerCase())
-  );
+function findDepositAddressRecordForClaimedTransfer(
+  depositAddressRecords,
+  claimedTransfer
+) {
+  const claimedTransferAddressInLowercase = String(
+    claimedTransfer.toAddress
+  ).toLowerCase();
 
-  return depositAddressRecords.find((depositAddressRecord) =>
-    claimedAddressesInLowercase.has(String(depositAddressRecord.address).toLowerCase())
+  return depositAddressRecords.find(
+    (depositAddressRecord) =>
+      String(depositAddressRecord.address).toLowerCase() ===
+      claimedTransferAddressInLowercase
   );
 }
 
@@ -128,25 +133,43 @@ export async function verifyClaimedUsdtTransferForBooking(
     };
   }
 
-  const receivingDepositAddressRecord = findReceivingDepositAddressRecord(
-    depositAddressRecords,
-    claimedTransfers
-  );
   const claimedTotalWei = sumClaimedTransferValuesWei(claimedTransfers);
 
-  await recordObservedTransfer({
-    depositAddressRecord: receivingDepositAddressRecord,
-    parsedTransfer: {
-      txHash: transactionReceipt.hash,
-      blockNumber: Number(transactionReceipt.blockNumber),
-      blockHash: transactionReceipt.blockHash,
-      logIndex: claimedTransfers[0].logIndex,
-      fromAddress: claimedTransfers[0].fromAddress,
-      toAddress: receivingDepositAddressRecord.address,
-      amountWei: claimedTotalWei,
-      amountUsdt: Number(ethers.formatUnits(claimedTotalWei, DEFAULT_USDT_DECIMALS)),
-    },
-  });
+  // Every Transfer log is its own deposit. Collapsing them into one row with
+  // the first log index makes the listener record the remaining logs again,
+  // which double-counts the payment.
+  for (const claimedTransfer of claimedTransfers) {
+    const claimedTransferDepositAddressRecord =
+      findDepositAddressRecordForClaimedTransfer(
+        depositAddressRecords,
+        claimedTransfer
+      );
+    if (!claimedTransferDepositAddressRecord) {
+      continue;
+    }
+
+    const claimedTransferValueWei = BigInt(claimedTransfer.value);
+    await recordObservedTransfer({
+      depositAddressRecord: claimedTransferDepositAddressRecord,
+      parsedTransfer: {
+        txHash: transactionReceipt.hash,
+        blockNumber: Number(transactionReceipt.blockNumber),
+        blockHash: transactionReceipt.blockHash,
+        logIndex: claimedTransfer.logIndex,
+        fromAddress: claimedTransfer.fromAddress,
+        toAddress: claimedTransferDepositAddressRecord.address,
+        amountWei: claimedTransferValueWei,
+        amountUsdt: Number(
+          ethers.formatUnits(claimedTransferValueWei, DEFAULT_USDT_DECIMALS)
+        ),
+      },
+    });
+  }
+
+  const receivingDepositAddressRecord = findDepositAddressRecordForClaimedTransfer(
+    depositAddressRecords,
+    claimedTransfers[0]
+  );
 
   const settlementFrontier = await fetchSettlementFrontier(provider);
   const observedDeposits = await fetchObservedDepositRecordsForOrderId(orderRecord.id);

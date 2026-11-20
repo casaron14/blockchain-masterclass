@@ -71,9 +71,9 @@ export const PAYMENT_METHOD_AZAMPESA = 'azampesa';
 export const PAYMENT_METHOD_USDT_BEP20 = 'usdt_bep20';
 export const PAYMENT_METHOD_LIPANAMBA = 'lipanamba';
 
-// Turns the AzamPesa initiation route and the AzamPay webhook off at the
-// process boundary. The service code stays because old payments must still be
-// readable and reconcilable in the admin transaction view.
+// AzamPesa is retired. Its write routes and provider client were removed;
+// historical rows stay readable through VALID_PAYMENT_METHODS and the admin
+// transaction view.
 export const AZAMPESA_PAYMENTS_ENABLED = false;
 
 const primaryEventConfiguration = fetchPrimaryEventConfiguration();

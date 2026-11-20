@@ -18,6 +18,8 @@ import {
   generateCurrentTotpCode,
 } from '../utils/totp.js';
 
+import { extractAdminAccessTokenFromRequest } from '../middleware/authmiddleware.js';
+
 const ENVIRONMENT_ADMIN_VARIABLE_NAMES = [
   'ADMIN_USERNAME',
   'ADMIN_PASSWORD',
@@ -77,6 +79,43 @@ test('createAdminUserInDatabase stores the admin flag and hides the password has
   assert.equal(createdAdmin.username, 'testadmin');
   assert.equal(createdAdmin.hashed_password, undefined);
   assert.equal(createdAdmin.totp_secret, undefined);
+});
+
+test('readAuthenticatedAdminSession returns the user for a full admin token', async () => {
+  const createdAdmin = await createAdminUserInDatabase({
+    name: 'Session Admin',
+    username: 'sessionadmin',
+    email: 'session-admin@example.com',
+    password: 'session-admin-password',
+  });
+
+  const response = createMockLoginResponse();
+  await authController.readAuthenticatedAdminSession(
+    { user: verifyUserToken(signFullAdminToken(createdAdmin.id, true)) },
+    response
+  );
+
+  assert.equal(response.capturedResponse.statusCode, 200);
+  assert.equal(response.capturedResponse.body.user.id, createdAdmin.id);
+  assert.equal(response.capturedResponse.body.user.username, 'sessionadmin');
+});
+
+test('extractAdminAccessTokenFromRequest falls back to the httpOnly jwt cookie', () => {
+  assert.equal(
+    extractAdminAccessTokenFromRequest({
+      headers: { cookie: 'theme=dark; jwt=cookie-token; other=value' },
+    }),
+    'cookie-token'
+  );
+  assert.equal(
+    extractAdminAccessTokenFromRequest({
+      headers: {
+        cookie: 'jwt=cookie-token',
+        authorization: 'Bearer bearer-token',
+      },
+    }),
+    'bearer-token'
+  );
 });
 
 test('signFullAdminToken verifies with the isAdmin flag for the admin middleware', () => {

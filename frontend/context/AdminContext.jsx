@@ -1,16 +1,18 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { adminLogin, adminLogout } from '@/lib/api';
+import {
+  ADMIN_COOKIE_SESSION_MARKER,
+  adminFetchSession,
+  adminLogin,
+  adminLogout,
+} from '@/lib/api';
 import {
   clampAdminSessionTimerDelayMs,
   isAdminTokenExpired,
   registerAdminSessionExpiryHandler,
   resolveAdminTokenRemainingLifetimeMs,
 } from '@/lib/adminSessionExpiry';
-
-const ADMIN_TOKEN_STORAGE_KEY = 'masterclass-admin-token';
-const ADMIN_USER_STORAGE_KEY = 'masterclass-admin-user';
 
 const AdminContext = createContext({
   adminToken: null,
@@ -22,64 +24,46 @@ const AdminContext = createContext({
   logoutAdminSession: () => {},
 });
 
-function removeStoredAdminSession() {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-  window.localStorage.removeItem(ADMIN_USER_STORAGE_KEY);
-}
-
-function readStoredAdminToken() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
-}
-
-function readStoredAdminUser() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  const rawUser = window.localStorage.getItem(ADMIN_USER_STORAGE_KEY);
-  if (!rawUser) {
-    return null;
-  }
-  try {
-    return JSON.parse(rawUser);
-  } catch {
-    return null;
-  }
-}
-
 export function AdminProvider({ children }) {
   const [adminToken, setAdminToken] = useState(null);
   const [adminUser, setAdminUser] = useState(null);
   const [isSessionRestoring, setIsSessionRestoring] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  // The JWT lives in an httpOnly cookie. The browser only restores the session
+  // state from the server, so a script on the page cannot read the credential.
   useEffect(() => {
-    const storedAdminToken = readStoredAdminToken();
+    let isMounted = true;
 
-    // A token left in localStorage from a previous visit may already be past
-    // its `exp` claim. Restoring it would send one doomed request before the
-    // API rejected it, so the session is discarded while the page is loading.
-    if (storedAdminToken && isAdminTokenExpired(storedAdminToken)) {
-      removeStoredAdminSession();
-      setAdminToken(null);
-      setAdminUser(null);
-    } else {
-      setAdminToken(storedAdminToken);
-      setAdminUser(readStoredAdminUser());
-    }
+    adminFetchSession()
+      .then((sessionResult) => {
+        if (!isMounted) {
+          return;
+        }
+        setAdminToken(ADMIN_COOKIE_SESSION_MARKER);
+        setAdminUser(sessionResult.user ?? null);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setAdminToken(null);
+        setAdminUser(null);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsSessionRestoring(false);
+        }
+      });
 
-    setIsSessionRestoring(false);
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const clearAdminSessionLocally = useCallback(() => {
     setAdminToken(null);
     setAdminUser(null);
-    removeStoredAdminSession();
   }, []);
 
   // Sign the operator out the moment the token reaches its expiry instead of
@@ -139,12 +123,10 @@ export function AdminProvider({ children }) {
   }, []);
 
   const completeAdminSession = useCallback((sessionToken, authenticatedUser) => {
-    setAdminToken(sessionToken);
+    // The token is already stored by the server in an httpOnly cookie. Keeping
+    // only a marker in React state means no script can read the credential.
+    setAdminToken(ADMIN_COOKIE_SESSION_MARKER);
     setAdminUser(authenticatedUser);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, sessionToken);
-      window.localStorage.setItem(ADMIN_USER_STORAGE_KEY, JSON.stringify(authenticatedUser));
-    }
   }, []);
 
   const logoutAdminSession = useCallback(async () => {

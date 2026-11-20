@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   adminConfirmBooking,
   adminFetchBookingDetail,
+  adminRejectOfflinePaymentReceipt,
   adminResendTicketConfirmationEmail,
   adminUpdateBooking,
 } from '@/lib/api';
@@ -13,7 +14,7 @@ import LoadingButton from '@/components/LoadingButton';
 import OfflinePaymentReceiptPreview from '@/components/OfflinePaymentReceiptPreview';
 import AdminSessionLoading from '@/components/AdminSessionLoading';
 import RecordLoadingSkeleton from '@/components/RecordLoadingSkeleton';
-import { defaultEventConfig } from '@/lib/eventConfig';
+import { defaultEventConfig, PAYMENT_METHOD_USDT_BEP20 } from '@/lib/eventConfig';
 import {
   formatAdminAmountWithCurrency,
   formatAdminStatusLabel,
@@ -54,6 +55,7 @@ export default function AdminBookingDetailPage({ params }) {
   const [bookingConfirmationTone, setBookingConfirmationTone] = useState('info');
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const [isConfirmingBooking, setIsConfirmingBooking] = useState(false);
+  const [isRejectingReceipt, setIsRejectingReceipt] = useState(false);
   const [isResendingTicketEmail, setIsResendingTicketEmail] = useState(false);
   const [ticketResendMessage, setTicketResendMessage] = useState(null);
   const [ticketResendTone, setTicketResendTone] = useState('info');
@@ -204,6 +206,33 @@ export default function AdminBookingDetailPage({ params }) {
     }
   }
 
+  async function handleRejectReceipt() {
+    const reviewerNote = window.prompt(
+      'Reason for rejecting this receipt',
+      'Receipt does not match the Lipa Namba statement'
+    );
+    if (reviewerNote === null) {
+      return;
+    }
+
+    setBookingConfirmationMessage(null);
+    setIsRejectingReceipt(true);
+    try {
+      await adminRejectOfflinePaymentReceipt(bookingId, reviewerNote, adminToken);
+      const refreshedDetail = await adminFetchBookingDetail(bookingId, adminToken);
+      applyRefreshedBookingDetail(refreshedDetail);
+      setBookingConfirmationTone('info');
+      setBookingConfirmationMessage(
+        'Receipt rejected. The attendee can upload a new receipt.'
+      );
+    } catch (error) {
+      setBookingConfirmationTone('error');
+      setBookingConfirmationMessage(error.message || 'Receipt could not be rejected.');
+    } finally {
+      setIsRejectingReceipt(false);
+    }
+  }
+
   if (isSessionRestoring) {
     return <AdminSessionLoading statusLabel="Restoring your admin session…" />;
   }
@@ -238,6 +267,10 @@ export default function AdminBookingDetailPage({ params }) {
   const isBookingPaymentConfirmed = !payment || payment.status === 'confirmed';
   const isBookingFullyConfirmed = isBookingConfirmed && isBookingPaymentConfirmed;
   const isBookingCancelled = booking.status === 'cancelled';
+  const paymentDisplayCurrency =
+    payment?.payment_method === PAYMENT_METHOD_USDT_BEP20
+      ? defaultEventConfig.cryptoCurrency
+      : defaultEventConfig.currency;
 
   return (
     <>
@@ -305,7 +338,7 @@ export default function AdminBookingDetailPage({ params }) {
             label="Amount expected"
             value={
               payment?.amount_expected
-                ? formatAdminAmountWithCurrency(payment.amount_expected, defaultEventConfig.currency)
+                ? formatAdminAmountWithCurrency(payment.amount_expected, paymentDisplayCurrency)
                 : '—'
             }
           />
@@ -336,7 +369,7 @@ export default function AdminBookingDetailPage({ params }) {
             <DetailItem label="Order ID" value={order.id} />
             <DetailItem label="Order status" value={formatAdminStatusLabel(order.status)} />
             <DetailItem label="Order amount (USDT)" value={order.amount_usdt} />
-            <DetailItem label="Deposit address" value={depositAddress?.address || '—'} />
+            <DetailItem label="Deposit address" value={depositAddress || '—'} />
           </div>
         )}
 
@@ -482,6 +515,22 @@ export default function AdminBookingDetailPage({ params }) {
                   </LoadingButton>
                 )}
               </OfflinePaymentReceiptPreview>
+
+              {offlineReceipt.status === 'submitted' && !isBookingFullyConfirmed && (
+                <div className="admin-actions">
+                  <LoadingButton
+                    type="button"
+                    className="btn btn-secondary"
+                    autoLoading={false}
+                    loading={isRejectingReceipt}
+                    loadingLabel="Rejecting receipt…"
+                    disabled={isBookingCancelled}
+                    onClick={handleRejectReceipt}
+                  >
+                    Reject receipt
+                  </LoadingButton>
+                </div>
+              )}
 
               {isBookingCancelled && (
                 <p className="error-banner">

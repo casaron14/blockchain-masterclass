@@ -14,11 +14,12 @@
 > variables.
 >
 > **Payments update.** Only Lipa Namba (offline, admin-reviewed) is sold.
-> AzamPesa STK push is advertised as "Instant Payment — coming soon" and
-> `AZAMPESA_PAYMENTS_ENABLED` stays `false`; USDT/BEP20 is muted in the checkout
-> as "coming soon" but its listener, sweep and reconciliation paths are intact so
-> older USDT invoices still settle. The AzamPesa service code and admin read
-> paths remain so historical rows can be reconciled.
+> AzamPesa STK push is advertised as "Instant Payment — coming soon"; its write
+> path (provider client, webhook and initiation routes) has been deleted.
+> `AZAMPESA_PAYMENTS_ENABLED` stays `false`, and historical rows remain readable
+> through the admin transaction view. USDT/BEP20 is muted in the checkout as
+> "coming soon" but its listener still settles older USDT invoices. Sections
+> below that describe the AzamPesa client or webhook are historical.
 
 This document records the current state of the backend for the Blockchain Masterclass
 booking project. It is intended for any developer (or agent) who picks up this codebase

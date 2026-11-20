@@ -298,3 +298,60 @@ test('a transaction hash the node does not know yet is reported without touching
   const paymentRecord = await fetchPaymentRecordByBookingId(bookingRecord.id);
   assert.equal(paymentRecord.status, 'pending');
 });
+
+test('a claimed transaction with two Transfer logs records both logs and does not double count', async () => {
+  const { bookingRecord, createdOrder, depositAddressRecords } =
+    await createPendingUsdtBookingWithDepositAddress();
+  const transactionHash = '0xclaimtwologs0000000000000000000000000000000000000006';
+  const halfPriceWei = ethers.parseUnits('1.9', DEFAULT_USDT_DECIMALS);
+  const transactionReceipt = buildTransactionReceipt({
+    txHash: transactionHash,
+    blockNumber: 600,
+    logs: [
+      buildUsdtTransferLog({
+        toAddress: depositAddressRecords[0].address,
+        amountWei: halfPriceWei,
+        logIndex: 7,
+      }),
+      buildUsdtTransferLog({
+        toAddress: depositAddressRecords[0].address,
+        amountWei: halfPriceWei,
+        logIndex: 8,
+      }),
+    ],
+  });
+
+  const claimResult = await verifyClaimedUsdtTransferForBooking(
+    bookingRecord.id,
+    transactionHash,
+    buildClaimDependencies({
+      transactionReceipt,
+      settlementFrontier: buildSettlementFrontierStub(600, { finalized: true }),
+    })
+  );
+
+  assert.equal(claimResult.confirmed, true);
+  assert.equal(claimResult.claim.matchedTransferCount, 2);
+  assert.equal(claimResult.claim.claimedAmountUsdt, 3.8);
+
+  const observedDepositResult = await pool.query(
+    `SELECT log_index, amount_wei
+       FROM deposits_observed
+      WHERE order_id = $1
+      ORDER BY log_index ASC`,
+    [createdOrder.id]
+  );
+  assert.equal(observedDepositResult.rows.length, 2);
+  assert.deepEqual(
+    observedDepositResult.rows.map((observedDepositRow) => Number(observedDepositRow.log_index)),
+    [7, 8]
+  );
+  assert.equal(
+    observedDepositResult.rows.reduce(
+      (runningTotal, observedDepositRow) =>
+        runningTotal + BigInt(observedDepositRow.amount_wei),
+      0n
+    ),
+    ethers.parseUnits('3.8', DEFAULT_USDT_DECIMALS)
+  );
+});

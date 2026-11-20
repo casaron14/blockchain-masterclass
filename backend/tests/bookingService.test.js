@@ -56,6 +56,37 @@ test('createBookingRecordWithActiveSeatHold persists the referral utm_source', a
   assert.equal(bookingRecord.utm_source, 'ref_john_x7k2');
 });
 
+test('two simultaneous bookings cannot take the last seat', async () => {
+  await pool.query('UPDATE seat_capacity SET confirmed_count = 0, cap = 1 WHERE id = 1');
+
+  const bookingAttempts = await Promise.allSettled([
+    createBookingRecordWithActiveSeatHold({
+      full_name: 'First Racer',
+      email: 'first-racer@example.com',
+      phone_number: '+255712345686',
+    }),
+    createBookingRecordWithActiveSeatHold({
+      full_name: 'Second Racer',
+      email: 'second-racer@example.com',
+      phone_number: '+255712345687',
+    }),
+  ]);
+
+  const successfulBookings = bookingAttempts.filter(
+    (bookingAttempt) => bookingAttempt.status === 'fulfilled'
+  );
+  const rejectedBookings = bookingAttempts.filter(
+    (bookingAttempt) => bookingAttempt.status === 'rejected'
+  );
+
+  assert.equal(successfulBookings.length, 1);
+  assert.equal(rejectedBookings.length, 1);
+  assert.equal(rejectedBookings[0].reason.code, 'SOLD_OUT');
+
+  const availabilitySnapshot = await fetchEventAvailabilitySnapshot();
+  assert.equal(availabilitySnapshot.seatsRemaining, 0);
+});
+
 test('checkSeatAvailabilityBeforeBooking throws SoldOutError when caps are exhausted', async () => {
   await pool.query('UPDATE seat_capacity SET confirmed_count = $1 WHERE id = 1', [SEAT_CAPACITY]);
 

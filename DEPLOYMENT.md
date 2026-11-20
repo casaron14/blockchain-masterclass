@@ -29,9 +29,9 @@ failure isolation in Vercel logs; it does not remove the requirement for a
 valid `DATABASE_URL`.
 
 The dedicated functions are `/api/bookings/*`, `/api/payments/*`,
-`/api/auth/*`, `/api/events/*`, `/api/tickets/*`, `/api/admin/*`,
-`/api/referrals/*`, and `/api/cron/*`. `/api/health` is a lightweight database
-probe; unmatched API paths use the catch-all fallback.
+`/api/auth/*`, `/api/events/*`, `/api/tickets/*`, `/api/admin/*`, and
+`/api/cron/*`. `/api/health` is a lightweight database probe; unmatched API
+paths use the catch-all fallback.
 
 `backend/` and `shared/` sit outside the project root, so on Vercel you **must**
 enable **Include source files outside of the Root Directory in the Build Step**
@@ -324,10 +324,12 @@ Behaviour:
 - Keep `ADMIN_PASSWORD_HASH` in single quotes when setting it from a shell:
   the `$` characters are part of the hash and would otherwise be expanded.
 
-`CORS_ALLOWED_ORIGINS` is **not** needed for the normal setup: the browser calls
-`/api/*` on the same origin, and `frontend/middleware.js` removes the browser
-`Origin` header on that internal hop. Only set it if a separately hosted client
-calls this API directly.
+`CORS_ALLOWED_ORIGINS` is needed when the public site uses a hostname that is
+not already known. Same-origin requests keep their browser `Origin` header, so
+the CORS policy must recognise that hostname. The built-in list covers
+`localhost`, `masterclass.dienacademy.com`,
+`blockchain-masterclass.vercel.app`, and on Vercel the deployment's
+`VERCEL_URL`. Add any other custom domain as a comma-separated origin list.
 
 Do **not** set `ENABLE_JOBS=true` on Vercel: the process is frozen between
 requests and has no timers. The website no longer collects funds; sweeping is a
@@ -599,7 +601,8 @@ the PDF download use the same generator and the same event configuration.
    appear in the Sheet with `Delivery status = sent`.
 5. Call `/api/cron/tick` with the wrong bearer token → `401`; with the right one
    → `200` and a job outcome list.
-6. Confirm `POST /api/payments/<id>/initiate-azampesa` returns `409`.
+6. Confirm the retired AzamPesa write route is gone: `POST
+   /api/payments/<id>/initiate-azampesa` returns `404`.
 7. Sign in at `/admin/login` with `ADMIN_USERNAME` / password. If
    `ADMIN_TOTP_SECRET` is set, the authenticator step must appear; otherwise the
    dashboard opens directly.
@@ -684,9 +687,9 @@ Pass `?include_resolved=true` to review the decision history.
 - Rotating `ADMIN_PASSWORD_HASH` / `ADMIN_PASSWORD` requires a Vercel env
   change and redeploy. Tokens issued before the rotation stay valid until their
   `JWT_EXPIRES_IN` window ends (8h by default).
-- Admin JWTs are still stored in `localStorage` (the API accepts them as bearer
-  tokens). A CSP is set on the frontend, but moving to httpOnly cookies is still
-  the stronger option.
+- Admin JWTs are stored in an httpOnly cookie. The browser keeps only a
+  session marker and restores the session through `/api/auth/session`, so a
+  script on the page cannot read the credential.
 - Rate limiting uses in-process memory, so on serverless it is per instance, not
   global. Turnstile and the strict per-endpoint limits remain the primary
   defences.

@@ -125,9 +125,10 @@ export async function createOrderWithDepositAddressForBooking(
 
     await client.query('COMMIT');
 
-    // Webhook registration is best effort: the polling listener still finds the
-    // deposit if Alchemy never learns the address.
-    await registerDepositAddressWithAlchemyWebhookSafely(address);
+    // Webhook registration is best effort and must not delay the response:
+    // the polling listener still finds the deposit if Alchemy never learns
+    // the address.
+    void registerDepositAddressWithAlchemyWebhookSafely(address);
 
     return {
       ...createdOrder,
@@ -203,7 +204,7 @@ export async function reissueDepositAddressForOrder(orderId, orderExpiryMinutes 
     );
 
     await client.query('COMMIT');
-    await registerDepositAddressWithAlchemyWebhookSafely(address);
+    void registerDepositAddressWithAlchemyWebhookSafely(address);
     return {
       ...normalizeOrderRow(renewedOrderResult.rows[0]),
       deposit_address: address,
@@ -219,11 +220,6 @@ export async function reissueDepositAddressForOrder(orderId, orderExpiryMinutes 
 
 export async function fetchOrderByBookingId(bookingId) {
   const result = await pool.query('SELECT * FROM orders WHERE booking_id = $1', [bookingId]);
-  return normalizeOrderRow(result.rows[0]);
-}
-
-export async function fetchOrderById(orderId) {
-  const result = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
   return normalizeOrderRow(result.rows[0]);
 }
 
@@ -245,14 +241,6 @@ export async function fetchDepositAddressRecordsForOrderId(orderId) {
     [orderId]
   );
   return result.rows.map(normalizeDepositAddressRow);
-}
-
-export async function fetchDepositAddressByAddress(depositAddress) {
-  const result = await pool.query(
-    'SELECT * FROM deposit_addresses WHERE address = $1',
-    [depositAddress]
-  );
-  return result.rows[0] ?? null;
 }
 
 export async function fetchActiveOrderDepositAddressForBooking(bookingId) {
@@ -298,14 +286,6 @@ export async function fetchPaidOrderRecords() {
   return fetchOrderRecordsByStatuses(['paid']);
 }
 
-export async function expireOrderById(orderId) {
-  return updateOrderStatus(orderId, 'expired');
-}
-
-export async function markOrderAsPaid(orderId) {
-  return updateOrderStatus(orderId, 'paid');
-}
-
 export async function revokeExpiredOrderHolds() {
   const result = await pool.query(
     `UPDATE orders
@@ -316,39 +296,12 @@ export async function revokeExpiredOrderHolds() {
   return result.rows.length;
 }
 
-// The listener's watch set: every deposit address that could still receive a
-// transfer, in one query, so a tick costs one address lookup instead of one per
-// open order.
-export async function fetchWatchableDepositAddressRecords() {
-  const result = await pool.query(
-    `SELECT da.id, da.order_id, da.derivation_index, da.address, da.is_active,
-            da.last_scanned_block, da.last_observed_at,
-            o.booking_id, o.status AS order_status, o.expires_at,
-            p.id AS payment_id, p.status AS payment_status,
-            p.amount_expected, p.payment_method
-       FROM deposit_addresses da
-       JOIN orders o ON o.id = da.order_id
-       LEFT JOIN payments p ON p.booking_id = o.booking_id
-      WHERE o.status = ANY($1::order_status[])
-      ORDER BY da.order_id ASC, da.is_active DESC`,
-    [WATCHABLE_ORDER_STATUSES]
-  );
-  return result.rows.map((row) => ({
-    ...row,
-    id: Number(row.id),
-    order_id: Number(row.order_id),
-    booking_id: Number(row.booking_id),
-    derivation_index: Number(row.derivation_index),
-    last_scanned_block: Number(row.last_scanned_block),
-    is_active: row.is_active === true,
-  }));
-}
-
 // The subset of the watch set whose payment can still be confirmed: a live hold
 // (pending order) or a hold that lapsed but whose booking is still confirmable.
 export async function fetchConfirmableDepositAddressRecords() {
   const result = await pool.query(
-    `SELECT da.id, da.order_id, da.derivation_index, da.address, da.is_active,
+    `SELECT DISTINCT ON (o.id)
+            da.id, da.order_id, da.derivation_index, da.address, da.is_active,
             da.last_scanned_block, da.last_observed_at,
             o.booking_id, o.status AS order_status, o.expires_at,
             b.status AS booking_status,
@@ -361,7 +314,7 @@ export async function fetchConfirmableDepositAddressRecords() {
       WHERE o.status = ANY($1::order_status[])
         AND p.payment_method = 'usdt_bep20'
         AND p.status <> 'confirmed'
-      ORDER BY da.order_id ASC, da.is_active DESC`,
+      ORDER BY o.id ASC, da.is_active DESC, da.id ASC`,
     [WATCHABLE_ORDER_STATUSES]
   );
   return result.rows.map((row) => ({

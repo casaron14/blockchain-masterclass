@@ -311,11 +311,25 @@ const logoutUserSession = async (req, res) => {
   res.status(200).json({ message: 'Logout successful' });
 };
 
+const readAuthenticatedAdminSession = async (req, res) => {
+  if (req.user?.credentialSource === ENVIRONMENT_ADMIN_CREDENTIAL_SOURCE) {
+    return res.status(200).json({ user: readEnvironmentAdminPublicIdentity() });
+  }
+
+  const userRecord = await findUserById(req.user?.id);
+  if (!userRecord || !userRecord.is_admin) {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+
+  return res.status(200).json({ user: sanitizeUserRecord(userRecord) });
+};
+
 export default {
   loginExistingUser,
   verifyTotpCode,
   beginTotpSetup,
   confirmTotpSetup,
   logoutUserSession,
+  readAuthenticatedAdminSession,
   createAdminUserInDatabase,
 };

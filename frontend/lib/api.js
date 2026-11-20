@@ -1,5 +1,10 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
+// The browser never holds the admin JWT. The login response still includes it
+// for API clients, but the admin UI keeps this marker and relies on the
+// httpOnly cookie set by the login endpoint.
+export const ADMIN_COOKIE_SESSION_MARKER = 'cookie-session';
+
 import { DEFAULT_EVENT_SLUG } from '@/lib/eventConfig';
 import { resolveOfflinePaymentReceiptFileExtension } from '@/lib/offlinePaymentReceiptPreview';
 import { resolveCsvDownloadFileName } from '@/lib/downloadFileName';
@@ -135,13 +140,6 @@ export function initiateUsdtPayment(paymentPublicToken) {
   );
 }
 
-export function registerReferrerInvite(referrerDetails) {
-  return request('/api/referrals/register', {
-    method: 'POST',
-    body: JSON.stringify(referrerDetails),
-  });
-}
-
 export function buildTicketPdfDownloadUrl(bookingReferenceCode) {
   return `${API_BASE_URL}/api/tickets/${encodeURIComponent(bookingReferenceCode)}/download`;
 }
@@ -185,6 +183,10 @@ export function adminLogin(username, password, turnstileToken) {
   });
 }
 
+export function adminFetchSession() {
+  return request('/api/auth/session');
+}
+
 export function adminVerifyTotp(temporaryToken, totpCode) {
   return request('/api/auth/verify-totp', {
     method: 'POST',
@@ -213,6 +215,9 @@ export function adminLogout() {
 }
 
 function buildAdminAuthorizationHeaders(adminToken) {
+  if (!adminToken || adminToken === ADMIN_COOKIE_SESSION_MARKER) {
+    return {};
+  }
   return { Authorization: `Bearer ${adminToken}` };
 }
 
@@ -297,6 +302,14 @@ export async function fetchAdminOfflinePaymentReceiptFile(bookingId, adminToken)
   const receiptMimeType = response.headers.get('content-type') || receiptBlob.type;
 
   return { receiptBlob, receiptMimeType };
+}
+
+export function adminRejectOfflinePaymentReceipt(bookingId, reviewerNote, adminToken) {
+  return request(`/api/admin/bookings/${bookingId}/offline-receipt/reject`, {
+    method: 'POST',
+    headers: buildAdminAuthorizationHeaders(adminToken),
+    body: JSON.stringify({ reviewer_note: reviewerNote || '' }),
+  });
 }
 
 export async function adminDownloadOfflinePaymentReceipt(bookingId, adminToken) {

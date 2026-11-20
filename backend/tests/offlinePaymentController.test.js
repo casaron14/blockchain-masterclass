@@ -126,3 +126,49 @@ test('uploadLipaNambaPaymentReceiptEndpoint stores a valid receipt for admin rev
     }
   }
 });
+
+test('rejectOfflinePaymentReceiptForAdminEndpoint rejects the receipt and fails the payment', async () => {
+  const { bookingRecord, paymentRecord } = await createLipaNambaPaymentFixture();
+  const uploadResponse = createMockResponse();
+
+  await offlinePaymentController.uploadLipaNambaPaymentReceiptEndpoint(
+    {
+      params: { paymentPublicToken: paymentRecord.public_token },
+      body: { booking_ref: bookingRecord.ref },
+      file: {
+        buffer: VALID_PNG_RECEIPT_BUFFER,
+        originalname: 'receipt.png',
+        mimetype: 'image/png',
+      },
+    },
+    uploadResponse
+  );
+
+  const uploadedReceipt = uploadResponse.capturedResponse.body.offlineReceipt;
+  const rejectResponse = createMockResponse();
+
+  try {
+    await offlinePaymentController.rejectOfflinePaymentReceiptForAdminEndpoint(
+      {
+        params: { id: String(bookingRecord.id) },
+        body: { reviewer_note: 'Receipt does not match the statement' },
+      },
+      rejectResponse
+    );
+
+    assert.equal(rejectResponse.capturedResponse.statusCode, 200);
+    assert.equal(rejectResponse.capturedResponse.body.offlineReceipt.status, 'rejected');
+
+    const paymentResult = await pool.query(
+      'SELECT status FROM payments WHERE id = $1',
+      [paymentRecord.id]
+    );
+    assert.equal(paymentResult.rows[0].status, 'failed');
+  } finally {
+    if (uploadedReceipt) {
+      await fs
+        .unlink(resolveOfflinePaymentReceiptAbsoluteFilePath(uploadedReceipt))
+        .catch(() => {});
+    }
+  }
+});

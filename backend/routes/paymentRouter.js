@@ -18,24 +18,12 @@ router.post(
   paymentController.createPaymentRecord
 );
 
-router.get(
-  "/by-external/:externalId",
-  createGeneralRequestRateLimiter(),
-  paymentController.fetchPaymentStatusByExternalId
-);
-
 // The URL segment is payments.public_token, never the sequential payments.id.
 // A numeric segment therefore resolves to nothing and returns 404.
 router.get(
   "/:paymentPublicToken",
   createGeneralRequestRateLimiter(),
   paymentController.getPaymentRecordByPublicToken
-);
-
-router.post(
-  "/:paymentPublicToken/initiate-azampesa",
-  createStrictPaymentInitiationRateLimiter(),
-  paymentController.initiateAzamPesaPaymentEndpoint
 );
 
 router.post(

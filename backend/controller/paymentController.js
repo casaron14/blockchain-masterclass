@@ -5,8 +5,6 @@ import {
   createPendingPaymentRecordForBooking,
   fetchPaymentRecordByPublicToken,
   PaymentNotFoundError,
-  initiateAzamPesaPayment,
-  findAzamPayPaymentRecordByExternalId,
 } from '../services/paymentService.js';
 
 import {
@@ -33,10 +31,8 @@ import {
 } from '../services/orderService.js';
 
 import {
-  PAYMENT_METHOD_AZAMPESA,
   PAYMENT_METHOD_LIPANAMBA,
   PAYMENT_METHOD_USDT_BEP20,
-  AZAMPESA_PAYMENTS_ENABLED,
 } from '../services/eventConfigService.js';
 
 import {
@@ -45,11 +41,8 @@ import {
   paymentMethodNotAvailableResponse,
   missingRequiredFieldResponse,
   paymentNotFoundResponse,
-  azamPayInvalidMethodResponse,
   usdtInvalidMethodResponse,
-  adminPaymentNotFoundResponse,
   usdtPaymentNotFoundResponse,
-  azamPayHoldExpiredResponse,
 } from '../utils/responseHelpers.js';
 
 // What the client is allowed to see about the chain: enough to display "we saw
@@ -133,7 +126,7 @@ async function getPaymentRecordByPublicToken(req, res) {
     }
 
     // Settlement evidence only exists for on-chain payments. Skipping it for
-    // AzamPesa keeps the polling endpoint at one query per request.
+    // other rails keeps the polling endpoint at one query per request.
     const settlementSummary =
       paymentRecord.payment_method === PAYMENT_METHOD_USDT_BEP20
         ? await buildPaymentSettlementSummaryForClient(paymentRecord)
@@ -209,82 +202,6 @@ async function createPaymentRecord(req, res) {
     }
     console.error('Error creating payment', error);
     return res.status(500).json({ message: 'Error creating payment' });
-  }
-}
-
-async function initiateAzamPesaPaymentEndpoint(req, res) {
-  // AzamPesa is retired. The route stays mounted so an old client gets a clear
-  // refusal instead of a generic 404, but it never reaches the provider.
-  if (!AZAMPESA_PAYMENTS_ENABLED) {
-    return res
-      .status(409)
-      .json(paymentMethodNotAvailableResponse(PAYMENT_METHOD_AZAMPESA));
-  }
-
-  const paymentPublicToken = String(req.params.paymentPublicToken || '');
-  const { phone_number: stkPhoneNumber } = req.body;
-
-  if (stkPhoneNumber && !/^\+?[0-9]{9,15}$/.test(String(stkPhoneNumber))) {
-    return res.status(400).json(missingRequiredFieldResponse('phone number'));
-  }
-
-  try {
-    const paymentRecord = await fetchPaymentRecordByPublicToken(paymentPublicToken);
-    if (!paymentRecord) {
-      throw new PaymentNotFoundError(paymentPublicToken);
-    }
-
-    const bookingRecord = await fetchBookingRecordById(paymentRecord.booking_id);
-    if (!bookingRecord) {
-      throw new PaymentNotFoundError(paymentPublicToken);
-    }
-
-    const initiationResult = await initiateAzamPesaPayment(
-      paymentRecord.booking_id,
-      bookingRecord,
-      stkPhoneNumber
-    );
-
-    return res.status(200).json({
-      message: 'Payment prompt sent, waiting for customer approval',
-      externalId: initiationResult.externalId,
-      status: initiationResult.status,
-    });
-  } catch (error) {
-    if (error instanceof PaymentNotFoundError) {
-      return res.status(404).json(paymentNotFoundResponse());
-    }
-    if (error.message === 'AZAMPESA_HOLD_EXPIRED') {
-      return res.status(409).json(azamPayHoldExpiredResponse());
-    }
-    if (error.message === 'AZAMPESA_INVALID_METHOD') {
-      return res.status(400).json(azamPayInvalidMethodResponse());
-    }
-    if (error.message === 'AZAMPESA_PAYMENT_NOT_FOUND') {
-      return res.status(404).json(adminPaymentNotFoundResponse());
-    }
-    console.error('Error initiating AzamPesa payment', error);
-    return res.status(502).json({ message: 'Failed to initiate AzamPesa payment' });
-  }
-}
-
-async function fetchPaymentStatusByExternalId(req, res) {
-  const externalId = req.params.externalId;
-
-  try {
-    const paymentRecord = await findAzamPayPaymentRecordByExternalId(externalId);
-    if (!paymentRecord) {
-      return res.status(404).json(paymentNotFoundResponse());
-    }
-
-    return res.status(200).json({
-      externalId,
-      currentStatus: paymentRecord.status,
-      bookingId: paymentRecord.booking_id,
-    });
-  } catch (error) {
-    console.error('Error fetching payment status by external id', error);
-    return res.status(500).json({ message: 'Server error' });
   }
 }
 
@@ -458,8 +375,6 @@ async function verifyUsdtPaymentEndpoint(req, res) {
 export default {
   getPaymentRecordByPublicToken,
   createPaymentRecord,
-  initiateAzamPesaPaymentEndpoint,
-  fetchPaymentStatusByExternalId,
   initiateUsdtPaymentEndpoint,
   verifyUsdtPaymentEndpoint,
 };

@@ -11,8 +11,12 @@ import {
   OfflinePaymentReceiptPaymentAlreadyConfirmedError,
   OfflinePaymentReceiptPaymentMismatchError,
   fetchOfflinePaymentReceiptForAdminDownload,
+  fetchOfflinePaymentReceiptByBookingId,
+  rejectOfflinePaymentReceiptForFailedPayment,
   storeOfflinePaymentReceiptForPayment,
 } from '../services/offlinePaymentReceiptService.js';
+
+import { fetchPaymentRecordByBookingId, updatePaymentRecordStatus } from '../services/paymentService.js';
 
 import {
   bookingNotFoundResponse,
@@ -121,6 +125,56 @@ async function uploadLipaNambaPaymentReceiptEndpoint(req, res) {
   }
 }
 
+async function rejectOfflinePaymentReceiptForAdminEndpoint(req, res) {
+  const bookingId = parseInt(req.params.id, 10);
+  const reviewerNote =
+    typeof req.body?.reviewer_note === 'string'
+      ? req.body.reviewer_note.trim().slice(0, 1000)
+      : '';
+
+  try {
+    const bookingRecord = await fetchBookingRecordById(bookingId);
+    if (!bookingRecord) {
+      return res.status(404).json(bookingNotFoundResponse());
+    }
+
+    if (bookingRecord.status === 'confirmed') {
+      return res.status(409).json({
+        message: 'This booking is already confirmed; cancel it before rejecting the receipt',
+      });
+    }
+
+    const receiptRecord = await fetchOfflinePaymentReceiptByBookingId(bookingId);
+    if (!receiptRecord) {
+      return res.status(404).json({
+        message: 'No receipt has been uploaded for this booking',
+      });
+    }
+
+    const paymentRecord = await fetchPaymentRecordByBookingId(bookingId);
+    if (!paymentRecord) {
+      return res.status(404).json(paymentNotFoundResponse());
+    }
+
+    if (paymentRecord.status === 'confirmed') {
+      return res.status(409).json({
+        message: 'This payment is already confirmed and its receipt cannot be rejected',
+      });
+    }
+
+    const rejectedReceiptRecord = await rejectOfflinePaymentReceiptForFailedPayment(
+      paymentRecord.id,
+      reviewerNote || null
+    );
+    await updatePaymentRecordStatus(paymentRecord.id, 'failed');
+
+    return res.status(200).json({ offlineReceipt: rejectedReceiptRecord });
+  } catch (error) {
+    console.error('Error rejecting Lipa Namba payment receipt', error);
+    return res.status(500).json({ message: 'Error rejecting payment receipt' });
+  }
+}
+
 async function downloadOfflinePaymentReceiptForAdminEndpoint(req, res) {
   const bookingId = parseInt(req.params.id, 10);
 
@@ -156,5 +210,6 @@ async function downloadOfflinePaymentReceiptForAdminEndpoint(req, res) {
 
 export default {
   uploadLipaNambaPaymentReceiptEndpoint,
+  rejectOfflinePaymentReceiptForAdminEndpoint,
   downloadOfflinePaymentReceiptForAdminEndpoint,
 };

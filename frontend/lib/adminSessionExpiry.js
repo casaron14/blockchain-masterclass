@@ -1,7 +1,6 @@
-// The admin session is a signed JWT kept in localStorage and sent as a bearer
-// token. Nothing in the browser knows when it stops being valid unless we read
-// the `exp` claim, so every expiry decision lives in this module: it lets the
-// admin context sign the session out on time and lets the API layer treat a
+// The admin session is a signed JWT kept in an httpOnly cookie. The browser
+// holds only a marker, so every expiry decision lives in this module: it lets
+// the admin context sign the session out on time and lets the API layer treat a
 // rejected token as the same event.
 
 // Sign the admin out slightly early so a request that starts just before the

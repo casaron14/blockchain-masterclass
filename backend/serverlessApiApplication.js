@@ -10,6 +10,7 @@ import {
   buildSecurityHeaders,
 } from './middleware/httpSecurityMiddleware.js';
 import { attachRequestLogging } from './middleware/requestLoggingMiddleware.js';
+import { assertProductionSigningConfigurationIsSafe } from './config/productionSigningGuard.js';
 
 // Webhook providers sign the exact bytes they sent. Keeping the parsed body
 // only would make the signature unverifiable, because re-serialising the same
@@ -19,6 +20,11 @@ function preserveRawRequestBodyForWebhookSignatures(req, res, bodyBuffer) {
 }
 
 export function configureCommonApiMiddleware(expressApplication) {
+  // Vercel serves the API through these scoped applications, not server.js.
+  // The guard must run on every entry point, or production could keep the
+  // deposit seed online without anyone noticing.
+  assertProductionSigningConfigurationIsSafe();
+
   expressApplication.disable('x-powered-by');
 
   const trustedProxyHopCount = parseInt(process.env.TRUST_PROXY_HOPS || '0', 10);

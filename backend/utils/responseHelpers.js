@@ -72,18 +72,8 @@ export function ticketNotFoundResponse() {
   };
 }
 
-export function azamPayInvalidMethodResponse() {
-  return paymentMethodNotFoundResponse('AzamPesa');
-}
-
 export function usdtInvalidMethodResponse() {
   return paymentMethodNotFoundResponse('USDT (BEP20)');
-}
-
-export function adminPaymentNotFoundResponse() {
-  return {
-    message: 'A payment record does not exist for this booking',
-  };
 }
 
 export function adminBookingStatusInvalidResponse(status) {
@@ -119,12 +109,6 @@ export function totpSetupNotStartedResponse() {
 export function orderAlreadyExistsResponse() {
   return {
     message: 'An order already exists for this booking',
-  };
-}
-
-export function azamPayHoldExpiredResponse() {
-  return {
-    message: 'Hold has expired, please rebook',
   };
 }
 

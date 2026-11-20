@@ -6,12 +6,15 @@ import {
   createOrderWithDepositAddressForBooking,
   fetchOrderByBookingId,
   fetchDepositAddressByOrderId,
+  fetchConfirmableDepositAddressRecords,
+  reissueDepositAddressForOrder,
   updateOrderStatus,
   revokeExpiredOrderHolds,
   OrderAlreadyExistsError,
 } from '../services/orderService.js';
 
 import { createBookingRecordWithActiveSeatHold } from '../services/bookingService.js';
+import { createPendingPaymentRecordForBooking } from '../services/paymentService.js';
 
 async function resetDatabaseState() {
   await pool.query('TRUNCATE bookings CASCADE');
@@ -71,6 +74,25 @@ test('customer_id derivation index is monotonic and never reused across orders',
 
   assert.ok(secondOrder.customer_id > firstOrder.customer_id);
   assert.notEqual(firstOrder.deposit_address, secondOrder.deposit_address);
+});
+
+test('a reissued order yields one confirmable address, the active one', async () => {
+  const bookingRecord = await createBookingForOrderTest();
+  await createPendingPaymentRecordForBooking(bookingRecord.id, 'usdt_bep20');
+  const createdOrder = await createOrderWithDepositAddressForBooking(bookingRecord.id);
+  const originalAddress = createdOrder.deposit_address;
+
+  await pool.query(
+    `UPDATE orders SET status = 'expired', expires_at = now() - interval '1 minute' WHERE id = $1`,
+    [createdOrder.id]
+  );
+  const renewedOrder = await reissueDepositAddressForOrder(createdOrder.id);
+
+  const confirmableRecords = await fetchConfirmableDepositAddressRecords();
+  assert.equal(confirmableRecords.length, 1);
+  assert.equal(confirmableRecords[0].address, renewedOrder.deposit_address);
+  assert.notEqual(confirmableRecords[0].address, originalAddress);
+  assert.equal(confirmableRecords[0].is_active, true);
 });
 
 test('updateOrderStatus transitions an order to paid then swept', async () => {

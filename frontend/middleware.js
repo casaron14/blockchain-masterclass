@@ -19,24 +19,16 @@ function redirectLegacyEventPathToRoot(request) {
 }
 
 // API requests are served in-process by the route-group handlers under
-// pages/api/, with the catch-all as a fallback. The browser still sends an
-// Origin header on same-origin POSTs, and the API's CORS allowlist only lists
-// known origins (every Vercel preview URL would otherwise have to be added).
-// The browser never leaves this origin, so the header carries no meaning for
-// the internal hop and is removed here. A direct cross-origin call from
-// another site does not pass through this middleware and is still checked.
+// pages/api/, with the catch-all as a fallback. Same-origin and preview
+// requests are allowed by the CORS policy itself, so the Origin header is
+// kept instead of being stripped here.
 export function middleware(request) {
   const legacyEventRedirectResponse = redirectLegacyEventPathToRoot(request);
   if (legacyEventRedirectResponse) {
     return legacyEventRedirectResponse;
   }
 
-  const proxiedRequestHeaders = new Headers(request.headers);
-  proxiedRequestHeaders.delete('origin');
-
-  return NextResponse.next({
-    request: { headers: proxiedRequestHeaders },
-  });
+  return NextResponse.next();
 }
 
 export const config = {

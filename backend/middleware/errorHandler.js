@@ -4,7 +4,6 @@ import {
   soldOutResponse,
   bookingNotFoundResponse,
   paymentNotFoundResponse,
-  azamPayInvalidMethodResponse,
   usdtInvalidMethodResponse,
   adminBookingStatusInvalidResponse,
   temporaryTokenInvalidResponse,
@@ -12,7 +11,6 @@ import {
   totpAlreadyConfiguredResponse,
   totpSetupNotStartedResponse,
   orderAlreadyExistsResponse,
-  azamPayHoldExpiredResponse,
   usdtPaymentNotFoundResponse,
   usdtAlreadyConfirmedResponse,
   wrongReceiverResponse,
@@ -72,18 +70,6 @@ const handleApplicationError = (err, req, res, next) => {
 
   if (err.code === 'SOLD_OUT') {
     return res.status(400).json(soldOutResponse(err.seatsRemaining));
-  }
-
-  if (err.message === 'AZAMPESA_HOLD_EXPIRED') {
-    return res.status(409).json(azamPayHoldExpiredResponse());
-  }
-
-  if (err.message === 'AZAMPESA_INVALID_METHOD') {
-    return res.status(400).json(azamPayInvalidMethodResponse());
-  }
-
-  if (err.message === 'AZAMPESA_PAYMENT_NOT_FOUND') {
-    return res.status(404).json(paymentNotFoundResponse());
   }
 
   if (err.message === 'USDT_INVALID_METHOD') {

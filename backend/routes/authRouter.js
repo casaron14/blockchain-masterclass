@@ -1,6 +1,7 @@
 import express from "express";
 
 import authController from "../controller/authController.js";
+import requireAdminAccess from "../middleware/adminAuthMiddleware.js";
 import { verifyTurnstileChallengeToken } from "../middleware/turnstileVerifier.js";
 import { createStrictAuthRateLimiter } from "../middleware/rateLimiter.js";
 
@@ -32,5 +33,7 @@ router.post(
 );
 
 router.post("/logout", authController.logoutUserSession);
+
+router.get("/session", requireAdminAccess, authController.readAuthenticatedAdminSession);
 
 export default router;

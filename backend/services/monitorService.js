@@ -22,6 +22,7 @@ import {
   deleteObservedDepositForReorgedTransfer,
   fetchUnfinalizedObservedDepositRecords,
   refreshObservedDepositConfirmations,
+  markSettledObservedDepositsAsFinalized,
 } from './usdtSettlementService.js';
 
 import {
@@ -306,7 +307,11 @@ async function confirmSettledOrderPayments({
   const confirmableAddressRecords = await fetchConfirmableDepositAddressRecords();
   const orderCandidateByOrderId = new Map();
   for (const confirmableAddressRecord of confirmableAddressRecords) {
-    orderCandidateByOrderId.set(confirmableAddressRecord.order_id, confirmableAddressRecord);
+    // One row per order is enough. Keeping the first row also keeps the active
+    // address first if the query ever returns more than one row per order.
+    if (!orderCandidateByOrderId.has(confirmableAddressRecord.order_id)) {
+      orderCandidateByOrderId.set(confirmableAddressRecord.order_id, confirmableAddressRecord);
+    }
   }
 
   const confirmationResults = [];
@@ -362,7 +367,11 @@ async function processOrderCandidateForSettlement({
       orderId: orderCandidate.order_id,
       bookingId: orderCandidate.booking_id,
       paymentId: orderCandidate.payment_id,
-      depositAddress: orderCandidate.address,
+      // The receipt and review flags must name the address that actually
+      // received the completing transfer, not whichever address the query
+      // happened to return first.
+      depositAddress:
+        settlementDecision.completingDeposit?.address ?? orderCandidate.address,
       observedDeposits,
       settlementFrontier,
       chainId,
@@ -382,7 +391,7 @@ async function processOrderCandidateForSettlement({
         orderId: orderCandidate.order_id,
         bookingId: orderCandidate.booking_id,
         paymentId: orderCandidate.payment_id,
-        depositAddress: orderCandidate.address,
+        depositAddress: observedDeposits[0]?.address ?? orderCandidate.address,
         amount: settlementDecision.totalAmountUsdt,
         reason: 'underpayment_after_window',
         details: { shortfallWei: underpaymentDecision.shortfallWei.toString() },
@@ -496,6 +505,12 @@ export async function runUsdtTransferListenerTick({ provider, providerPool, chai
 
   const droppedReorgedDeposits = await dropObservedDepositsFromReorgedBlocks(activeProvider);
 
+  // Finality is a property of the block, not of the payment. Marking settled
+  // deposits here stops every later tick from re-checking blocks that cannot
+  // reorg and keeps the confirmation update limited to live deposits.
+  await markSettledObservedDepositsAsFinalized(
+    settlementFrontier.finalizedBlockNumber
+  );
   await refreshObservedDepositConfirmations(settlementFrontier.latestBlockNumber);
   await updateTransferScanStateAfterSuccessfulScan({
     scannedToBlock: settlementFrontier.latestBlockNumber,

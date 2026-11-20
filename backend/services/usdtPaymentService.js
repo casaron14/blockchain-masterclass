@@ -17,8 +17,6 @@ import { TICKET_PRICE_USDT, PAYMENT_METHOD_USDT_BEP20 } from './eventConfigServi
 
 import {
   evaluateOrderPaymentSettlement,
-  fetchObservedDepositRecordsForOrderId,
-  getExpectedPaymentAmountWei,
   markObservedDepositsAsFinalized,
 } from './usdtSettlementService.js';
 
@@ -96,16 +94,6 @@ export async function recordBlockchainTransaction(client, paymentId, transaction
   return result.rows[0] ?? null;
 }
 
-export async function recordBlockchainTransactionError(paymentId, txHash, errorMessage, client = pool) {
-  const result = await client.query(
-    `INSERT INTO blockchain_transaction_errors (payment_id, tx_hash, error_message)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
-    [paymentId, txHash, errorMessage]
-  );
-  return result.rows[0] ?? null;
-}
-
 // Money that arrived but cannot be completed automatically is parked here with
 // the facts attached, so a human (or a later automated refund) can act on it
 // without re-deriving what happened from the chain.
@@ -142,10 +130,6 @@ async function fetchPaymentRecordForUpdate(client, paymentId) {
 async function fetchBookingRecordForUpdate(client, bookingId) {
   const result = await client.query('SELECT * FROM bookings WHERE id = $1 FOR UPDATE', [bookingId]);
   return result.rows[0] ?? null;
-}
-
-export async function fetchUsdtPaymentRecordById(paymentId) {
-  return fetchPaymentRecordById(paymentId);
 }
 
 // A payment that lands after the hold expired is still honoured when a seat is
@@ -507,46 +491,4 @@ async function deliverTicketAndReceiptAfterConfirmation({
   deliveryOutcome.ticketDeliveryResult = ticketDeliveryResult;
 
   return deliveryOutcome;
-}
-
-export async function verifyUsdtCumulativeDepositBalanceOnChain(depositAddress, provider = createUsdtProvider()) {
-  const usdtContractAddress = getUsdtContractAddress();
-  if (!usdtContractAddress) {
-    return { valid: false, reason: 'USDT_CONTRACT_ADDRESS_MISSING' };
-  }
-  const usdtContract = new ethers.Contract(
-    usdtContractAddress,
-    ['function balanceOf(address account) view returns (uint256)'],
-    provider
-  );
-
-  const depositBalanceWei = await usdtContract.balanceOf(depositAddress);
-  const expectedAmountWei = ethers.parseUnits(String(getUsdtExpectedAmount()), DEFAULT_USDT_DECIMALS);
-
-  if (depositBalanceWei < expectedAmountWei) {
-    return { valid: false, reason: 'AMOUNT_UNDERPAID' };
-  }
-  return { valid: true, reason: 'OK', balanceWei: depositBalanceWei };
-}
-
-// Verification uses the recorded transfer evidence first; the live token
-// balance is only a supporting signal. Without sweeps the funds stay at the
-// deposit address, so observed deposits are the durable record to trust.
-export async function verifyUsdtPaymentFromRecordedEvidence({
-  orderId,
-  depositAddress,
-  paymentRecord,
-}) {
-  const observedDeposits = await fetchObservedDepositRecordsForOrderId(orderId);
-  const observedTotalWei = observedDeposits.reduce(
-    (runningTotal, observedDeposit) => runningTotal + BigInt(observedDeposit.amount_wei),
-    0n
-  );
-  const expectedAmountWei = getExpectedPaymentAmountWei(paymentRecord);
-
-  if (observedTotalWei >= expectedAmountWei) {
-    return { valid: true, reason: 'OBSERVED_DEPOSITS', observedTotalWei, expectedAmountWei };
-  }
-
-  return { valid: false, reason: 'NO_SETTLED_EVIDENCE', observedTotalWei, expectedAmountWei };
 }

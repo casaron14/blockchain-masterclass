@@ -94,4 +94,10 @@ router.get(
   offlinePaymentController.downloadOfflinePaymentReceiptForAdminEndpoint
 );
 
+router.post(
+  '/bookings/:id/offline-receipt/reject',
+  validatePositiveIntegerRouteParam('id'),
+  offlinePaymentController.rejectOfflinePaymentReceiptForAdminEndpoint
+);
+
 export default router;

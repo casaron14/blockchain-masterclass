@@ -3,11 +3,9 @@ import './config/environment.js';
 import express from 'express';
 
 import apiRouter from './routes/index.js';
-import azamPayWebhookRouter from './routes/azamPayWebhookRouter.js';
 import handleApplicationError, {
   handleNotFoundRoute,
 } from './middleware/errorHandler.js';
-import { AZAMPESA_PAYMENTS_ENABLED } from './services/eventConfigService.js';
 import { configureCommonApiMiddleware } from './serverlessApiApplication.js';
 import { respondToDatabaseHealthCheck } from './controller/healthController.js';
 
@@ -21,12 +19,6 @@ export function createApplication() {
   configureCommonApiMiddleware(app);
 
   app.use('/api', apiRouter);
-
-  // AzamPesa is retired. The webhook trusts the payload it receives, so it is
-  // not reachable at all while the method is disabled (see shared/eventConfig.js).
-  if (AZAMPESA_PAYMENTS_ENABLED) {
-    app.use('/webhook/azampay', azamPayWebhookRouter);
-  }
 
   app.get('/', respondToDatabaseHealthCheck);
   app.get('/api/health', respondToDatabaseHealthCheck);
