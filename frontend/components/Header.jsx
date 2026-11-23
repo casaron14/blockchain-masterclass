@@ -4,17 +4,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import {
-  buildBookingPageUrl,
-  buildEventHomeSectionUrlForSectionId,
-  buildEventHomeUrl,
-} from '@/lib/siteRoutes';
-
-const EVENT_SECTION_LINKS = [
-  { sectionId: 'programme', labelKey: 'site.nav.programme' },
-  { sectionId: 'admission', labelKey: 'site.nav.admission' },
-  { sectionId: 'questions', labelKey: 'site.nav.questions' },
-];
+import { buildBookingPageUrl, buildEventHomeUrl } from '@/lib/siteRoutes';
 
 export default function Header() {
   const { t } = useLanguage();
@@ -28,14 +18,6 @@ export default function Header() {
           <span className="site-wordmark__institution">DienAcademy</span>
           <span className="site-wordmark__event">{name}</span>
         </Link>
-
-        <nav className="site-nav" aria-label="Main">
-          {EVENT_SECTION_LINKS.map(({ sectionId, labelKey }) => (
-            <Link key={sectionId} href={buildEventHomeSectionUrlForSectionId(sectionId)} className="site-nav__link">
-              {t(labelKey)}
-            </Link>
-          ))}
-        </nav>
 
         <div className="site-header__actions">
           <span className="site-header__dateline">{dateLabel}</span>

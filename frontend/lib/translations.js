@@ -12,12 +12,6 @@ export const translations = {
       bookNow: 'Book now',
     },
     site: {
-      nav: {
-        home: 'Home',
-        programme: 'Programme',
-        admission: 'Admission',
-        questions: 'Questions',
-      },
       hero: {
         titleOne: 'Build the future with',
         titleTwo: 'Blockchain',
@@ -388,12 +382,6 @@ export const translations = {
       bookNow: 'Hifadhi nafasi',
     },
     site: {
-      nav: {
-        home: 'Nyumbani',
-        programme: 'Ratiba',
-        admission: 'Kiingilio',
-        questions: 'Maswali',
-      },
       hero: {
         titleOne: 'Jenga mustakabali kwa',
         titleTwo: 'Blockchain',
