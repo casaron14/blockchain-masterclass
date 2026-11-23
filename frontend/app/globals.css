@@ -468,10 +468,6 @@ code {
 }
 
 .hero-plate__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.88fr);
-  align-items: center;
-  gap: clamp(2.5rem, 5vw, 5.5rem);
   padding-block: clamp(3.5rem, 7vw, 7.25rem);
 }
 
@@ -565,14 +561,6 @@ code {
   font-size: clamp(0.98rem, 1.5vw, 1.18rem);
   line-height: 1.2;
   color: var(--paper);
-}
-
-.hero-plate__specimen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-left: clamp(1.5rem, 3vw, 3rem);
-  border-left: 1px solid var(--line-on-ink);
 }
 
 /* --------------------------------------------------------------------------
@@ -754,10 +742,41 @@ code {
    8. Live admission ledger
    -------------------------------------------------------------------------- */
 
-.ledger-band {
-  padding-block: clamp(2rem, 3.5vw, 3rem);
+.session-gallery {
+  padding-block: clamp(1.25rem, 2.5vw, 2rem) clamp(1.75rem, 3.5vw, 3rem);
   border-bottom: 1px solid var(--line);
   background: var(--paper);
+  overflow: hidden;
+}
+
+.session-gallery__viewport {
+  width: 100%;
+}
+
+.session-gallery__track {
+  display: flex;
+  width: max-content;
+  animation: session-gallery-travel 48s linear infinite;
+}
+
+.session-gallery__group {
+  display: flex;
+  flex: none;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.session-gallery__frame {
+  position: relative;
+  flex: none;
+  width: clamp(14rem, 24vw, 22rem);
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--paper-sunk);
+}
+
+.session-gallery__frame img {
+  object-fit: cover;
 }
 
 .seat-ledger {
@@ -926,14 +945,6 @@ code {
 
 .seat-ledger--ink .seat-ledger__cell--loading {
   background: var(--ink-soft);
-}
-
-.seat-ledger--full-bleed .seat-ledger__head,
-.seat-ledger--full-bleed .seat-ledger__note {
-  width: 100%;
-  max-width: var(--shell-max);
-  margin-inline: auto;
-  padding-inline: var(--shell-gutter);
 }
 
 /* --------------------------------------------------------------------------
@@ -3610,6 +3621,15 @@ code {
   }
 }
 
+@keyframes session-gallery-travel {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -3645,6 +3665,23 @@ code {
 
   .skeleton-line {
     opacity: 0.75;
+  }
+
+  .session-gallery__track {
+    width: 100%;
+    transform: none;
+    animation: none;
+  }
+
+  .session-gallery__group {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+    padding-right: 0;
+  }
+
+  .session-gallery__group--duplicate {
+    display: none;
   }
 }
 
@@ -3921,17 +3958,6 @@ code {
     font-size: 0.6rem;
   }
 
-  .hero-plate__grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 3rem;
-  }
-
-  .hero-plate__specimen {
-    padding-left: 0;
-    border-left: 0;
-    justify-content: flex-start;
-  }
-
   .admission-pass {
     width: min(100%, 26rem);
   }
@@ -4173,7 +4199,6 @@ code {
 @media print {
   .site-header,
   .site-footer,
-  .hero-plate__specimen,
   .seat-ledger,
   .closing-plate,
   .payment-flow button {

@@ -6,7 +6,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
 import SeatLedgerGrid from '@/components/SeatLedgerGrid';
 
-export default function SeatAvailabilityBanner({ tone = 'paper', compact = false, fullBleed = false }) {
+export default function SeatAvailabilityBanner({ tone = 'paper', compact = false }) {
   const { t } = useLanguage();
   const { eventConfig } = useEvent();
   const { slug, seatCapacity } = eventConfig;
@@ -33,7 +33,6 @@ export default function SeatAvailabilityBanner({ tone = 'paper', compact = false
     'seat-ledger',
     `seat-ledger--${tone}`,
     compact ? 'seat-ledger--compact' : '',
-    fullBleed ? 'seat-ledger--full-bleed' : '',
   ]
     .filter(Boolean)
     .join(' ');

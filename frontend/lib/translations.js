@@ -54,6 +54,10 @@ export const translations = {
         reading: 'Reading the ledger…',
         unavailable: 'Live seat availability is momentarily unavailable.',
       },
+      gallery: {
+        label: 'Scenes from the masterclass',
+        photographAlt: 'Masterclass session photograph {index}',
+      },
       record: {
         heading: 'The academy in numbers',
         note: 'A record of the masterclass series to date.',
@@ -425,6 +429,10 @@ export const translations = {
         soldOut: 'Nafasi zote {capacity} zimechukuliwa',
         reading: 'Inasoma daftari…',
         unavailable: 'Taarifa ya nafasi haipatikani kwa muda.',
+      },
+      gallery: {
+        label: 'Picha kutoka kwenye masterclass',
+        photographAlt: 'Picha ya kikao cha masterclass {index}',
       },
       record: {
         heading: 'Taaluma kwa nambari',

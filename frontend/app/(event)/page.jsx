@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import AdmissionPassCard from '@/components/AdmissionPassCard';
 import SeatAvailabilityBanner from '@/components/SeatAvailabilityBanner';
+import SessionGalleryMarquee from '@/components/SessionGalleryMarquee';
 import inkryptusHorizontalLogo from '@/assets/inkryptus-horizontal.svg';
 import { useLanguage } from '@/context/LanguageContext';
 import { useEvent } from '@/context/EventContext';
@@ -87,16 +87,10 @@ export default function MasterHomePage() {
               </div>
             </dl>
           </div>
-
-          <div className="hero-plate__specimen">
-            <AdmissionPassCard />
-          </div>
         </div>
       </section>
 
-      <section className="ledger-band">
-        <SeatAvailabilityBanner tone="paper" fullBleed />
-      </section>
+      <SessionGalleryMarquee />
 
       <section className="section programme-section" id="programme">
         <div className="shell programme-layout">
