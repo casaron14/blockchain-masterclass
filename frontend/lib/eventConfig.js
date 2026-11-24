@@ -83,6 +83,7 @@ export const defaultEventConfig = {
   name: primaryEventConfiguration.name,
   tagline: primaryEventConfiguration.tagline,
   dateLabel: primaryEventConfiguration.event.date,
+  eventTime: primaryEventConfiguration.event.eventTime,
   location: primaryEventConfiguration.event.location,
   durationDays: primaryEventConfiguration.durationDays,
   seatHoldMinutes: primaryEventConfiguration.seatHoldMinutes,
@@ -153,6 +154,7 @@ export function buildEventConfigFromPayload(payload) {
       payload.date ||
       payload.dateLabel ||
       defaultEventConfig.dateLabel,
+    eventTime: eventDetails.eventTime || defaultEventConfig.eventTime,
     location:
       eventDetails.location ||
       payload.location ||

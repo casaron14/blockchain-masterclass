@@ -18,6 +18,7 @@ export default function MasterHomePage() {
     name,
     location,
     dateLabel,
+    eventTime,
     currency,
     ticketPrice,
     regularTicketPrice,
@@ -44,7 +45,7 @@ export default function MasterHomePage() {
         <div className="shell hero-plate__grid">
           <div className="hero-plate__copy">
             <p className="hero-plate__dateline">
-              {dateLabel} · {location}
+              {dateLabel} · {eventTime} · {location}
             </p>
 
             <h1 className="hero-plate__title">

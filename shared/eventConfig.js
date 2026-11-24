@@ -16,6 +16,7 @@ export const EVENT_CONFIGURATIONS = [
       // DD/MM/YYYY form printed on the event pass. Keep it in sync with `date`.
       ticketDateLabel: '28/11/2026',
       location: 'Dodoma, Tanzania',
+      eventTime: '2:30 PM - 5:00 PM',
       venueName: 'Mizengo Hall, Dodoma Hotel',
       motto: 'Jenga mustakabali kwa Blockchain',
       brandName: 'Inkryptus',
