@@ -272,6 +272,14 @@ export function adminResendTicketConfirmationEmail(bookingId, adminToken) {
   });
 }
 
+export function adminSendAttendeeReminderBatch(reminderAudience, adminToken) {
+  return request('/api/admin/reminders/send', {
+    method: 'POST',
+    headers: buildAdminAuthorizationHeaders(adminToken),
+    body: JSON.stringify({ audience: reminderAudience }),
+  });
+}
+
 export function adminSyncBookingsToGoogleSheet(adminToken) {
   return request('/api/admin/google-sheet/sync-bookings', {
     method: 'POST',

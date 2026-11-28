@@ -2,6 +2,7 @@ import express from 'express';
 import adminController from '../controller/adminController.js';
 import adminConfigController from '../controller/adminConfigController.js';
 import adminPaymentReviewController from '../controller/adminPaymentReviewController.js';
+import adminReminderController from '../controller/adminReminderController.js';
 import adminTransactionController from '../controller/adminTransactionController.js';
 import offlinePaymentController from '../controller/offlinePaymentController.js';
 import referrerController from '../controller/referrerController.js';
@@ -15,6 +16,11 @@ router.use(createGeneralRequestRateLimiter());
 router.use(requireAdminAccess);
 
 router.get('/report', adminController.fetchAdminSummaryReport);
+
+router.post(
+  '/reminders/send',
+  adminReminderController.sendManualAttendeeReminderBatchEndpoint
+);
 
 router.get('/configuration', adminConfigController.fetchAdminEventConfigurationEndpoint);
 

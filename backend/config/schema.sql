@@ -413,6 +413,34 @@ CREATE OR REPLACE TRIGGER trg_ticket_deliveries_updated_at
   EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
+-- reminder_deliveries - one confirmed-event and one payment reminder per booking
+-- A successful reminder suppresses later automatic/manual sends for that audience;
+-- a failed send remains eligible for the next batch.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS reminder_deliveries (
+  id               BIGSERIAL PRIMARY KEY,
+  booking_id       BIGINT NOT NULL REFERENCES bookings (id) ON DELETE CASCADE,
+  reminder_type    TEXT NOT NULL CHECK (reminder_type IN ('confirmed', 'unpaid')),
+  status           delivery_status NOT NULL DEFAULT 'pending',
+  attempt_count    INTEGER NOT NULL DEFAULT 0,
+  last_error       TEXT,
+  sent_at          TIMESTAMPTZ,
+  send_claimed_at  TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (booking_id, reminder_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reminder_deliveries_eligibility
+  ON reminder_deliveries (reminder_type, sent_at);
+
+CREATE OR REPLACE TRIGGER trg_reminder_deliveries_updated_at
+  BEFORE UPDATE ON reminder_deliveries
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+-- ---------------------------------------------------------------------
 -- users - optional future admin tooling (not part of the public flow)
 -- ---------------------------------------------------------------------
 

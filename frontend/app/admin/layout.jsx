@@ -12,6 +12,7 @@ const ADMIN_SECTION_LINKS = [
   { href: '/admin', label: 'Bookings' },
   { href: '/admin/referrals', label: 'Referrals' },
   { href: '/admin/transactions', label: 'Transactions' },
+  { href: '/admin/reminders', label: 'Reminders' },
   { href: '/admin/settings', label: 'Settings' },
 ];
 

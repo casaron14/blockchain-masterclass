@@ -5,6 +5,7 @@ import { runListenerHealthCheckJob } from './listenerHealthCheckJob.js';
 import { runOrderExpiryJob } from './expireOrdersJob.js';
 import { runExpireSeatHoldsJob } from './expireSeatHoldsJob.js';
 import { runTicketDeliveryRetryJob } from './ticketDeliveryRetryJob.js';
+import { runAutomaticPaymentReminderJob } from './paymentReminderJob.js';
 
 import { logError, logInfo } from '../utils/applicationLogger.js';
 
@@ -42,6 +43,13 @@ const SCHEDULED_JOB_DEFINITIONS = [
     advisoryLockKey: 764104,
     shouldRunAt: (now) => now.getUTCMinutes() % 5 === 0,
     run: () => runTicketDeliveryRetryJob(),
+  },
+  {
+    jobName: 'paymentReminder',
+    environmentFlagName: 'ENABLE_PAYMENT_REMINDER_JOB',
+    advisoryLockKey: 764106,
+    shouldRunAt: (now) => now.getUTCMinutes() === 0,
+    run: () => runAutomaticPaymentReminderJob(),
   },
   {
     jobName: 'listenerHealth',

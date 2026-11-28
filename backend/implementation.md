@@ -399,6 +399,12 @@ After confirmation:
 
 If email sending fails, the booking should be flagged for retry or manual recovery instead of silently disappearing from the system. A deployment that does not send email sets `EMAIL_DELIVERY_ENABLED=false`: no delivery record is written and the retry job stays idle, while the booking lookup remains the ticket delivery path.
 
+### 6.8 Attendee reminders
+- The authenticated admin reminders page sends separate event reminders to confirmed attendees and payment-completion reminders to pending or expired bookings without confirmed payment.
+- Each attendee receives each reminder type once. Failed deliveries remain eligible for a later batch, and a short delivery lease prevents concurrent duplicate sends.
+- `ENABLE_PAYMENT_REMINDER_JOB=true` also sends the payment reminder automatically to unpaid bookings older than one hour through the existing cron tick or long-running job scheduler.
+- Reminder sends use the configured email provider and are recorded in `reminder_deliveries`. Batches default to 20 recipients and can be run again until no eligible attendees remain.
+
 ## 7. Payment Integration Details
 
 ### 7.1 AzamPesa

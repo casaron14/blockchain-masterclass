@@ -14,9 +14,11 @@ import {
 
 export const EMAIL_DELIVERY_KIND_TICKET = 'ticket';
 export const EMAIL_DELIVERY_KIND_RECEIPT = 'receipt';
+export const EMAIL_DELIVERY_KIND_REMINDER = 'reminder';
 const SUPPORTED_EMAIL_DELIVERY_KINDS = new Set([
   EMAIL_DELIVERY_KIND_TICKET,
   EMAIL_DELIVERY_KIND_RECEIPT,
+  EMAIL_DELIVERY_KIND_REMINDER,
 ]);
 
 export function buildBookingEmailDeliveryMetadata(

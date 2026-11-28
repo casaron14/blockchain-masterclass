@@ -3,6 +3,7 @@ import { runListenerHealthCheckJob } from './listenerHealthCheckJob.js';
 import { runOrderExpiryJob } from './expireOrdersJob.js';
 import { runExpireSeatHoldsJob } from './expireSeatHoldsJob.js';
 import { runTicketDeliveryRetryJob } from './ticketDeliveryRetryJob.js';
+import { runAutomaticPaymentReminderJob } from './paymentReminderJob.js';
 
 function resolveJobIntervalMs(envValue, defaultMs) {
   return Number(envValue || defaultMs);
@@ -79,6 +80,19 @@ export function startBlockchainBackgroundJobs() {
         console.error('Order expiry job error', error)
       );
     }, expiryIntervalMs);
+    activeJobIntervals.push(intervalId);
+  }
+
+  if (isJobEnabled('PAYMENT_REMINDER')) {
+    const paymentReminderIntervalMs = resolveJobIntervalMs(
+      process.env.PAYMENT_REMINDER_INTERVAL_MS,
+      3600000
+    );
+    const intervalId = setInterval(() => {
+      runAutomaticPaymentReminderJob().catch((error) =>
+        console.error('Payment reminder job error', error)
+      );
+    }, paymentReminderIntervalMs);
     activeJobIntervals.push(intervalId);
   }
 

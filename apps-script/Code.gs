@@ -1,5 +1,5 @@
 /**
- * Google Apps Script web app that sends ticket and receipt emails, mirrors
+ * Google Apps Script web app that sends ticket, receipt and reminder emails, mirrors
  * every delivery attempt into the bound Google Sheet, and syncs the booking
  * list into the "Bookings" tab.
  *
@@ -384,7 +384,11 @@ function validateEmailRequest(emailRequest) {
     throw new Error('delivery_metadata_missing');
   }
 
-  if (emailRequest.emailKind !== 'ticket' && emailRequest.emailKind !== 'receipt') {
+  if (
+    emailRequest.emailKind !== 'ticket' &&
+    emailRequest.emailKind !== 'receipt' &&
+    emailRequest.emailKind !== 'reminder'
+  ) {
     throw new Error('unsupported_email_kind');
   }
 
